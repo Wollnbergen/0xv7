@@ -1,0 +1,9 @@
+[workspace]
+members = ["node", "sultan-interop"]
+resolver = "2"
+
+[workspace.dependencies]
+prost = "0.13.1"
+tonic = "0.12"
+tonic-build = "0.12"
+tracing-subscriber = "0.3"

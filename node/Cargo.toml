@@ -1,0 +1,32 @@
+
+[package]
+name = "sultan-coordinator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hex = "0.4"
+tokio = { version = "1.47", features = ["full"] }
+uuid = "1.10"
+scylla = "1.3.1"
+sultan-interop = { path = "../sultan-interop" }
+anyhow = "1.0"
+chrono = "0.4"
+clap = { version = "4.5", features = ["derive"] }
+futures = "0.3"
+pqcrypto-dilithium = "0.4"
+pqcrypto-traits = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+teloxide = { version = "0.17", default-features = false, features = ["macros", "rustls"] }
+toml = "0.8"
+tracing = "0.1"
+
+prost = { workspace = true }
+tonic = { workspace = true, features = ["tls", "tls-webpki-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tonic-build = { workspace = true }
+tracing-subscriber = { workspace = true }
+warp = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1.47", features = ["test-util"] }
