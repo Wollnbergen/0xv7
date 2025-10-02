@@ -5,11 +5,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ sultan_interop = { package = "sultan-interop", path = "../sultan-interop" }
 hex = "0.4"
 tokio = { version = "1.47", features = ["full"] }
 uuid = "1.10"
 scylla = "1.3.1"
-sultan-interop = { path = "../sultan-interop" }
 anyhow = "1.0"
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }

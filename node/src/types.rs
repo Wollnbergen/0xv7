@@ -1,3 +1,17 @@
+#[derive(Clone, Debug, Default)]
+#[allow(dead_code)] // For future expansion
+pub struct Block {
+    pub height: u64,
+    pub hash: String,
+    pub previous_hash: String,
+    pub timestamp: u64,
+    pub validator: String,
+    pub signature: String,
+    pub state_root: Vec<u8>,
+    pub transactions: Vec<Transaction>,
+    pub shard_id: u64,
+    pub mev_proofs: Vec<Vec<u8>>,
+}
 // types.rs - Shared types for Sultan Blockchain
 
 // Add your shared structs and enums here
@@ -5,38 +19,19 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Block {
-    pub hash: String,
-    pub previous_hash: String,
-    pub timestamp: u64,
-    pub transactions: Vec<Transaction>,
-    pub validator: String,
-}
-
-impl Block {
-    pub fn calculate_hash(&mut self) -> String {
-        format!("{:?}", self) // Stub hash
-    }
-}
-
-impl Default for Block {
-    fn default() -> Self {
-        Self {
-            hash: "default_hash".to_string(),
-            previous_hash: "genesis".to_string(),
-            timestamp: 0,
-            transactions: Vec::new(),
-            validator: "genesis".to_string(),
-        }
-    }
-}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Transaction {
+    pub tx_hash: String,
+    pub block_height: u64,
+    pub from_address: String,
+    pub to_address: String,
+    pub amount: u128,
+    pub signature: String,
+    pub subsidy_flag: bool,
+    pub stake: f64, // For min stake check
+    pub subsidy: f64, // For daily subsidy
     pub data: Vec<u8>,
-    pub token_amount: u64,
-    pub sig: Option<Vec<u8>>, // Patch: For Dilithium signature storage (post-quantum secure)
     pub interop_flag: bool, // Patch: For atomic swaps/light clients in interop
 }
 

@@ -3,7 +3,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct QuantumCrypto {
+	#[allow(dead_code)] // For future quantum expansion
 	sk: SecretKey, // Cached secret key for signing
+	#[allow(dead_code)] // For future quantum expansion
 	pub pk: PublicKey, // Cached public key for verify
 }
 
@@ -22,11 +24,10 @@ impl QuantumCrypto {
 
 	// Public getter for the quantum public key (for signature verification)
 
-	// pub fn verify(&self, _signed: &[u8], _data: &[u8]) -> bool { // Unused for now
-	//     // PHASE 3: Quantum verification disabled for build. Refactor to store SignedMessage in Transaction for production.
-	//     // let signed_msg = SignedMessage(signed.to_vec());
-	//     true // Always pass for build
-	// }
+	#[allow(dead_code)] // For future quantum expansion
+	pub fn verify(&self, _signed: &[u8], _data: &[u8]) -> bool {
+		false
+	}
 }
 
 pub type SharedQuantumCrypto = Arc<RwLock<QuantumCrypto>>;

@@ -1,4 +1,5 @@
 pub mod bitcoin;
+pub mod zk_proofs;
 use anyhow::Result;
 use tracing::info;
 use tokio::sync::RwLock;

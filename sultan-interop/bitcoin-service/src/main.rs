@@ -1,6 +1,6 @@
 
 use anyhow::Result;
-use axum::{extract::State as AxumState, response::Json, routing::get, Router};
+use axum::{response::Json, routing::get, Router};
 use bitcoin::block::Header as BlockHeader; // Correct for production block parsing
 use prometheus::{Counter, Histogram, register_counter, register_histogram};
 use std::sync::Arc;
@@ -37,14 +37,19 @@ struct Provider {
        url: String,
        client: reqwest::Client,
        health_score: f64,
-       chain_id: u64,
-       latest_block: u64,
+        #[allow(dead_code)] // For future expansion
+        chain_id: u64,
+        #[allow(dead_code)] // For future expansion
+        latest_block: u64,
 }
 
 struct Metrics {
-       requests_total: Counter,
-       request_duration: Histogram,
-       provider_health: Histogram,
+        #[allow(dead_code)] // For future expansion
+        requests_total: Counter,
+        #[allow(dead_code)] // For future expansion
+        request_duration: Histogram,
+        #[allow(dead_code)] // For future expansion
+        provider_health: Histogram,
     grpc_requests: Counter,
 }
 
