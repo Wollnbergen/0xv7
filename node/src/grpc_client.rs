@@ -7,14 +7,35 @@ use tracing::info;
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    info!("Initializing gRPC client for verify_state test");
-    let channel = Channel::from_static("http://localhost:50054").connect().await?;
-    let mut client = ChainServiceClient::new(channel);
-    let request = tonic::Request::new(VerifyStateRequest {
-        chain: "bitcoin".to_string(),
-        proof: None, // For test, send None; for real, send Some(StateProof)
-    });
-    let response = client.verify_state(request).await?;
-    info!("State verified successfully: {:?}", response.into_inner());
+    let chains = vec![
+        ("bitcoin", 50054),
+        ("ethereum", 50051),
+        ("solana", 50052),
+        ("ton", 50053),
+    ];
+    for (chain, port) in chains {
+        info!("Initializing gRPC client for {} verify_state test", chain);
+    let addr = format!("http://localhost:{}", port);
+    match Channel::builder(addr.parse()?).connect().await {
+            Ok(channel) => {
+                let mut client = ChainServiceClient::new(channel);
+                let request = tonic::Request::new(VerifyStateRequest {
+                    chain: chain.to_string(),
+                    proof: None,
+                });
+                match client.verify_state(request).await {
+                    Ok(response) => {
+                        info!("State verified successfully for {}: {:?}", chain, response.into_inner());
+                    }
+                    Err(e) => {
+                        info!("Failed to verify state for {}: {}", chain, e);
+                    }
+                }
+            }
+            Err(e) => {
+                info!("Failed to connect to {} service on {}: {}", chain, addr, e);
+            }
+        }
+    }
     Ok(())
 }
