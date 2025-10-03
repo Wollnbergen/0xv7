@@ -2,7 +2,7 @@ use sultan_interop::sultan::{chain_service_server::{ChainService, ChainServiceSe
 use tonic::transport::Server;
 use tracing::info;
 
-use sultan_interop::sultan::{BlockInfo, GetBlockInfoRequest, GetBlockInfoResponse, GetStateProofRequest, GetStateProofResponse, SubscribeRequest, StateProof};
+use sultan_interop::sultan::{BlockInfo, GetBlockInfoRequest, GetBlockInfoResponse, GetStateProofRequest, GetStateProofResponse, SubscribeRequest};
 use futures::Stream;
 use std::pin::Pin;
 use tonic::Status;
@@ -12,7 +12,7 @@ pub struct EthereumService;
 
 #[tonic::async_trait]
 impl ChainService for EthereumService {
-    async fn verify_state(&self, request: tonic::Request<VerifyStateRequest>) -> Result<tonic::Response<VerifyStateResponse>, tonic::Status> {
+    async fn verify_state(&self, _request: tonic::Request<VerifyStateRequest>) -> Result<tonic::Response<VerifyStateResponse>, tonic::Status> {
         info!("gRPC VerifyState request for chain: ethereum");
         Ok(tonic::Response::new(VerifyStateResponse { verified: true, message: "".to_string() }))
     }

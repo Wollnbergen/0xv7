@@ -26,12 +26,12 @@ pub struct ZKTransferResponse {
     pub estimated_time: u64,
 }
 
-pub struct ZKBridgeService {
+pub struct ZKBridge {
     zk_system: Arc<ZKProofSystem>,
     pending_transfers: Arc<RwLock<Vec<ZKTransferRequest>>>,
 }
 
-impl ZKBridgeService {
+impl ZKBridge {
     pub fn new() -> Self {
         info!("🌉 Initializing ZK-enabled Native Bridge");
         

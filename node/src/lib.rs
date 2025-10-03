@@ -90,7 +90,7 @@ fn calculate_inflation_rate(config: &Config) -> f64 {
 	config.inflation_rate  // Placeholder; enhance in Phase 3 for disinflation (decrease 15% yearly to 1.5%)
 }
 
-pub fn tally_votes(votes: &Vec<Vote>) -> f64 {
+pub fn tally_votes(_votes: &Vec<Vote>) -> f64 {
 	// For now, use a default config for inflation rate
 	let config = Config { inflation_rate: 8.0, total_supply: 0, min_stake: 5000, shards: 8 };
 	let rate = calculate_inflation_rate(&config);

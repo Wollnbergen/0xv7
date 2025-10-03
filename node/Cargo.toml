@@ -1,4 +1,7 @@
 [[bin]]
+name = "telegram_bot"
+path = "src/telegram_bot.rs"
+[[bin]]
 name = "grpc_client"
 path = "src/grpc_client.rs"
 

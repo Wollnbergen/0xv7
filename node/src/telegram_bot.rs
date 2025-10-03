@@ -1,3 +1,10 @@
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+    let bot = TelegramBot::new();
+    bot.stake(1000).await?;
+    Ok(())
+}
 use anyhow::Result;
 use tracing::info;
 

@@ -1,3 +1,4 @@
+pub mod zk_bridge;
 pub mod sultan {
     tonic::include_proto!("sultan");
 }
