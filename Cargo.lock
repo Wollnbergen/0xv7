@@ -2529,6 +2529,7 @@ dependencies = [
  "anyhow",
  "axum",
  "bitcoin",
+ "futures",
  "hex",
  "prometheus",
  "prost",
