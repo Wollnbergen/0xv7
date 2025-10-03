@@ -1,3 +1,12 @@
+## SDKs
+- **Wallet SDK**: APIs for stake/query_apy in `sdk.rs` (one-tap Telegram UX, hide complexity for mass adoption).
+- **DEX SDK**: APIs for cross_chain_swap in `sdk.rs` (<3s interop without bridges for BTC/ETH/SOL/TON).
+- **dApp SDK**: APIs for validator onboarding, governance voting in `blockchain.rs` (democratic, min 5k SLTN stake ~$1.1k, 30% mobile).
+
+**Developer Integration:**
+- SDKs are production-ready for integration with DEXs, dApps, and wallets.
+- Gas-free transactions on Sultan (subsidized by APY ~26.67% in `transaction_validator.rs`).
+- Trusted/reliable for enterprises and individuals (quantum/MEV secure, robust, and uncorruptible).
 # Sultan Blockchain - MVP Launch Plan (Updated October 01, 2025)
 ## Phase 1: Core Infrastructure (August-October 01, 2025) - COMPLETE ✅
 **Goal: Bulletproof foundation**

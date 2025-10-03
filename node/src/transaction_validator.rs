@@ -5,7 +5,7 @@
 use anyhow::Result;
 use tracing::info;
 use crate::types::Transaction;
-use crate::Config;
+use crate::ChainConfig;
 use std::collections::HashMap;
 use anyhow::anyhow;
 use crate::quantum::{QuantumCrypto, SharedQuantumCrypto};
@@ -18,14 +18,18 @@ use sultan_interop::zk_bridge::{ZKBridge, ZKTransferRequest};
 
 pub struct TransactionValidator {
     quantum_crypto: SharedQuantumCrypto,
-    // config: Config, // Unused, reserved for future expansion
+    chain_config: Option<ChainConfig>, // Unused, reserved for future expansion
     stake_map: HashMap<String, u64>, // Production: Load from scylla
 }
 
 impl TransactionValidator {
     #[allow(unused_variables)]
-    pub fn new(config: Config) -> Self {
-    Self { quantum_crypto: Arc::new(RwLock::new(QuantumCrypto::new())), stake_map: HashMap::new() }
+    pub fn new(chain_config: ChainConfig) -> Self {
+        Self {
+            quantum_crypto: Arc::new(RwLock::new(QuantumCrypto::new())),
+            chain_config: Some(chain_config), // Updated to use ChainConfig
+            stake_map: HashMap::new(),
+        }
     }
 
     pub async fn subsidize_gas(&self, tx: &mut Transaction) -> Result<()> {

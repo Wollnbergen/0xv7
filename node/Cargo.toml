@@ -1,4 +1,10 @@
 [[bin]]
+name = "sdk"
+path = "src/sdk.rs"
+[[bin]]
+name = "p2p_node"
+path = "src/p2p_node.rs"
+[[bin]]
 name = "telegram_bot"
 path = "src/telegram_bot.rs"
 [[bin]]
@@ -11,6 +17,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+libp2p = "0.52"
  sultan_interop = { package = "sultan-interop", path = "../sultan-interop" }
 hex = "0.4"
 tokio = { version = "1.47", features = ["full"] }

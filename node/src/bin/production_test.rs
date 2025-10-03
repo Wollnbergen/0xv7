@@ -1,6 +1,6 @@
 use anyhow::Result;
 use sultan_coordinator::blockchain::Blockchain as SultanBlockchain;
-use sultan_coordinator::Config;
+use sultan_coordinator::ChainConfig;
 use sultan_interop::bitcoin::BitcoinBridge;
 use sultan_interop::EthBridge;
 use std::time::Instant;
@@ -11,7 +11,7 @@ use tracing_subscriber::fmt as tracing_fmt;
 async fn main() -> Result<()> {
     tracing_fmt().with_max_level(Level::INFO).init();
     
-    let config = Config::default(); // Load real config
+    let config = ChainConfig::default(); // Load real config
     let blockchain = SultanBlockchain::new(config).await?;
     
     let start = Instant::now();
