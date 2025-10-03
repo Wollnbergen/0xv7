@@ -35,23 +35,15 @@ impl TransactionValidator {
             }
             // Dynamic APY ~26.67%
                 const APY: f64 = 0.2667; // ~26.67% annual
-                let subsidy = (tx.amount as f64) * APY / 365.0; // Daily subsidy
-            tx.stake = stake as f64;
-            tx.subsidy = subsidy;
-            info!("Gas-free subsidy {:.4} SLTN applied for TX {} at APY {:.2}% (stake {} >= min 5000 SLTN)", subsidy, tx.tx_hash, APY * 100.0, tx.stake);
-            // MEV ZK proof integration (use existing Transaction fields)
-            let zk_system = ZKProofSystem::new();
-            let proof = zk_system.generate_state_proof(
-                &tx.from_address,
-                tx.block_height,
-                &tx.tx_hash,
-                vec![], // Placeholder for merkle_path
-            )?;
-            if zk_system.verify_state_proof(&proof)? {
-                info!("MEV-resistant ZK proof verified for TX {} (production)", tx.tx_hash);
-            } else {
-                return Err(anyhow!("MEV ZK verification failed for TX {}", tx.tx_hash));
-            }
+                tx.subsidy = (tx.amount as f64) * APY / 365.0; // Daily subsidy
+                info!("Gas-free subsidy {:.4} SLTN applied for TX {} at APY {:.2}% (stake {} >= min 5000 SLTN)", tx.subsidy, tx.tx_hash, APY * 100.0, stake);
+                let zk_system = ZKProofSystem::new();
+                let proof = zk_system.generate_state_proof(&tx.from_address, tx.block_height, &tx.tx_hash, vec![])?;
+                if zk_system.verify_state_proof(&proof)? {
+                    info!("MEV-resistant ZK proof verified for TX {} (production)", tx.tx_hash);
+                } else {
+                    return Err(anyhow!("MEV ZK verification failed for TX {}", tx.tx_hash));
+                }
         } else {
             info!("Standard TX {} validated (gas paid via SLTN)", tx.tx_hash);
         }

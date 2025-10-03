@@ -1,3 +1,4 @@
+pub mod grpc_client;
 pub mod types;
 pub mod transaction_validator;
 pub mod blockchain; // Expose for production_test.rs
@@ -96,7 +97,7 @@ fn tally_votes(votes: &[Vote]) -> f64 {
 	} else {
 		5.0 // Default
 	};
-	rate / 0.3 // Dynamic APY ~26.67%
+	return rate / 0.3 // Dynamic APY ~26.67%
 }
 
 async fn governance_proposal(bot: Bot, msg: Message, id: u32) -> Result<()> {

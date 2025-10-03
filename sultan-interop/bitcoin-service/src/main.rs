@@ -13,11 +13,8 @@ use tracing_subscriber::EnvFilter;
 use bitcoin::consensus::deserialize;
 
 // Import generated proto code
-pub mod sultan {
-    tonic::include_proto!("sultan");
-}
 
-use sultan::{
+use sultan_interop::sultan::{
     chain_service_server::{ChainService, ChainServiceServer},
     BlockInfo, GetBlockInfoRequest, GetBlockInfoResponse,
     GetStateProofRequest, GetStateProofResponse,

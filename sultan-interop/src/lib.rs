@@ -1,3 +1,6 @@
+pub mod sultan {
+    tonic::include_proto!("sultan");
+}
 pub mod bitcoin;
 pub mod zk_proofs;
 use anyhow::Result;
