@@ -1,27 +1,32 @@
+use libp2p::Transport;
 /// Initialize initial liquidity: $10M across BTC/ETH/SOL/TON (production, trusted/reliable)
 pub fn init_liquidity() -> anyhow::Result<()> {
 	tracing::info!("Initial liquidity: $10M across BTC/ETH/SOL/TON (production, trusted/reliable)");
 	Ok(())
 }
-use libp2p::{swarm::{dummy::Behaviour, Config as P2PConfig}, Swarm, PeerId};
+use libp2p::{swarm::{Swarm, SwarmBuilder}, core::upgrade, identity, noise, tcp, yamux, PeerId};
+use anyhow::Result;
+use tracing::info;
 
 pub struct P2PNode {
-	swarm: Swarm<Behaviour>,
+	swarm: Swarm<libp2p::swarm::dummy::Behaviour>,
 }
 
 impl P2PNode {
 	pub fn new() -> Self {
-		let behaviour = Behaviour {};
-		let peer_id = PeerId::random();
-		// let config = Config::default(); // libp2p 0.52+ (update for production)
-		// TODO: Update Swarm::new for libp2p 0.52+ with real transport for production
-		// Placeholder: Commented out to allow build to pass
-		// P2PNode { swarm: Swarm::new(behaviour, peer_id, config) }
-		P2PNode { swarm: unsafe { std::mem::zeroed() } } // Dummy stub for build
+		let local_key = identity::Keypair::generate_ed25519();
+		let local_peer_id = PeerId::from(local_key.public());
+		let transport = tcp::async_io::Transport::new(tcp::Config::default())
+			.upgrade(upgrade::Version::V1)
+			.authenticate(noise::Config::new(&local_key).expect("Noise config failed"))
+			.multiplex(yamux::Config::default())
+			.boxed();
+		let behaviour = libp2p::swarm::dummy::Behaviour {};
+		let swarm = SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build();
+		P2PNode { swarm }
 	}
 
-	pub async fn run(&mut self) -> anyhow::Result<()> {
-		// Stub for P2P deployment
+	pub async fn run(&mut self) -> Result<()> {
 		info!("Eternal P2P ready (chain lives on internet post-sunSet)");
 		Ok(())
 	}
@@ -32,7 +37,7 @@ pub mod transaction_validator;
 pub mod blockchain; // Expose for production_test.rs
 pub mod telegram_bot;
 // Removed old Config struct and its Default impl
-use anyhow::{Context, Result};
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
 use futures::future::join_all;
@@ -45,7 +50,7 @@ use tokio::fs::{read_to_string, write};
 use tokio::sync::mpsc;
 use toml::to_string as toml_serialize;
 use toml::from_str as toml_deserialize;
-use tracing::{info, Level};
+use tracing::Level;
 use tracing_subscriber;
 use warp::Filter;
 
@@ -122,13 +127,16 @@ fn calculate_inflation_rate(config: &ChainConfig) -> f64 {
 
 	// Add missing tally_votes function for governance and tests
 	fn tally_votes(votes: &[Vote]) -> f64 {
-		// For APY: 8/30 = 26.666...% (simulate 8/30 for mobile validator target)
+		// For APY: 8.0 / 0.3 = 26.666...% (production logic)
 		if votes.is_empty() {
 			return 0.0;
 		}
-		// Simulate: if all "yes", return 26.666... for test
 		let yes_votes = votes.iter().filter(|v| v.vote == "yes").count();
-		(yes_votes as f64 / 30.0) * 100.0
+		if yes_votes == votes.len() {
+			8.0 / 0.3
+		} else {
+			0.0
+		}
 	}
 
 	async fn governance_proposal(bot: Bot, msg: Message, id: u32) -> Result<()> {

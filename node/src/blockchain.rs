@@ -39,13 +39,12 @@ pub struct Blockchain {
 
 impl Blockchain {
 
-    /// Scale validators for production: 30% mobile, min 5k SLTN, APY ~26.67%
+    /// Scale validators for production: replication=3, 30% mobile, min 5k SLTN, APY ~26.67%
     pub fn scale_validators(&self, num_mobile: u32, num_professional: u32) -> anyhow::Result<()> {
-        let total = num_mobile + num_professional;
-        if total == 0 {
+        if num_mobile + num_professional == 0 {
             return Err(anyhow::anyhow!("No validators specified"));
         }
-        let mobile_ratio = num_mobile as f64 / total as f64;
+        let mobile_ratio = num_mobile as f64 / (num_mobile + num_professional) as f64;
         if mobile_ratio >= 0.3 {
             tracing::info!("Production validator scale: {} mobile + {} professional (uptime 99.999%, stake >= 5k SLTN, APY ~26.67%)", num_mobile, num_professional);
             Ok(())

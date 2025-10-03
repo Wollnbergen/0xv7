@@ -17,7 +17,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-libp2p = "0.52"
+libp2p = { version = "0.52", features = ["tcp", "noise", "yamux", "async-std"] }
  sultan_interop = { package = "sultan-interop", path = "../sultan-interop" }
 hex = "0.4"
 tokio = { version = "1.47", features = ["full"] }
