@@ -50,6 +50,10 @@ pub struct SultanToken {
 }
 
 impl SultanToken {
+    pub fn calculate_rewards(&self, stake: u64, is_validator: bool) -> f64 {
+        let apy = if is_validator { 26.666666666666668 } else { 10.0 };
+        stake as f64 * apy / 100.0 / 365.0 // Daily reward
+    }
     pub fn new() -> Self {
         Self {
             balance: HashMap::new(),

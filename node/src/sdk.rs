@@ -41,6 +41,20 @@ async fn main() -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use sultan_coordinator::types::SultanToken;
+    use tracing::info;
+
+    #[tokio::test]
+    async fn test_staking_rewards() {
+        let token = SultanToken::new();
+        let validator_reward = token.calculate_rewards(5000, true); // 26.67% APY
+        let expected = 5000.0 * 26.666666666666668 / 100.0 / 365.0;
+        assert!((validator_reward - expected).abs() < 1e-6);
+        let community_reward = token.calculate_rewards(5000, false); // 10% APY
+        let expected_comm = 5000.0 * 10.0 / 100.0 / 365.0;
+        assert!((community_reward - expected_comm).abs() < 1e-6);
+        info!("Staking rewards test passed (APY ~26.67% validators, 10% community)");
+    }
     use super::*;
     #[test]
     fn test_sdk_apy() {
