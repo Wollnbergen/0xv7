@@ -4,32 +4,32 @@ pub fn init_liquidity() -> anyhow::Result<()> {
 	tracing::info!("Initial liquidity: $10M across BTC/ETH/SOL/TON (production, trusted/reliable)");
 	Ok(())
 }
-use libp2p::{swarm::{Swarm, SwarmBuilder}, core::upgrade, identity, noise, tcp, yamux, PeerId};
+use libp2p::{swarm::{Swarm, SwarmBuilder, keep_alive::Behaviour}, core::upgrade, identity, noise, tcp, yamux, PeerId};
 use anyhow::Result;
 use tracing::info;
 
 pub struct P2PNode {
-	swarm: Swarm<libp2p::swarm::dummy::Behaviour>,
+    swarm: Swarm<Behaviour>,
 }
 
 impl P2PNode {
-	pub fn new() -> Self {
-		let local_key = identity::Keypair::generate_ed25519();
-		let local_peer_id = PeerId::from(local_key.public());
-		let transport = tcp::async_io::Transport::new(tcp::Config::default())
-			.upgrade(upgrade::Version::V1)
-			.authenticate(noise::Config::new(&local_key).expect("Noise config failed"))
-			.multiplex(yamux::Config::default())
-			.boxed();
-		let behaviour = libp2p::swarm::dummy::Behaviour {};
-		let swarm = SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build();
-		P2PNode { swarm }
-	}
+    pub fn new() -> Self {
+        let local_key = identity::Keypair::generate_ed25519();
+        let local_peer_id = PeerId::from(local_key.public());
+	let transport = tcp::async_io::Transport::default()
+            .upgrade(upgrade::Version::V1)
+            .authenticate(noise::Config::new(&local_key).expect("Noise config failed"))
+            .multiplex(yamux::Config::default())
+            .boxed();
+        let behaviour = Behaviour::default();
+        let swarm = SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build();
+        P2PNode { swarm }
+    }
 
-	pub async fn run(&mut self) -> Result<()> {
-		info!("Eternal P2P ready (chain lives on internet post-sunSet)");
-		Ok(())
-	}
+    pub async fn run(&mut self) -> Result<()> {
+        info!("Eternal P2P ready (chain lives on internet post-sunSet)");
+        Ok(())
+    }
 }
 pub mod grpc_client;
 pub mod types;
