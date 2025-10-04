@@ -43,3 +43,4 @@ warp = "0.3"
 
 [dev-dependencies]
 tokio = { version = "1.47", features = ["test-util"] }
+tracing-test = "0.2.5"

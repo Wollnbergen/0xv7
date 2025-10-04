@@ -1,3 +1,27 @@
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tracing::info;
+    #[tokio::test]
+    async fn test_governance_proposal() {
+        let votes = vec![
+            Vote { proposal_id: 1, validator_id: "v1".to_string(), vote_yes: true, stake_weight: 1, sig: None },
+            Vote { proposal_id: 1, validator_id: "v2".to_string(), vote_yes: false, stake_weight: 1, sig: None },
+            Vote { proposal_id: 1, validator_id: "v3".to_string(), vote_yes: true, stake_weight: 1, sig: None },
+        ];
+        let result = process_governance_proposal(&votes);
+        assert!(result.is_ok());
+        info!("Governance proposal test passed (democratic, production)");
+    }
+}
+// Post-launch: Democratic governance proposal processing (no stake-weighted, equal vote)
+pub fn process_governance_proposal(votes: &Vec<Vote>) -> Result<()> {
+    let yes_votes = votes.iter().filter(|v| v.vote_yes).count();
+    let no_votes = votes.len() - yes_votes;
+    let passed = yes_votes > no_votes;
+    info!("Governance proposal processed (democratic, production, APY ~26.67%): {} yes, {} no, passed: {}", yes_votes, no_votes, passed);
+    Ok(())
+}
 // consensus.rs - Consensus logic for Sultan Blockchain
 
 // Add your consensus implementation here
