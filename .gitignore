@@ -344,3 +344,4 @@ __pycache__/
 *.lock
 *.bak
 *.tmp
+node_modules
