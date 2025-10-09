@@ -1,11 +1,14 @@
-use std::error::Error;
+// sultan-interop/build.rs - Production gRPC build for SDK (full proto compat, eternal)
+use std::io::Result;
+use std::path::Path;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // Use workspace root to resolve proto path robustly
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-    let proto_file = format!("{}/../proto/sultan.proto", manifest_dir);
-    let proto_dir = format!("{}/../proto", manifest_dir);
+fn main() -> Result<()> {
+    let proto_dir = "proto";
+    let proto_file = Path::new(proto_dir).join("sultan.proto"); // Relative fix for full proto
+    if !proto_file.exists() {
+        panic!("proto/sultan.proto missing—add provided full file");
+    }
     tonic_build::configure()
-        .compile(&[&proto_file], &[&proto_dir])?;
+        .compile_protos(&[proto_file], &[proto_dir])?; // Renamed, full path
     Ok(())
 }

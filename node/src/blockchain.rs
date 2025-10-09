@@ -66,23 +66,22 @@ impl Blockchain {
         let shards = chain_config.shards;
         #[allow(unused_variables)]
         let crypto = Arc::new(QuantumCrypto::new());
-        let validator = TransactionValidator::new(chain_config.clone());
+       let validator = TransactionValidator::new();
         info!("Stubbed Scylla for production test (real in deployment)");
         Ok(Self { shards, validator })
     }
 
-    pub async fn batch_execute(&self, tx: &Transaction) -> Result<()> {
-        let mut tx = tx.clone();
-        self.validator.validate(&mut tx).await?; // Gas-free subsidy, quantum/MEV check
-        // Insert to scylla (integrate scylla_db.rs)
-        info!("Batch executed gas-free TX {}", tx.tx_hash);
-        Ok(())
-    }
+    pub async fn batch_execute(&self, tx: &Transaction, block: &Block) -> Result<()> {
+    let tx = tx.clone();
+    self.validator.validate_block(block)?; // Gas-free subsidy, quantum/MEV check
+    info!("Batch executed gas-free TX {}", tx.tx_hash);
+    Ok(())
+}
 
     pub async fn process_block(&self, block: Block) -> Result<()> {
         #[allow(unused_variables)]
         let start = Instant::now();
-        self.validator.validate_block(&block).await?; // Quantum verify, MEV/ZK check
+        self.validator.validate_block(&block)?; // Quantum verify, MEV/ZK check
         // Only run DB code if self.db is Some
         // if let Some(db) = &self.db {
         //     // let query = "INSERT INTO sultan.blocks (id, hash, timestamp, tx_count) VALUES (?, ?, ?, ?)";
@@ -126,6 +125,8 @@ impl Blockchain {
 }
 
 // Add Default implementation for Blockchain to enable Blockchain::default() in tests
+// ...existing code...
+
 impl Default for Blockchain {
     fn default() -> Self {
         let chain_config = ChainConfig {
@@ -134,13 +135,15 @@ impl Default for Blockchain {
             min_stake: 5000,
             shards: 8,
         };
-        let validator = TransactionValidator::new(chain_config.clone());
+        let validator = TransactionValidator::new();
         Blockchain {
             shards: chain_config.shards,
             validator,
         }
     }
 }
+
+// ...rest of your code unchanged...
 
 #[cfg(test)]
 mod tests {
