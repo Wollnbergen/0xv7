@@ -62,6 +62,9 @@ pub mod transaction_validator;
 pub mod blockchain;
 pub mod telegram_bot;
 pub use self::quantum::quantum_sign;
+pub mod scylla_db;
+pub mod grpc_service;
+// ...existing code...
 
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
