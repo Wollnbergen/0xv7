@@ -1,6 +1,5 @@
 // scylla_db.rs - ScyllaDB integration for sharding/TPS
 
-// Add ScyllaDB logic here
 use anyhow::{Result, anyhow};
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
@@ -12,9 +11,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 use std::collections::HashMap;
-use rocksdb::DB; // For migration
-use crate::quantum::QuantumCrypto; // For signed blocks
-use crate::lib::{Block, Transaction}; // Production structs
+use rocksdb::DB;
+use crate::quantum::QuantumCrypto;
+use crate::lib::{Block, Transaction};
 
 pub struct ScyllaCluster {
     pub session: Arc<Session>,
@@ -41,6 +40,11 @@ pub struct PreparedQueries {
     pub update_shard_state: PreparedStatement,
     pub update_balance: PreparedStatement,
     pub get_balance: PreparedStatement,
+    // Added for production wallet/token/governance support:
+    pub insert_wallet: PreparedStatement,
+    pub update_wallet_balance: PreparedStatement,
+    pub insert_proposal: PreparedStatement,
+    pub insert_vote: PreparedStatement,
 }
 
 impl ScyllaCluster {
@@ -82,7 +86,50 @@ impl ScyllaCluster {
             ) WITH CLUSTERING ORDER BY (height DESC)",
             &[]
         ).await?;
-        // ... existing tables ...
+        session.query_iter(
+            "CREATE TABLE IF NOT EXISTS wallets (
+                telegram_id TEXT PRIMARY KEY,
+                address TEXT,
+                pk BLOB,
+                sk BLOB,
+                balance BIGINT,
+                created_at BIGINT
+            )",
+            &[]
+        ).await?;
+        session.query_iter(
+            "CREATE TABLE IF NOT EXISTS proposals (
+                proposal_id TEXT PRIMARY KEY,
+                description TEXT,
+                chain_name TEXT,
+                interop_chain TEXT,
+                votes_for BIGINT,
+                votes_against BIGINT,
+                quorum DOUBLE
+            )",
+            &[]
+        ).await?;
+        session.query_iter(
+            "CREATE TABLE IF NOT EXISTS votes (
+                proposal_id TEXT,
+                validator_id TEXT,
+                vote BOOL,
+                stake_weight BIGINT,
+                sig BLOB,
+                timestamp BIGINT,
+                PRIMARY KEY (proposal_id, validator_id)
+            )",
+            &[]
+        ).await?;
+        session.query_iter(
+            "CREATE TABLE IF NOT EXISTS accounts (
+                address TEXT,
+                shard_id INT,
+                balance BIGINT,
+                PRIMARY KEY (address, shard_id)
+            )",
+            &[]
+        ).await?;
         Ok(())
     }
 
@@ -102,10 +149,22 @@ impl ScyllaCluster {
             update_shard_state: session.prepare("UPDATE shards SET state_root = ? WHERE shard_id = ?").await?,
             update_balance: session.prepare("UPDATE accounts SET balance = ? WHERE address = ? AND shard_id = ?").await?,
             get_balance: session.prepare("SELECT balance FROM accounts WHERE address = ? AND shard_id = ?").await?,
+            // New for wallet/token/governance:
+            insert_wallet: session.prepare(
+                "INSERT INTO wallets (telegram_id, address, pk, sk, balance, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+            ).await?,
+            update_wallet_balance: session.prepare(
+                "UPDATE wallets SET balance = balance + ? WHERE address = ?"
+            ).await?,
+            insert_proposal: session.prepare(
+                "INSERT INTO proposals (proposal_id, description, chain_name, interop_chain, votes_for, votes_against, quorum) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            ).await?,
+            insert_vote: session.prepare(
+                "INSERT INTO votes (proposal_id, validator_id, vote, stake_weight, sig, timestamp) VALUES (?, ?, ?, ?, ?, ?)"
+            ).await?,
         })
     }
 
-    // High-performance insert with batch support
     pub async fn insert_block(&self, shard_id: i32, block: &Block) -> Result<()> {
         let queries = self.prepared_queries.read().await;
         self.session.execute_iter(
@@ -115,7 +174,41 @@ impl ScyllaCluster {
         Ok(())
     }
 
-    // ... existing methods ...
+    pub async fn insert_wallet(&self, telegram_id: &str, address: &str, pk: &[u8], sk: &[u8], created_at: i64) -> Result<()> {
+        let queries = self.prepared_queries.read().await;
+        self.session.execute_iter(
+            &queries.insert_wallet,
+            (telegram_id, address, pk, sk, 0_i64, created_at),
+        ).await?;
+        Ok(())
+    }
+
+    pub async fn update_wallet_balance(&self, address: &str, amount: i64) -> Result<()> {
+        let queries = self.prepared_queries.read().await;
+        self.session.execute_iter(
+            &queries.update_wallet_balance,
+            (amount, address),
+        ).await?;
+        Ok(())
+    }
+
+    pub async fn insert_proposal(&self, proposal_id: &str, description: &str, chain_name: &str, interop_chain: &str, votes_for: i64, votes_against: i64, quorum: f64) -> Result<()> {
+        let queries = self.prepared_queries.read().await;
+        self.session.execute_iter(
+            &queries.insert_proposal,
+            (proposal_id, description, chain_name, interop_chain, votes_for, votes_against, quorum),
+        ).await?;
+        Ok(())
+    }
+
+    pub async fn insert_vote(&self, proposal_id: &str, validator_id: &str, vote: bool, stake_weight: i64, sig: &[u8], timestamp: i64) -> Result<()> {
+        let queries = self.prepared_queries.read().await;
+        self.session.execute_iter(
+            &queries.insert_vote,
+            (proposal_id, validator_id, vote, stake_weight, sig, timestamp),
+        ).await?;
+        Ok(())
+    }
 
     pub async fn insert_transactions_batch(&self, shard_id: i32, transactions: Vec<Transaction>) -> Result<()> {
         let queries = self.prepared_queries.read().await;
@@ -130,7 +223,7 @@ impl ScyllaCluster {
                 tx.block_height as i64,
                 tx.from_address,
                 tx.to_address,
-                tx.amount as i64, // Assume DECIMAL for amount
+                tx.amount as i64,
                 tx.nonce as i64,
                 tx.signature,
                 tx.timestamp,
@@ -140,8 +233,6 @@ impl ScyllaCluster {
         self.session.batch(&batch, &values).await?;
         Ok(())
     }
-
-    // ... existing ...
 }
 
 // Migration helper for RocksDB -> ScyllaDB

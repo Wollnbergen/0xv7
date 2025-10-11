@@ -61,6 +61,7 @@ pub mod types;
 pub mod transaction_validator;
 pub mod blockchain;
 pub mod telegram_bot;
+pub use self::quantum::quantum_sign;
 
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
