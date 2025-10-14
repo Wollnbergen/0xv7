@@ -4103,3 +4103,7 @@ prometheus-*/
 # Env files
 .env
 .env.*
+
+# Ignore Prometheus archives
+prometheus-*.tar.gz
+
