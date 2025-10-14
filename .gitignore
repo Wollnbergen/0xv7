@@ -4107,3 +4107,7 @@ prometheus-*/
 # Ignore Prometheus archives
 prometheus-*.tar.gz
 
+
+# Node
+node_modules/
+
