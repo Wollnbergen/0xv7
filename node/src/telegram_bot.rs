@@ -17,7 +17,10 @@ impl TelegramBot {
     }
 
     pub async fn stake(&self, amount: u64) -> Result<()> {
-        info!("One-tap staking {} SLTN at APY ~26.67% (hide complexity)", amount);
+        info!(
+            "One-tap staking {} SLTN at APY ~26.67% (hide complexity)",
+            amount
+        );
         Ok(())
     }
 }

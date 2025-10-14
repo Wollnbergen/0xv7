@@ -5,9 +5,9 @@ pub mod sultan {
 pub mod bitcoin;
 pub mod zk_proofs;
 use anyhow::Result;
-use tracing::info;
-use tokio::sync::RwLock;
 use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::info;
 
 #[allow(dead_code)]
 pub struct EthBridge {
@@ -17,11 +17,16 @@ pub struct EthBridge {
 impl EthBridge {
     pub async fn new() -> Result<Self> {
         info!("Initializing ETH bridge stub");
-        Ok(Self { quantum_crypto: SharedQuantumCrypto::new() })
+        Ok(Self {
+            quantum_crypto: SharedQuantumCrypto::new(),
+        })
     }
 
     pub async fn atomic_swap(&self, amount: u64) -> Result<()> {
-        info!("Atomic swap stub: {} SLTN <-> ETH (gas-free on Sultan, light client verified <3s)", amount);
+        info!(
+            "Atomic swap stub: {} SLTN <-> ETH (gas-free on Sultan, light client verified <3s)",
+            amount
+        );
         Ok(())
     }
 

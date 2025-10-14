@@ -1,20 +1,20 @@
 // grpc_service.rs - gRPC for interop
 
-// Add gRPC service logic here
-use tonic::{transport::Server, Request, Response, Status};
-use tonic::server::Grpc;
-use tokio_stream::wrappers::ReceiverStream;
-use anyhow::Result;
-use tracing::info;
-use std::sync::Arc;
 use crate::blockchain::Blockchain;
-use tonic::include_proto!("sultan"); // Proto gen for sultan
+use anyhow::Result;
+use std::sync::Arc;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{transport::Server, Request, Response, Status};
+use tracing::info;
+
+// Correct proto module declaration
+pub mod sultan {
+    tonic::include_proto!("sultan");
+}
 use sultan::{
     chain_service_server::{ChainService, ChainServiceServer},
-    BlockInfo, GetBlockInfoRequest, GetBlockInfoResponse,
-    GetStateProofRequest, GetStateProofResponse,
-    SubscribeRequest, VerifyStateRequest, VerifyStateResponse,
-    StateProof,
+    BlockInfo, GetBlockInfoRequest, GetBlockInfoResponse, GetStateProofRequest,
+    GetStateProofResponse, StateProof, SubscribeRequest, VerifyStateRequest, VerifyStateResponse,
 };
 
 pub struct SultanGrpcService {
@@ -42,10 +42,9 @@ impl ChainService for SultanGrpcService {
             state_root: format!("sultanstate_{:058x}", height),
             timestamp: chrono::Utc::now().timestamp(),
         };
-        Ok(Response::new(GetBlockInfoResponse {
-            block: Some(block),
-        }))
+        Ok(Response::new(GetBlockInfoResponse { block: Some(block) }))
     }
+
     async fn get_state_proof(
         &self,
         request: Request<GetStateProofRequest>,
@@ -56,19 +55,21 @@ impl ChainService for SultanGrpcService {
             block_height: height,
             state_root: format!("sultanstate_{:058x}", height),
             merkle_proof: vec![vec![]], // Dummy
-            signature: vec![], // Dummy
+            signature: vec![],          // Dummy
         };
-        Ok(Response::new(GetStateProofResponse {
-            proof: Some(proof),
-        }))
+        Ok(Response::new(GetStateProofResponse { proof: Some(proof) }))
     }
+
     type SubscribeToBlocksStream = ReceiverStream<Result<BlockInfo, Status>>;
     async fn subscribe_to_blocks(
         &self,
         request: Request<SubscribeRequest>,
-    ) -> Result<Response<<SultanGrpcService as ChainService>::SubscribeToBlocksStream>, Status> {
+    ) -> Result<Response<Self::SubscribeToBlocksStream>, Status> {
         let from_block = request.into_inner().from_block;
-        info!("⚡ gRPC SubscribeToBlocks request from block: {}", from_block);
+        info!(
+            "⚡ gRPC SubscribeToBlocks request from block: {}",
+            from_block
+        );
         let (tx, rx) = tokio::sync::mpsc::channel(128);
         let blockchain_clone = self.blockchain.clone();
         tokio::spawn(async move {
@@ -90,6 +91,7 @@ impl ChainService for SultanGrpcService {
         });
         Ok(Response::new(ReceiverStream::new(rx)))
     }
+
     async fn verify_state(
         &self,
         request: Request<VerifyStateRequest>,
@@ -103,10 +105,12 @@ impl ChainService for SultanGrpcService {
         }))
     }
 }
+
 pub async fn start_grpc_server(blockchain: Arc<Blockchain>, addr: String) -> Result<()> {
     let service = SultanGrpcService::new(blockchain);
     Server::builder()
         .add_service(ChainServiceServer::new(service))
-        .serve(addr.parse()?).await?;
+        .serve(addr.parse()?)
+        .await?;
     Ok(())
 }

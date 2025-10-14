@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use pqcrypto_traits::sign::{PublicKey, SecretKey};
+// ...existing code...
     use super::*;
     use tracing::info;
     #[tokio::test]

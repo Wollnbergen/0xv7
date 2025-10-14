@@ -4,10 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "sdk"
-path = "src/sdk.rs"
-
-[[bin]]
 name = "p2p_node"
 path = "src/p2p_node.rs"
 
@@ -43,7 +39,22 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 tonic-build = { workspace = true }
 tracing-subscriber = { workspace = true }
 warp = "0.3"
+rocksdb = "0.24.0"
+bincode = "2.0.1"
+serde_json = "1.0.145"
+tokio-stream = "0.1.17"
+jsonrpc-core = "18"
+jsonrpc-http-server = "18"
+jsonwebtoken = "9"
+redis = "0.25"
+prometheus = "0.13"
+tiny_http = "0.12"
+lazy_static = "1.4"
+dotenvy = "0.15"
 
 [dev-dependencies]
 tokio = { version = "1.47", features = ["test-util"] }
 tracing-test = "0.2.5"
+
+[build-dependencies]
+tonic-build.workspace = true

@@ -1,10 +1,14 @@
 use anyhow::Result;
+use bincode::{Decode, Encode};
+use pqcrypto_dilithium::dilithium3::keypair;
+use pqcrypto_traits::sign::{PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use pqcrypto_dilithium::dilithium3::keypair;
 
-#[derive(Clone, Debug, Default)]
+// Shared types for Sultan Blockchain
+
+#[derive(Clone, Debug, Default, Encode, Decode)]
 #[allow(dead_code)] // For future expansion
 pub struct Block {
     pub height: u64,
@@ -19,9 +23,7 @@ pub struct Block {
     pub mev_proofs: Vec<Vec<u8>>,
 }
 
-// types.rs - Shared types for Sultan Blockchain
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct Transaction {
     pub tx_hash: String,
     pub block_height: u64,
@@ -44,10 +46,12 @@ pub struct ValidatorInfo {
     pub device_type: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+// FIX: Remove Serialize/Deserialize from SultanToken, or skip db field
+#[derive(Clone, Debug)]
 pub struct SultanToken {
     pub balance: HashMap<String, u64>,
     pub supply: u64,
+    #[allow(dead_code)]
     pub db: Option<Arc<crate::scylla_db::ScyllaCluster>>,
 }
 
@@ -82,7 +86,14 @@ impl SultanToken {
         let address = format!("sultan1{}", hex::encode(pk.as_bytes()));
         if let Some(db) = &self.db {
             let timestamp = chrono::Utc::now().timestamp();
-            db.insert_wallet(telegram_id, &address, pk.as_bytes(), sk.as_bytes(), timestamp).await?;
+            db.insert_wallet(
+                telegram_id,
+                &address,
+                pk.as_bytes(),
+                sk.as_bytes(),
+                timestamp,
+            )
+            .await?;
         }
         println!("Generated wallet address for {}: {}", telegram_id, address);
         Ok(address)
@@ -102,7 +113,10 @@ impl SultanToken {
         let rewards = (amount as f64 * 0.6) as u64;
         let subsidies = (amount as f64 * 0.3) as u64;
         let burned = amount - rewards - subsidies;
-        println!("Inflation allocated: {} rewards, {} subsidies, {} burned", rewards, subsidies, burned);
+        println!(
+            "Inflation allocated: {} rewards, {} subsidies, {} burned",
+            rewards, subsidies, burned
+        );
         self.supply += amount;
         Ok(())
     }

@@ -1,13 +1,14 @@
 use anyhow::Result;
+use futures::future::join_all;
+use pqcrypto_traits::sign::{PublicKey, SecretKey};
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::info;
-use futures::future::join_all;
-use std::sync::Arc;
-use crate::ChainConfig;
-use crate::types::{Block, Transaction, ValidatorInfo, SultanToken};
-use crate::transaction_validator::TransactionValidator;
-use crate::quantum::QuantumCrypto;
+// ...existing code...
 use crate::scylla_db::ScyllaCluster;
+use crate::transaction_validator::TransactionValidator;
+use crate::types::{Block, SultanToken, Transaction};
+use crate::ChainConfig;
 
 #[derive(Default, Debug, Clone)]
 pub struct Stats {
@@ -36,13 +37,27 @@ impl Blockchain {
         let validator = TransactionValidator::new();
         let token = SultanToken::new(db.clone());
         info!("Blockchain initialized with ScyllaDB for production.");
-        Ok(Self { db, shards, validator, token })
+        Ok(Self {
+            db,
+            shards,
+            validator,
+            token,
+        })
     }
 
-    pub async fn stake_to_validator(&self, validator_id: &str, amount: u64, signed: String) -> Result<()> {
-        info!("Staking {} SLTN to validator {} (signed: {})", amount, validator_id, signed);
+    pub async fn stake_to_validator(
+        &self,
+        validator_id: &str,
+        amount: u64,
+        signed: String,
+    ) -> Result<()> {
+        info!(
+            "Staking {} SLTN to validator {} (signed: {})",
+            amount, validator_id, signed
+        );
         if let Some(db) = &self.db {
-            db.update_balance(validator_id, amount as i64, 0).await?; // 0 = default shard
+            db.update_wallet_balance(validator_id, amount as i64)
+                .await?;
         }
         Ok(())
     }
@@ -51,17 +66,43 @@ impl Blockchain {
         Ok(26.67)
     }
 
-    pub async fn atomic_swap(&self, from: &str, to: &str, amount: u64, signed: String) -> Result<()> {
-        info!("Atomic swap: {} {} -> {} (signed: {})", amount, from, to, signed);
+    pub async fn atomic_swap(
+        &self,
+        from: &str,
+        to: &str,
+        amount: u64,
+        signed: String,
+    ) -> Result<()> {
+        info!(
+            "Atomic swap: {} {} -> {} (signed: {})",
+            amount, from, to, signed
+        );
         // TODO: Integrate with interop service for real swaps
         Ok(())
     }
 
-    pub async fn submit_vote(&self, proposal_id: &str, vote: bool, stake: u64, signed: String) -> Result<()> {
-        info!("Vote submitted: proposal {} vote {} stake {} (signed: {})", proposal_id, vote, stake, signed);
+    pub async fn submit_vote(
+        &self,
+        proposal_id: &str,
+        vote: bool,
+        stake: u64,
+        signed: String,
+    ) -> Result<()> {
+        info!(
+            "Vote submitted: proposal {} vote {} stake {} (signed: {})",
+            proposal_id, vote, stake, signed
+        );
         if let Some(db) = &self.db {
             let timestamp = chrono::Utc::now().timestamp();
-            db.insert_vote(proposal_id, &signed, vote, stake as i64, signed.as_bytes(), timestamp).await?;
+            db.insert_vote(
+                proposal_id,
+                &signed,
+                vote,
+                stake as i64,
+                signed.as_bytes(),
+                timestamp,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -69,8 +110,16 @@ impl Blockchain {
     pub async fn run_validator(&self, num: u64) -> Result<Stats> {
         let blocks = vec![Block::default(); num as usize];
         self.sharded_process(blocks).await?;
-        info!("Production run_validator complete with {} nodes (2M+ TPS)", num);
-        Ok(Stats { tps: 2_000_000.0, uptime: 100.0, finality: 0.9, inflation: 8.0 })
+        info!(
+            "Production run_validator complete with {} nodes (2M+ TPS)",
+            num
+        );
+        Ok(Stats {
+            tps: 2_000_000.0,
+            uptime: 100.0,
+            finality: 0.9,
+            inflation: 8.0,
+        })
     }
 
     pub async fn batch_execute(&self, tx: &Transaction, block: &Block) -> Result<()> {
@@ -85,7 +134,10 @@ impl Blockchain {
         if let Some(db) = &self.db {
             db.insert_block(block.shard_id as i32, &block).await?;
         }
-        info!("Processed block {} with ScyllaDB (production)", block.height);
+        info!(
+            "Processed block {} with ScyllaDB (production)",
+            block.height
+        );
         Ok(())
     }
 
@@ -102,7 +154,10 @@ impl Blockchain {
                 }
             })
             .collect::<Vec<_>>();
-        join_all(futures).await.into_iter().collect::<Result<Vec<_>>>()?;
+        join_all(futures)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?;
         Ok(())
     }
 

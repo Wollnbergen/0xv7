@@ -1,26 +1,28 @@
 use anyhow::Result;
 use bitcoin::block::Block;
-use bitcoin::Network;
-use bitcoin::psbt::Psbt;
-use bitcoin::hashes::Hash;
 use bitcoin::hash_types::Txid;
+use bitcoin::hashes::Hash;
 use bitcoin::locktime::absolute::LockTime;
-use bitcoin::transaction::Version;
-use bitcoin::Transaction;
-use bitcoin::script::Builder;
-use bitcoin::secp256k1::{rand::rngs::OsRng, rand::RngCore, Secp256k1, SecretKey, PublicKey as SecpPublicKey};
 use bitcoin::opcodes::all::*;
+use bitcoin::psbt::Psbt;
+use bitcoin::script::Builder;
+use bitcoin::secp256k1::{
+    rand::rngs::OsRng, rand::RngCore, PublicKey as SecpPublicKey, Secp256k1, SecretKey,
+};
+use bitcoin::transaction::Version;
 use bitcoin::Address;
 use bitcoin::Amount;
+use bitcoin::Network;
+use bitcoin::PrivateKey;
+use bitcoin::PublicKey;
+use bitcoin::ScriptBuf;
+use bitcoin::Transaction;
 use bitcoin::TxIn;
 use bitcoin::TxOut;
 use bitcoin::Witness;
-use bitcoin::ScriptBuf;
 use std::collections::BTreeMap;
-use bitcoin::PrivateKey;
-use bitcoin::PublicKey;
-use tracing::info;
 use std::time::Instant;
+use tracing::info;
 
 pub struct BitcoinBridge {
     network: Network,
@@ -29,7 +31,9 @@ pub struct BitcoinBridge {
 impl BitcoinBridge {
     pub async fn new() -> Result<Self> {
         info!("Initializing real BTC bridge");
-        Ok(Self { network: Network::Bitcoin })
+        Ok(Self {
+            network: Network::Bitcoin,
+        })
     }
 
     pub async fn atomic_swap(&self, amount: u64) -> Result<()> {
@@ -53,13 +57,19 @@ impl BitcoinBridge {
             .push_opcode(OP_SHA256)
             .push_slice(hash.as_byte_array())
             .push_opcode(OP_EQUALVERIFY)
-            .push_key(&PublicKey { inner: receiver_pk, compressed: true })
+            .push_key(&PublicKey {
+                inner: receiver_pk,
+                compressed: true,
+            })
             .push_opcode(OP_CHECKSIG)
             .push_opcode(OP_ELSE)
             .push_int(refund_timeout.to_consensus_u32() as i64)
             .push_opcode(OP_CLTV)
             .push_opcode(OP_DROP)
-            .push_key(&PublicKey { inner: sender_pk, compressed: true })
+            .push_key(&PublicKey {
+                inner: sender_pk,
+                compressed: true,
+            })
             .push_opcode(OP_CHECKSIG)
             .push_opcode(OP_ENDIF)
             .into_script();
@@ -83,16 +93,37 @@ impl BitcoinBridge {
         };
         let mut psbt = Psbt::from_unsigned_tx(tx)?;
         // Sign input (dummy; in production, sign real input)
-        let keys = BTreeMap::from([(PublicKey { inner: sender_pk, compressed: true }, PrivateKey { inner: sender_sk, network: self.network.into(), compressed: true })]);
-        psbt.sign(&keys, &secp).map_err(|e| anyhow::anyhow!("Sign error: {:?}", e))?;
+        let keys = BTreeMap::from([(
+            PublicKey {
+                inner: sender_pk,
+                compressed: true,
+            },
+            PrivateKey {
+                inner: sender_sk,
+                network: self.network.into(),
+                compressed: true,
+            },
+        )]);
+        psbt.sign(&keys, &secp)
+            .map_err(|e| anyhow::anyhow!("Sign error: {:?}", e))?;
         // In production, broadcast psbt.extract_tx()? via node API and wait for confirmation
-        info!("Production atomic swap on {}: {} SLTN <-> BTC (HTLC hash: {}, timeout: {}, <3s: {:?})", self.network, amount, hash, refund_timeout, start.elapsed());
+        info!(
+            "Production atomic swap on {}: {} SLTN <-> BTC (HTLC hash: {}, timeout: {}, <3s: {:?})",
+            self.network,
+            amount,
+            hash,
+            refund_timeout,
+            start.elapsed()
+        );
         Ok(())
     }
 
     pub async fn sync_light_client(&self, _block: Block) -> Result<()> {
         let txid = Txid::from_raw_hash(bitcoin::hashes::sha256d::Hash::all_zeros());
-        info!("Real BTC light client sync on {} (SPV verified txid: {})", self.network, txid);
+        info!(
+            "Real BTC light client sync on {} (SPV verified txid: {})",
+            self.network, txid
+        );
         Ok(())
     }
 }

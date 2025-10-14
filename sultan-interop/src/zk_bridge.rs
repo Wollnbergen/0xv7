@@ -1,7 +1,7 @@
 // Zero-knowledge bridge service stub
 
 // ...to be implemented...
-use crate::zk_proofs::{ZKProofSystem, StateProof, CrossChainProof};
+use crate::zk_proofs::{CrossChainProof, StateProof, ZKProofSystem};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -34,16 +34,21 @@ pub struct ZKBridge {
 impl ZKBridge {
     pub fn new() -> Self {
         info!("🌉 Initializing ZK-enabled Native Bridge");
-        
+
         Self {
             zk_system: Arc::new(ZKProofSystem::new()),
             pending_transfers: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
-    pub async fn initiate_transfer(&self, request: ZKTransferRequest) -> Result<ZKTransferResponse> {
-        info!("🔐 Processing ZK-secured transfer: {} {} from {} to {}", 
-            request.amount, request.source_chain, request.sender, request.recipient);
+    pub async fn initiate_transfer(
+        &self,
+        request: ZKTransferRequest,
+    ) -> Result<ZKTransferResponse> {
+        info!(
+            "🔐 Processing ZK-secured transfer: {} {} from {} to {}",
+            request.amount, request.source_chain, request.sender, request.recipient
+        );
 
         // Verify source chain state proof if provided
         let source_verified = if let Some(ref state_proof) = request.source_state_proof {
@@ -79,12 +84,12 @@ impl ZKBridge {
 
     pub async fn verify_and_complete_transfer(&self, tx_id: &str) -> Result<bool> {
         info!("✅ Completing ZK-verified transfer: {}", tx_id);
-        
+
         // In production, this would:
         // 1. Verify the transfer proof on target chain
         // 2. Execute the transfer
         // 3. Generate completion proof
-        
+
         Ok(true)
     }
 }

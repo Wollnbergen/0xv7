@@ -1,6 +1,6 @@
 // node/src/transaction_validator.rs - SDK gas-free (minimal stub)
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use tracing::info;
 
 #[derive(Debug)]
@@ -22,7 +22,8 @@ impl TransactionValidator {
     }
 
     pub fn validate(&self, tx: &Tx) -> Result<()> {
-        if tx.subsidy { // Gas-free on Sultan
+        if tx.subsidy {
+            // Gas-free on Sultan
             info!("Validated gas-free tx (subsidized by APY ~26.67%)");
             Ok(())
         } else {

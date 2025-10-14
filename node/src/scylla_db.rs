@@ -1,36 +1,25 @@
-// scylla_db.rs - ScyllaDB integration for sharding/TPS
-
-use anyhow::{Result, anyhow};
+use crate::types::{Block, Transaction};
+use anyhow::Result;
+use bincode;
+use rocksdb::DB;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
-use scylla::statement::Consistency;
-use scylla::prepared_statement::PreparedStatement;
 use scylla::statement::batch::{Batch, BatchType};
-use scylla::macros::FromRow;
+use scylla::statement::prepared::PreparedStatement;
+use scylla::statement::Consistency;
+use serde_json::to_string;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
-use std::collections::HashMap;
-use rocksdb::DB;
-use crate::quantum::QuantumCrypto;
-use crate::lib::{Block, Transaction};
 
+#[derive(Debug)]
 pub struct ScyllaCluster {
     pub session: Arc<Session>,
     pub keyspace: String,
     pub prepared_queries: Arc<RwLock<PreparedQueries>>,
 }
 
-#[derive(FromRow)]
-pub struct BlockData {
-    pub height: i64,
-    pub hash: String,
-    pub previous_hash: String,
-    pub timestamp: i64,
-    pub validator: String,
-    pub state_root: Vec<u8>,
-}
-
+#[derive(Debug)]
 pub struct PreparedQueries {
     pub insert_block: PreparedStatement,
     pub get_block: PreparedStatement,
@@ -40,7 +29,6 @@ pub struct PreparedQueries {
     pub update_shard_state: PreparedStatement,
     pub update_balance: PreparedStatement,
     pub get_balance: PreparedStatement,
-    // Added for production wallet/token/governance support:
     pub insert_wallet: PreparedStatement,
     pub update_wallet_balance: PreparedStatement,
     pub insert_proposal: PreparedStatement,
@@ -49,10 +37,8 @@ pub struct PreparedQueries {
 
 impl ScyllaCluster {
     pub async fn new(nodes: Vec<&str>, keyspace: &str) -> Result<Self> {
-        let session: Arc<Session> = Arc::new(SessionBuilder::new()
-            .known_nodes(nodes)
-            .build()
-            .await?);
+        let session: Arc<Session> =
+            Arc::new(SessionBuilder::new().known_nodes(nodes).build().await?);
         session.query_iter(
             format!(
                 "CREATE KEYSPACE IF NOT EXISTS {} WITH REPLICATION = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 3}}",
@@ -71,8 +57,9 @@ impl ScyllaCluster {
     }
 
     async fn create_tables(session: &Session) -> Result<()> {
-        session.query_iter(
-            "CREATE TABLE IF NOT EXISTS blocks (
+        session
+            .query_iter(
+                "CREATE TABLE IF NOT EXISTS blocks (
                 shard_id INT,
                 height BIGINT,
                 hash TEXT,
@@ -84,10 +71,12 @@ impl ScyllaCluster {
                 transactions LIST<TEXT>,
                 PRIMARY KEY (shard_id, height)
             ) WITH CLUSTERING ORDER BY (height DESC)",
-            &[]
-        ).await?;
-        session.query_iter(
-            "CREATE TABLE IF NOT EXISTS wallets (
+                &[],
+            )
+            .await?;
+        session
+            .query_iter(
+                "CREATE TABLE IF NOT EXISTS wallets (
                 telegram_id TEXT PRIMARY KEY,
                 address TEXT,
                 pk BLOB,
@@ -95,10 +84,12 @@ impl ScyllaCluster {
                 balance BIGINT,
                 created_at BIGINT
             )",
-            &[]
-        ).await?;
-        session.query_iter(
-            "CREATE TABLE IF NOT EXISTS proposals (
+                &[],
+            )
+            .await?;
+        session
+            .query_iter(
+                "CREATE TABLE IF NOT EXISTS proposals (
                 proposal_id TEXT PRIMARY KEY,
                 description TEXT,
                 chain_name TEXT,
@@ -107,10 +98,12 @@ impl ScyllaCluster {
                 votes_against BIGINT,
                 quorum DOUBLE
             )",
-            &[]
-        ).await?;
-        session.query_iter(
-            "CREATE TABLE IF NOT EXISTS votes (
+                &[],
+            )
+            .await?;
+        session
+            .query_iter(
+                "CREATE TABLE IF NOT EXISTS votes (
                 proposal_id TEXT,
                 validator_id TEXT,
                 vote BOOL,
@@ -119,17 +112,20 @@ impl ScyllaCluster {
                 timestamp BIGINT,
                 PRIMARY KEY (proposal_id, validator_id)
             )",
-            &[]
-        ).await?;
-        session.query_iter(
-            "CREATE TABLE IF NOT EXISTS accounts (
+                &[],
+            )
+            .await?;
+        session
+            .query_iter(
+                "CREATE TABLE IF NOT EXISTS accounts (
                 address TEXT,
                 shard_id INT,
                 balance BIGINT,
                 PRIMARY KEY (address, shard_id)
             )",
-            &[]
-        ).await?;
+                &[],
+            )
+            .await?;
         Ok(())
     }
 
@@ -142,14 +138,13 @@ impl ScyllaCluster {
             get_block: session.prepare("SELECT * FROM blocks WHERE shard_id = ? AND height = ?").await?,
             get_latest_block: session.prepare("SELECT * FROM blocks WHERE shard_id = ? ORDER BY height DESC LIMIT 1").await?,
             insert_transaction: session.prepare(
-                "INSERT INTO transactions (shard_id, tx_hash, block_height, from_address, to_address, amount, nonce, signature, timestamp, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO transactions (shard_id, tx_hash, block_height, from_address, to_address, amount, signature)
+                VALUES (?, ?, ?, ?, ?, ?, ?)"
             ).await?,
             get_validator: session.prepare("SELECT * FROM validators WHERE address = ?").await?,
             update_shard_state: session.prepare("UPDATE shards SET state_root = ? WHERE shard_id = ?").await?,
             update_balance: session.prepare("UPDATE accounts SET balance = ? WHERE address = ? AND shard_id = ?").await?,
             get_balance: session.prepare("SELECT balance FROM accounts WHERE address = ? AND shard_id = ?").await?,
-            // New for wallet/token/governance:
             insert_wallet: session.prepare(
                 "INSERT INTO wallets (telegram_id, address, pk, sk, balance, created_at) VALUES (?, ?, ?, ?, ?, ?)"
             ).await?,
@@ -167,50 +162,115 @@ impl ScyllaCluster {
 
     pub async fn insert_block(&self, shard_id: i32, block: &Block) -> Result<()> {
         let queries = self.prepared_queries.read().await;
-        self.session.execute_iter(
-            &queries.insert_block,
-            (shard_id, block.height as i64, &block.hash, &block.previous_hash, block.timestamp.timestamp(), &block.validator, &block.signature, &block.state_root, &block.transactions),
-        ).await?;
+        let tx_strings: Vec<String> = block
+            .transactions
+            .iter()
+            .map(|tx| to_string(tx).unwrap_or_default())
+            .collect();
+        self.session
+            .execute_iter(
+                queries.insert_block.clone(),
+                (
+                    shard_id,
+                    block.height as i64,
+                    &block.hash,
+                    &block.previous_hash,
+                    block.timestamp as i64,
+                    &block.validator,
+                    &block.signature,
+                    &block.state_root,
+                    tx_strings,
+                ),
+            )
+            .await?;
         Ok(())
     }
 
-    pub async fn insert_wallet(&self, telegram_id: &str, address: &str, pk: &[u8], sk: &[u8], created_at: i64) -> Result<()> {
+    pub async fn insert_wallet(
+        &self,
+        telegram_id: &str,
+        address: &str,
+        pk: &[u8],
+        sk: &[u8],
+        created_at: i64,
+    ) -> Result<()> {
         let queries = self.prepared_queries.read().await;
-        self.session.execute_iter(
-            &queries.insert_wallet,
-            (telegram_id, address, pk, sk, 0_i64, created_at),
-        ).await?;
+        self.session
+            .execute_iter(
+                queries.insert_wallet.clone(),
+                (telegram_id, address, pk, sk, 0_i64, created_at),
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn update_wallet_balance(&self, address: &str, amount: i64) -> Result<()> {
         let queries = self.prepared_queries.read().await;
-        self.session.execute_iter(
-            &queries.update_wallet_balance,
-            (amount, address),
-        ).await?;
+        self.session
+            .execute_iter(queries.update_wallet_balance.clone(), (amount, address))
+            .await?;
         Ok(())
     }
 
-    pub async fn insert_proposal(&self, proposal_id: &str, description: &str, chain_name: &str, interop_chain: &str, votes_for: i64, votes_against: i64, quorum: f64) -> Result<()> {
+    pub async fn insert_proposal(
+        &self,
+        proposal_id: &str,
+        description: &str,
+        chain_name: &str,
+        interop_chain: &str,
+        votes_for: i64,
+        votes_against: i64,
+        quorum: f64,
+    ) -> Result<()> {
         let queries = self.prepared_queries.read().await;
-        self.session.execute_iter(
-            &queries.insert_proposal,
-            (proposal_id, description, chain_name, interop_chain, votes_for, votes_against, quorum),
-        ).await?;
+        self.session
+            .execute_iter(
+                queries.insert_proposal.clone(),
+                (
+                    proposal_id,
+                    description,
+                    chain_name,
+                    interop_chain,
+                    votes_for,
+                    votes_against,
+                    quorum,
+                ),
+            )
+            .await?;
         Ok(())
     }
 
-    pub async fn insert_vote(&self, proposal_id: &str, validator_id: &str, vote: bool, stake_weight: i64, sig: &[u8], timestamp: i64) -> Result<()> {
+    pub async fn insert_vote(
+        &self,
+        proposal_id: &str,
+        validator_id: &str,
+        vote: bool,
+        stake_weight: i64,
+        sig: &[u8],
+        timestamp: i64,
+    ) -> Result<()> {
         let queries = self.prepared_queries.read().await;
-        self.session.execute_iter(
-            &queries.insert_vote,
-            (proposal_id, validator_id, vote, stake_weight, sig, timestamp),
-        ).await?;
+        self.session
+            .execute_iter(
+                queries.insert_vote.clone(),
+                (
+                    proposal_id,
+                    validator_id,
+                    vote,
+                    stake_weight,
+                    sig,
+                    timestamp,
+                ),
+            )
+            .await?;
         Ok(())
     }
 
-    pub async fn insert_transactions_batch(&self, shard_id: i32, transactions: Vec<Transaction>) -> Result<()> {
+    pub async fn insert_transactions_batch(
+        &self,
+        shard_id: i32,
+        transactions: Vec<Transaction>,
+    ) -> Result<()> {
         let queries = self.prepared_queries.read().await;
         let mut batch = Batch::new(BatchType::Logged);
         batch.set_consistency(Consistency::LocalQuorum);
@@ -224,10 +284,7 @@ impl ScyllaCluster {
                 tx.from_address,
                 tx.to_address,
                 tx.amount as i64,
-                tx.nonce as i64,
                 tx.signature,
-                tx.timestamp,
-                tx.status,
             ));
         }
         self.session.batch(&batch, &values).await?;
@@ -243,14 +300,28 @@ pub struct DataMigrator {
 
 impl DataMigrator {
     pub fn new(rocks_db: Arc<DB>, scylla_db: Arc<ScyllaCluster>) -> Self {
-        Self { rocks_db, scylla_db }
+        Self {
+            rocks_db,
+            scylla_db,
+        }
     }
 
-    pub async fn migrate_blocks(&self, shard_id: i32, start_height: u64, end_height: u64) -> Result<()> {
-        info!("Migrating blocks {} to {} for shard {}", start_height, end_height, shard_id);
+    pub async fn migrate_blocks(
+        &self,
+        shard_id: i32,
+        start_height: u64,
+        end_height: u64,
+    ) -> Result<()> {
+        info!(
+            "Migrating blocks {} to {} for shard {}",
+            start_height, end_height, shard_id
+        );
         for height in start_height..=end_height {
             if let Some(block_bytes) = self.rocks_db.get(height.to_be_bytes())? {
-                let block: Block = bincode::deserialize(&block_bytes)?;
+                let block: Block =
+                    bincode::decode_from_slice(&block_bytes, bincode::config::standard())
+                        .unwrap()
+                        .0;
                 self.scylla_db.insert_block(shard_id, &block).await?;
                 if height % 1000 == 0 {
                     info!("Migrated {} blocks", height);

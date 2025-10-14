@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateProof {
@@ -39,23 +39,27 @@ impl ZKProofSystem {
         _merkle_path: Vec<Vec<u8>>,
     ) -> Result<StateProof> {
         let start = Instant::now();
-        info!("⚡ Generating ZK state proof for {} at height {}", chain, block_height);
+        info!(
+            "⚡ Generating ZK state proof for {} at height {}",
+            chain, block_height
+        );
 
         // For now, create a mock proof - in production this would use Plonky2
         let proof = vec![1, 2, 3, 4, 5]; // Placeholder
-        
+
         let elapsed = start.elapsed();
-        info!("✅ ZK state proof generated in {:?} (size: {} bytes)", elapsed, proof.len());
+        info!(
+            "✅ ZK state proof generated in {:?} (size: {} bytes)",
+            elapsed,
+            proof.len()
+        );
 
         Ok(StateProof {
             chain: chain.to_string(),
             block_height,
             state_root: state_root.to_string(),
             proof,
-            public_inputs: vec![
-                block_height.to_string(),
-                state_root.to_string(),
-            ],
+            public_inputs: vec![block_height.to_string(), state_root.to_string()],
         })
     }
 
@@ -69,15 +73,20 @@ impl ZKProofSystem {
         recipient: &str,
     ) -> Result<CrossChainProof> {
         let start = Instant::now();
-        info!("⚡ Generating ZK transfer proof: {} {} from {} to {}", 
-            amount, source_chain, sender, recipient);
+        info!(
+            "⚡ Generating ZK transfer proof: {} {} from {} to {}",
+            amount, source_chain, sender, recipient
+        );
 
         // Mock proof generation
         let proof = vec![6, 7, 8, 9, 10]; // Placeholder
-        
+
         let elapsed = start.elapsed();
-        info!("✅ ZK transfer proof generated in {:?} (size: {} bytes)", 
-            elapsed, proof.len());
+        info!(
+            "✅ ZK transfer proof generated in {:?} (size: {} bytes)",
+            elapsed,
+            proof.len()
+        );
 
         Ok(CrossChainProof {
             source_chain: source_chain.to_string(),
@@ -95,10 +104,13 @@ impl ZKProofSystem {
         debug!("🔍 Verifying ZK state proof for {}", proof.chain);
 
         let is_valid = !proof.proof.is_empty() && proof.block_height > 0;
-        
+
         let elapsed = start.elapsed();
-        info!("✅ ZK proof verification completed in {:?}: {}", elapsed, is_valid);
-        
+        info!(
+            "✅ ZK proof verification completed in {:?}: {}",
+            elapsed, is_valid
+        );
+
         Ok(is_valid)
     }
 
@@ -108,10 +120,13 @@ impl ZKProofSystem {
         debug!("🔍 Verifying ZK transfer proof");
 
         let is_valid = !proof.proof.is_empty() && proof.amount > 0;
-        
+
         let elapsed = start.elapsed();
-        info!("✅ ZK transfer verification completed in {:?}: {}", elapsed, is_valid);
-        
+        info!(
+            "✅ ZK transfer verification completed in {:?}: {}",
+            elapsed, is_valid
+        );
+
         Ok(is_valid)
     }
 }

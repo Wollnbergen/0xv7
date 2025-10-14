@@ -34,7 +34,8 @@ impl QuantumCrypto {
 pub type SharedQuantumCrypto = Arc<RwLock<QuantumCrypto>>;
 
 // === Quantum-proof signing stub for SDK integration ===
-pub fn quantum_sign(_message: &str) -> String { // Prefix _ for unused var
+pub fn quantum_sign(_message: &str) -> String {
+    // Prefix _ for unused var
     info!("Quantum-proof signing stub called (production, trusted/reliable)");
     "signed_message_stub".to_string()
 }

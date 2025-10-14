@@ -1,6 +1,6 @@
 // scylla_db.rs - ScyllaDB integration for sharding/TPS
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, Context, anyhow};
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::statement::Consistency;
@@ -9,7 +9,7 @@ use scylla::statement::batch::{Batch, BatchType};
 use scylla::macros::FromRow;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, error};
 use std::collections::HashMap;
 use rocksdb::DB;
 use crate::quantum::QuantumCrypto;
@@ -52,17 +52,18 @@ impl ScyllaCluster {
         let session: Arc<Session> = Arc::new(SessionBuilder::new()
             .known_nodes(nodes)
             .build()
-            .await?);
+            .await
+            .context("Failed to connect to ScyllaDB")?);
         session.query_iter(
             format!(
                 "CREATE KEYSPACE IF NOT EXISTS {} WITH REPLICATION = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 3}}",
                 keyspace
             ),
             &[]
-        ).await?;
-        session.use_keyspace(keyspace, false).await?;
-        Self::create_tables(&session).await?;
-        let prepared_queries = Self::prepare_queries(&session).await?;
+        ).await.context("Failed to create keyspace")?;
+        session.use_keyspace(keyspace, false).await.context("Failed to use keyspace")?;
+        Self::create_tables(&session).await.context("Failed to create tables")?;
+        let prepared_queries = Self::prepare_queries(&session).await.context("Failed to prepare queries")?;
         Ok(Self {
             session,
             keyspace: keyspace.to_string(),
@@ -85,7 +86,7 @@ impl ScyllaCluster {
                 PRIMARY KEY (shard_id, height)
             ) WITH CLUSTERING ORDER BY (height DESC)",
             &[]
-        ).await?;
+        ).await.context("Failed to create blocks table")?;
         session.query_iter(
             "CREATE TABLE IF NOT EXISTS wallets (
                 telegram_id TEXT PRIMARY KEY,
@@ -96,7 +97,7 @@ impl ScyllaCluster {
                 created_at BIGINT
             )",
             &[]
-        ).await?;
+        ).await.context("Failed to create wallets table")?;
         session.query_iter(
             "CREATE TABLE IF NOT EXISTS proposals (
                 proposal_id TEXT PRIMARY KEY,
@@ -108,7 +109,7 @@ impl ScyllaCluster {
                 quorum DOUBLE
             )",
             &[]
-        ).await?;
+        ).await.context("Failed to create proposals table")?;
         session.query_iter(
             "CREATE TABLE IF NOT EXISTS votes (
                 proposal_id TEXT,
@@ -120,7 +121,7 @@ impl ScyllaCluster {
                 PRIMARY KEY (proposal_id, validator_id)
             )",
             &[]
-        ).await?;
+        ).await.context("Failed to create votes table")?;
         session.query_iter(
             "CREATE TABLE IF NOT EXISTS accounts (
                 address TEXT,
@@ -129,7 +130,7 @@ impl ScyllaCluster {
                 PRIMARY KEY (address, shard_id)
             )",
             &[]
-        ).await?;
+        ).await.context("Failed to create accounts table")?;
         Ok(())
     }
 
@@ -138,30 +139,30 @@ impl ScyllaCluster {
             insert_block: session.prepare(
                 "INSERT INTO blocks (shard_id, height, hash, previous_hash, timestamp, validator, signature, state_root, transactions)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            ).await?,
-            get_block: session.prepare("SELECT * FROM blocks WHERE shard_id = ? AND height = ?").await?,
-            get_latest_block: session.prepare("SELECT * FROM blocks WHERE shard_id = ? ORDER BY height DESC LIMIT 1").await?,
+            ).await.context("Failed to prepare insert_block")?,
+            get_block: session.prepare("SELECT * FROM blocks WHERE shard_id = ? AND height = ?").await.context("Failed to prepare get_block")?,
+            get_latest_block: session.prepare("SELECT * FROM blocks WHERE shard_id = ? ORDER BY height DESC LIMIT 1").await.context("Failed to prepare get_latest_block")?,
             insert_transaction: session.prepare(
                 "INSERT INTO transactions (shard_id, tx_hash, block_height, from_address, to_address, amount, nonce, signature, timestamp, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            ).await?,
-            get_validator: session.prepare("SELECT * FROM validators WHERE address = ?").await?,
-            update_shard_state: session.prepare("UPDATE shards SET state_root = ? WHERE shard_id = ?").await?,
-            update_balance: session.prepare("UPDATE accounts SET balance = ? WHERE address = ? AND shard_id = ?").await?,
-            get_balance: session.prepare("SELECT balance FROM accounts WHERE address = ? AND shard_id = ?").await?,
+            ).await.context("Failed to prepare insert_transaction")?,
+            get_validator: session.prepare("SELECT * FROM validators WHERE address = ?").await.context("Failed to prepare get_validator")?,
+            update_shard_state: session.prepare("UPDATE shards SET state_root = ? WHERE shard_id = ?").await.context("Failed to prepare update_shard_state")?,
+            update_balance: session.prepare("UPDATE accounts SET balance = ? WHERE address = ? AND shard_id = ?").await.context("Failed to prepare update_balance")?,
+            get_balance: session.prepare("SELECT balance FROM accounts WHERE address = ? AND shard_id = ?").await.context("Failed to prepare get_balance")?,
             // New for wallet/token/governance:
             insert_wallet: session.prepare(
                 "INSERT INTO wallets (telegram_id, address, pk, sk, balance, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-            ).await?,
+            ).await.context("Failed to prepare insert_wallet")?,
             update_wallet_balance: session.prepare(
                 "UPDATE wallets SET balance = balance + ? WHERE address = ?"
-            ).await?,
+            ).await.context("Failed to prepare update_wallet_balance")?,
             insert_proposal: session.prepare(
                 "INSERT INTO proposals (proposal_id, description, chain_name, interop_chain, votes_for, votes_against, quorum) VALUES (?, ?, ?, ?, ?, ?, ?)"
-            ).await?,
+            ).await.context("Failed to prepare insert_proposal")?,
             insert_vote: session.prepare(
                 "INSERT INTO votes (proposal_id, validator_id, vote, stake_weight, sig, timestamp) VALUES (?, ?, ?, ?, ?, ?)"
-            ).await?,
+            ).await.context("Failed to prepare insert_vote")?,
         })
     }
 
@@ -170,7 +171,7 @@ impl ScyllaCluster {
         self.session.execute_iter(
             &queries.insert_block,
             (shard_id, block.height as i64, &block.hash, &block.previous_hash, block.timestamp.timestamp(), &block.validator, &block.signature, &block.state_root, &block.transactions),
-        ).await?;
+        ).await.context("Failed to insert block")?;
         Ok(())
     }
 
@@ -179,7 +180,7 @@ impl ScyllaCluster {
         self.session.execute_iter(
             &queries.insert_wallet,
             (telegram_id, address, pk, sk, 0_i64, created_at),
-        ).await?;
+        ).await.context("Failed to insert wallet")?;
         Ok(())
     }
 
@@ -188,7 +189,7 @@ impl ScyllaCluster {
         self.session.execute_iter(
             &queries.update_wallet_balance,
             (amount, address),
-        ).await?;
+        ).await.context("Failed to update wallet balance")?;
         Ok(())
     }
 
@@ -197,7 +198,7 @@ impl ScyllaCluster {
         self.session.execute_iter(
             &queries.insert_proposal,
             (proposal_id, description, chain_name, interop_chain, votes_for, votes_against, quorum),
-        ).await?;
+        ).await.context("Failed to insert proposal")?;
         Ok(())
     }
 
@@ -206,7 +207,7 @@ impl ScyllaCluster {
         self.session.execute_iter(
             &queries.insert_vote,
             (proposal_id, validator_id, vote, stake_weight, sig, timestamp),
-        ).await?;
+        ).await.context("Failed to insert vote")?;
         Ok(())
     }
 
@@ -230,7 +231,7 @@ impl ScyllaCluster {
                 tx.status,
             ));
         }
-        self.session.batch(&batch, &values).await?;
+        self.session.batch(&batch, &values).await.context("Failed to insert transactions batch")?;
         Ok(())
     }
 }
@@ -249,9 +250,17 @@ impl DataMigrator {
     pub async fn migrate_blocks(&self, shard_id: i32, start_height: u64, end_height: u64) -> Result<()> {
         info!("Migrating blocks {} to {} for shard {}", start_height, end_height, shard_id);
         for height in start_height..=end_height {
-            if let Some(block_bytes) = self.rocks_db.get(height.to_be_bytes())? {
-                let block: Block = bincode::deserialize(&block_bytes)?;
-                self.scylla_db.insert_block(shard_id, &block).await?;
+            if let Some(block_bytes) = self.rocks_db.get(height.to_be_bytes()).map_err(|e| {
+                error!("Failed to read block from RocksDB: {:?}", e);
+                anyhow!("Failed to read block from RocksDB")
+            })? {
+                let block: Block = bincode::deserialize(&block_bytes).map_err(|e| {
+                    error!("Failed to deserialize block: {:?}", e);
+                    anyhow!("Failed to deserialize block")
+                })?;
+                if let Err(e) = self.scylla_db.insert_block(shard_id, &block).await {
+                    error!("Failed to insert block into ScyllaDB: {:?}", e);
+                }
                 if height % 1000 == 0 {
                     info!("Migrated {} blocks", height);
                 }
