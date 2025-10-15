@@ -1,0 +1,4 @@
+{
+  "python.terminal.activateEnvironment": true,
+  "python.defaultInterpreterPath": "/opt/conda/envs/0xv7/bin/python"
+}
