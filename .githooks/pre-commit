@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+max_mb=50
+limit=$((max_mb*1024*1024))
+staged=$(git diff --cached --name-only --diff-filter=AM)
+blocked=0
+for f in $staged; do
+  [ -f "$f" ] || continue
+  size=$(wc -c <"$f")
+  if [ "$size" -ge "$limit" ]; then
+    human=$(numfmt --to=iec "$size" 2>/dev/null || echo "${size} bytes")
+    echo "Error: $f is $human; exceeds ${max_mb}MB limit. Use LFS or exclude it." >&2
+    blocked=1
+  fi
+done
+exit $blocked
