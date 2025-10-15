@@ -1,0 +1,24 @@
+name: Large file guard
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Block files >50MB in the PR
+        run: |
+          set -eo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          big=$(git diff --name-only --diff-filter=AM "$base" "$head" | while read -r f; do
+            [ -f "$f" ] || continue
+            sz=$(wc -c <"$f")
+            if [ "$sz" -ge $((50*1024*1024)) ]; then echo "$f ($sz bytes)"; fi
+          done)
+          if [ -n "$big" ]; then
+            echo "The following files exceed 50MB:"
+            echo "$big"
+            exit 1
+          fi
