@@ -7,27 +7,46 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR head
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-      - name: Fetch base branch
-        run: |
-          git fetch --no-tags --prune --depth=1 origin "${{ github.event.pull_request.base.ref }}"
-      - name: Block files >50MB in the PR
+
+      - name: Compute changed files
+        id: diff
+        shell: bash
         run: |
           set -euo pipefail
-          base_ref="origin/${{ github.event.pull_request.base.ref }}"
-          changed="$(git diff --name-only --diff-filter=AMRC "$base_ref"...HEAD)"
-          [ -z "$changed" ] && { echo "No tracked changes."; exit 0; }
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base_ref="origin/${{ github.event.pull_request.base.ref }}"
+            git fetch --no-tags --prune --depth=1 origin "${{ github.event.pull_request.base.ref }}"
+            changed="$(git diff --name-only --diff-filter=AMRC "$base_ref"...HEAD)"
+          else
+            # Manual run on branch: check last commit only
+            git fetch --no-tags --prune --depth=2 origin "${GITHUB_REF_NAME}"
+            changed="$(git diff --name-only --diff-filter=AMRC HEAD~1..HEAD || true)"
+          fi
+          {
+            echo "changed<<EOF"
+            echo "$changed"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Block files >50MB in the changed set
+        if: steps.diff.outputs.changed != ''
+        shell: bash
+        run: |
+          set -euo pipefail
           big=""
           while IFS= read -r f; do
-            [ -f "$f" ] || continue
+            [[ -f "$f" ]] || continue
             sz=$(wc -c <"$f")
-            [ "$sz" -ge $((50*1024*1024)) ] && big+="$f ($sz bytes)\n"
-          done <<< "$changed"
-          if [ -n "$big" ]; then
+            [[ "$sz" -ge $((50*1024*1024)) ]] && big+="$f ($sz bytes)\n"
+          done <<< "${{ steps.diff.outputs.changed }}"
+          if [[ -n "$big" ]]; then
             printf "The following files exceed 50MB:\n%b" "$big"
             exit 1
+          else
+            echo "OK: no files exceed 50MB."
           fi
