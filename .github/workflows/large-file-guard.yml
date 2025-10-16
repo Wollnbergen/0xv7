@@ -2,23 +2,32 @@ name: Large file guard
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch: {}
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Fetch base branch
+        run: |
+          git fetch --no-tags --prune --depth=1 origin "${{ github.event.pull_request.base.ref }}"
       - name: Block files >50MB in the PR
         run: |
-          set -eo pipefail
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-          big=$(git diff --name-only --diff-filter=AM "$base" "$head" | while read -r f; do
+          set -euo pipefail
+          base_ref="origin/${{ github.event.pull_request.base.ref }}"
+          changed="$(git diff --name-only --diff-filter=AMRC "$base_ref"...HEAD)"
+          [ -z "$changed" ] && { echo "No tracked changes."; exit 0; }
+          big=""
+          while IFS= read -r f; do
             [ -f "$f" ] || continue
             sz=$(wc -c <"$f")
-            if [ "$sz" -ge $((50*1024*1024)) ]; then echo "$f ($sz bytes)"; fi
-          done)
+            [ "$sz" -ge $((50*1024*1024)) ] && big+="$f ($sz bytes)\n"
+          done <<< "$changed"
           if [ -n "$big" ]; then
-            echo "The following files exceed 50MB:"
-            echo "$big"
+            printf "The following files exceed 50MB:\n%b" "$big"
             exit 1
           fi
