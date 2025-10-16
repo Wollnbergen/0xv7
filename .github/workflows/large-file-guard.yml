@@ -1,4 +1,3 @@
-// filepath: /workspaces/0xv7/.github/workflows/large-file-guard.yml
 name: Large file guard
 on:
   pull_request:
