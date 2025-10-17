@@ -4,4 +4,4 @@
 After cloning, enable repo hooks:
 bash scripts/setup-git-hooks.sh
 
-The pre-commit hook blocks files larger than 50MB. CI enforces the same rule on PRs.
+The pre-commit hook blocks files larger than 50MB. CI enforces the same rule on PRs.test
