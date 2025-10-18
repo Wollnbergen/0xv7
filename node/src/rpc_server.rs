@@ -9,19 +9,19 @@ use jsonrpc_core::{
     Result as RpcResult, Value,
 };
 use jsonrpc_http_server::{hyper, ServerBuilder};
+use serde::Deserialize;
 use serde_json::json;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
 
 // JWT authentication
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::Deserialize;
 
 // Shared SDK instance for all RPC calls
 use lazy_static::lazy_static;
 lazy_static! {
-    static ref SDK: Arc<Mutex<Option<SultanSDK>>> = Arc::new(Mutex::new(None));
+    static ref SDK: Mutex<Option<SultanSDK>> = Mutex::new(None);
 }
 
 // Distributed rate limiting (Redis)
@@ -38,10 +38,14 @@ lazy_static! {
             }
         }
     };
-    static ref RATE_LIMIT_RPS: i32 = env::var("SULTAN_RATE_LIMIT_RPS").ok()
-        .and_then(|v| v.parse().ok()).unwrap_or(5);
-    static ref RATE_LIMIT_WINDOW_SECS: u64 = env::var("SULTAN_RATE_LIMIT_WINDOW_SECS").ok()
-        .and_then(|v| v.parse().ok()).unwrap_or(1);
+    static ref RATE_LIMIT_RPS: i32 = env::var("SULTAN_RATE_LIMIT_RPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+    static ref RATE_LIMIT_WINDOW_SECS: u64 = env::var("SULTAN_RATE_LIMIT_WINDOW_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
 }
 
 // Prometheus metrics
@@ -72,19 +76,33 @@ fn gather_metrics() -> String {
 }
 
 use std::thread;
-use tiny_http::{Response, Server as TinyServer};
+use tiny_http::{Header, Method, Response, Server as TinyServer};
 fn start_metrics_server() {
     thread::spawn(|| {
-        let primary = "0.0.0.0:9100";
-        let fallback = "0.0.0.0:9101";
-        let server = match TinyServer::http(primary) {
+        // Read primary bind from env with fallback to +1 port if busy
+        let primary =
+            std::env::var("SULTAN_METRICS_ADDR").unwrap_or_else(|_| "0.0.0.0:9100".to_string());
+        let fallback = {
+            let (host, port) = primary
+                .rsplit_once(':')
+                .map_or(("0.0.0.0", "9100"), |(h, p)| {
+                    (if h.is_empty() { "0.0.0.0" } else { h }, p)
+                });
+            let p = port.parse::<u16>().unwrap_or(9100);
+            format!("{}:{}", host, p.saturating_add(1))
+        };
+
+        let server = match TinyServer::http(&primary) {
             Ok(s) => {
-                info!("Prometheus metrics endpoint running on http://{}/metrics", primary);
+                info!(
+                    "Prometheus metrics endpoint running on http://{}/metrics",
+                    primary
+                );
                 s
             }
             Err(e) => {
                 warn!("Port {} busy ({}); trying {}", primary, e, fallback);
-                TinyServer::http(fallback).expect("Failed to bind fallback metrics port")
+                TinyServer::http(&fallback).expect("Failed to bind fallback metrics port")
             }
         };
         let addr = server.server_addr();
@@ -92,15 +110,30 @@ fn start_metrics_server() {
             "Prometheus metrics endpoint active on http://{}/metrics",
             addr
         );
+
         for request in server.incoming_requests() {
-            if request.url() == "/metrics" {
+            let url = request.url().to_string();
+            let method = request.method().clone();
+
+            // Simple health for browsers/LBs
+            if method == Method::Get && (url == "/" || url == "/health") {
+                let resp = Response::from_string("OK")
+                    .with_header(Header::from_bytes(b"Content-Type", b"text/plain").unwrap());
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            if url == "/metrics" {
                 let metrics = gather_metrics();
-                let response = Response::from_string(metrics).with_header(
-                    tiny_http::Header::from_bytes(b"Content-Type", b"text/plain").unwrap(),
-                );
+                let response = Response::from_string(metrics)
+                    .with_header(Header::from_bytes(b"Content-Type", b"text/plain").unwrap());
                 let _ = request.respond(response);
             } else {
-                let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
+                let _ = request.respond(
+                    Response::from_string("Not Found")
+                        .with_status_code(404)
+                        .with_header(Header::from_bytes(b"Content-Type", b"text/plain").unwrap()),
+                );
             }
         }
     });
@@ -214,6 +247,52 @@ where
     }
 }
 
+// Params aliases to support both array and object styles
+#[derive(Deserialize)]
+struct WalletCreateParams {
+    telegram_id: String,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+#[derive(Deserialize)]
+struct WalletBalanceParams {
+    address: String,
+}
+#[derive(Deserialize)]
+struct TokenMintParams {
+    to: String,
+    amount: u64,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+#[derive(Deserialize)]
+struct StakeParams {
+    validator_id: String,
+    amount: u64,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+#[derive(Deserialize)]
+struct QueryApyParams {
+    #[serde(default)]
+    is_validator: bool,
+}
+#[derive(Deserialize)]
+struct VoteParams {
+    proposal_id: String,
+    vote: bool,
+    validator_id: String,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+#[derive(Deserialize)]
+struct SwapParams {
+    from: String,
+    amount: u64,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+
 // Endpoints
 
 fn wallet_create(params: Params, meta: RpcMeta) -> RpcResult<Value> {
@@ -221,10 +300,14 @@ fn wallet_create(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     let client_id = require_auth(&meta, "wallet_create")?;
 
     let (telegram_id, idempotency_key_opt) =
-        match params.clone().parse::<(String, Option<String>)>() {
-            Ok((id, key)) if !id.is_empty() => (id, key),
-            _ => return jsonrpc_err(RpcErrorCode::InvalidParams, "telegram_id required"),
+        if let Ok((id, key)) = params.clone().parse::<(String, Option<String>)>() {
+            (id, key)
+        } else if let Ok(p) = params.parse::<WalletCreateParams>() {
+            (p.telegram_id, p.idempotency_key)
+        } else {
+            return jsonrpc_err(RpcErrorCode::InvalidParams, "telegram_id required");
         };
+
     if !check_rate_limit("wallet_create", &client_id) {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
@@ -256,10 +339,17 @@ fn wallet_create(params: Params, meta: RpcMeta) -> RpcResult<Value> {
 fn wallet_balance(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "wallet_balance")?;
-    let address = match params.parse::<(String,)>() {
-        Ok((addr,)) if !addr.is_empty() && is_valid_address(&addr) => addr,
-        _ => return jsonrpc_err(RpcErrorCode::InvalidParams, "valid address required"),
+    let address = if let Ok((addr,)) = params.clone().parse::<(String,)>() {
+        addr
+    } else if let Ok(p) = params.parse::<WalletBalanceParams>() {
+        p.address
+    } else {
+        return jsonrpc_err(RpcErrorCode::InvalidParams, "valid address required");
     };
+    if address.is_empty() || !is_valid_address(&address) {
+        return jsonrpc_err(RpcErrorCode::InvalidParams, "valid address required");
+    }
+
     if !check_rate_limit("wallet_balance", &client_id) {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
@@ -284,18 +374,26 @@ fn wallet_balance(params: Params, meta: RpcMeta) -> RpcResult<Value> {
 fn token_mint(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "token_mint")?;
+
     let (to, amount, idempotency_key_opt) =
-        match params.clone().parse::<(String, u64, Option<String>)>() {
-            Ok((to, amount, key)) if !to.is_empty() && is_valid_address(&to) && amount > 0 => {
-                (to, amount, key)
-            }
-            _ => {
-                return jsonrpc_err(
-                    RpcErrorCode::InvalidParams,
-                    "valid 'to' and positive 'amount' required",
-                )
-            }
+        if let Ok((to, amount, key)) = params.clone().parse::<(String, u64, Option<String>)>() {
+            (to, amount, key)
+        } else if let Ok(p) = params.parse::<TokenMintParams>() {
+            (p.to, p.amount, p.idempotency_key)
+        } else {
+            return jsonrpc_err(
+                RpcErrorCode::InvalidParams,
+                "valid 'to' and positive 'amount' required",
+            );
         };
+
+    if to.is_empty() || !is_valid_address(&to) || amount == 0 {
+        return jsonrpc_err(
+            RpcErrorCode::InvalidParams,
+            "valid 'to' and positive 'amount' required",
+        );
+    }
+
     if !check_rate_limit("token_mint", &client_id) {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
@@ -326,16 +424,26 @@ fn token_mint(params: Params, meta: RpcMeta) -> RpcResult<Value> {
 fn stake(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "stake")?;
+
     let (validator_id, amount, idempotency_key_opt) =
-        match params.clone().parse::<(String, u64, Option<String>)>() {
-            Ok((id, amt, key)) if !id.is_empty() && amt > 0 => (id, amt, key),
-            _ => {
-                return jsonrpc_err(
-                    RpcErrorCode::InvalidParams,
-                    "validator_id and amount required",
-                )
-            }
+        if let Ok((id, amt, key)) = params.clone().parse::<(String, u64, Option<String>)>() {
+            (id, amt, key)
+        } else if let Ok(p) = params.parse::<StakeParams>() {
+            (p.validator_id, p.amount, p.idempotency_key)
+        } else {
+            return jsonrpc_err(
+                RpcErrorCode::InvalidParams,
+                "validator_id and amount required",
+            );
         };
+
+    if validator_id.is_empty() || amount == 0 {
+        return jsonrpc_err(
+            RpcErrorCode::InvalidParams,
+            "validator_id and amount required",
+        );
+    }
+
     if !check_rate_limit("stake", &client_id) {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
@@ -366,7 +474,15 @@ fn stake(params: Params, meta: RpcMeta) -> RpcResult<Value> {
 fn query_apy(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "query_apy")?;
-    let is_validator = params.parse::<(bool,)>().map(|v| v.0).unwrap_or(false);
+
+    let is_validator = if let Ok((b,)) = params.clone().parse::<(bool,)>() {
+        b
+    } else if let Ok(p) = params.parse::<QueryApyParams>() {
+        p.is_validator
+    } else {
+        false
+    };
+
     if !check_rate_limit("query_apy", &client_id) {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
@@ -391,19 +507,29 @@ fn query_apy(params: Params, meta: RpcMeta) -> RpcResult<Value> {
 fn vote_on_proposal(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "vote_on_proposal")?;
-    let (proposal_id, vote, validator_id, idempotency_key_opt) =
-        match params
+
+    let (proposal_id, vote, validator_id, idempotency_key_opt) = if let Ok((pid, v, vid, key)) =
+        params
             .clone()
             .parse::<(String, bool, String, Option<String>)>()
-        {
-            Ok((pid, v, vid, key)) if !pid.is_empty() && !vid.is_empty() => (pid, v, vid, key),
-            _ => {
-                return jsonrpc_err(
-                    RpcErrorCode::InvalidParams,
-                    "proposal_id, vote, validator_id required",
-                )
-            }
-        };
+    {
+        (pid, v, vid, key)
+    } else if let Ok(p) = params.parse::<VoteParams>() {
+        (p.proposal_id, p.vote, p.validator_id, p.idempotency_key)
+    } else {
+        return jsonrpc_err(
+            RpcErrorCode::InvalidParams,
+            "proposal_id, vote, validator_id required",
+        );
+    };
+
+    if proposal_id.is_empty() || validator_id.is_empty() {
+        return jsonrpc_err(
+            RpcErrorCode::InvalidParams,
+            "proposal_id, vote, validator_id required",
+        );
+    }
+
     if !check_rate_limit("vote_on_proposal", &client_id) {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
@@ -422,9 +548,12 @@ fn vote_on_proposal(params: Params, meta: RpcMeta) -> RpcResult<Value> {
                     "Voted {} on proposal {} by {}",
                     vote, proposal_id, validator_id
                 );
-                Ok(
-                    json!({ "proposal_id": proposal_id, "vote": vote, "validator_id": validator_id, "signed": signed }),
-                )
+                Ok(json!({
+                    "proposal_id": proposal_id,
+                    "vote": vote,
+                    "validator_id": validator_id,
+                    "signed": signed
+                }))
             }
             Err(e) => {
                 error!("Vote failed: {:?}", e);
@@ -439,20 +568,26 @@ fn vote_on_proposal(params: Params, meta: RpcMeta) -> RpcResult<Value> {
 fn cross_chain_swap(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "cross_chain_swap")?;
-    let (from, amount, idempotency_key_opt) = match params
-        .clone()
-        .parse::<(String, u64, Option<String>)>()
-    {
-        Ok((from, amount, key)) if !from.is_empty() && is_valid_address(&from) && amount > 0 => {
+
+    let (from, amount, idempotency_key_opt) =
+        if let Ok((from, amount, key)) = params.clone().parse::<(String, u64, Option<String>)>() {
             (from, amount, key)
-        }
-        _ => {
+        } else if let Ok(p) = params.parse::<SwapParams>() {
+            (p.from, p.amount, p.idempotency_key)
+        } else {
             return jsonrpc_err(
                 RpcErrorCode::InvalidParams,
                 "valid 'from' and positive 'amount' required",
-            )
-        }
-    };
+            );
+        };
+
+    if from.is_empty() || !is_valid_address(&from) || amount == 0 {
+        return jsonrpc_err(
+            RpcErrorCode::InvalidParams,
+            "valid 'from' and positive 'amount' required",
+        );
+    }
+
     if !check_rate_limit("cross_chain_swap", &client_id) {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
@@ -486,6 +621,9 @@ pub fn main() {
     start_metrics_server();
 
     let rt = Runtime::new().unwrap();
+
+    // Optional DB: set SULTAN_DB_ADDR to Cassandra contact point; leave unset for in-memory/dev
+    let db_addr = std::env::var("SULTAN_DB_ADDR").ok();
     let sdk = rt
         .block_on(SultanSDK::new(
             ChainConfig {
@@ -494,7 +632,7 @@ pub fn main() {
                 min_stake: 5000,
                 shards: 8,
             },
-            Some("127.0.0.1:9042"),
+            db_addr.as_deref(),
         ))
         .ok();
     *SDK.lock().unwrap() = sdk;
@@ -515,46 +653,71 @@ pub fn main() {
     io.add_method_with_meta("token_mint", |p, m| async move { token_mint(p, m) });
     io.add_method_with_meta("stake", |p, m| async move { stake(p, m) });
     io.add_method_with_meta("query_apy", |p, m| async move { query_apy(p, m) });
-    io.add_method_with_meta("vote_on_proposal", |p, m| async move { vote_on_proposal(p, m) });
-    io.add_method_with_meta("cross_chain_swap", |p, m| async move { cross_chain_swap(p, m) });
+    io.add_method_with_meta(
+        "vote_on_proposal",
+        |p, m| async move { vote_on_proposal(p, m) },
+    );
+    io.add_method_with_meta(
+        "cross_chain_swap",
+        |p, m| async move { cross_chain_swap(p, m) },
+    );
 
     let secret_for_extractor = jwt_secret.clone();
 
-    let server = ServerBuilder::with_meta_extractor(io, move |req: &hyper::Request<hyper::Body>| {
-        let auth_header = req
-            .headers()
-            .get(hyper::header::AUTHORIZATION)
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.to_string());
+    let server =
+        ServerBuilder::with_meta_extractor(io, move |req: &hyper::Request<hyper::Body>| {
+            let auth_header = req
+                .headers()
+                .get(hyper::header::AUTHORIZATION)
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_string());
 
-        let bearer = auth_header
-            .as_deref()
-            .and_then(|s| s.strip_prefix("Bearer ").map(|t| t.to_string()));
+            let bearer = auth_header
+                .as_deref()
+                .and_then(|s| s.strip_prefix("Bearer ").map(|t| t.to_string()));
 
-        if let (Some(token), true) = (bearer, !secret_for_extractor.is_empty()) {
-            let mut validation = Validation::new(Algorithm::HS256);
-            validation.validate_exp = true;
-            match decode::<Claims>(
-                &token,
-                &DecodingKey::from_secret(secret_for_extractor.as_bytes()),
-                &validation,
-            ) {
-                Ok(data) => RpcMeta {
-                    sub: Some(data.claims.sub),
-                },
-                Err(e) => {
-                    warn!("JWT validation failed: {:?}", e);
-                    RpcMeta { sub: None }
+            // Optional dev passthrough: if enabled and token equals the secret, accept without JWT structure
+            let allow_raw = std::env::var("SULTAN_JWT_ALLOW_RAW")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+
+            if let (Some(token), true) = (bearer, !secret_for_extractor.is_empty()) {
+                if allow_raw && token == secret_for_extractor {
+                    return RpcMeta {
+                        sub: Some("dev-user".to_string()),
+                    };
                 }
+                let mut validation = Validation::new(Algorithm::HS256);
+                validation.validate_exp = true;
+                match decode::<Claims>(
+                    &token,
+                    &DecodingKey::from_secret(secret_for_extractor.as_bytes()),
+                    &validation,
+                ) {
+                    Ok(data) => RpcMeta {
+                        sub: Some(data.claims.sub),
+                    },
+                    Err(e) => {
+                        warn!("JWT validation failed: {:?}", e);
+                        RpcMeta { sub: None }
+                    }
+                }
+            } else {
+                RpcMeta { sub: None }
             }
-        } else {
-            RpcMeta { sub: None }
-        }
-    })
-    .threads(2)
-    .start_http(&"0.0.0.0:3030".parse().unwrap())
-    .expect("Unable to start JSON-RPC server");
+        })
+        .threads(2)
+        .start_http(
+            &std::env::var("SULTAN_RPC_ADDR")
+                .unwrap_or_else(|_| "0.0.0.0:3030".to_string())
+                .parse()
+                .expect("SULTAN_RPC_ADDR must be host:port"),
+        )
+        .expect("Unable to start JSON-RPC server");
 
-    info!("Sultan JSON-RPC server running on http://0.0.0.0:3030 (JWT via Authorization header)");
+    info!(
+        "Sultan JSON-RPC server running on http://{} (JWT via Authorization header)",
+        std::env::var("SULTAN_RPC_ADDR").unwrap_or_else(|_| "0.0.0.0:3030".to_string())
+    );
     server.wait();
 }

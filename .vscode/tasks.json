@@ -55,17 +55,17 @@
       "presentation": { "reveal": "always", "clear": true }
     },
     {
+      "label": "Tests: with Scylla",
+      "dependsOn": ["Scylla: start", "Tests: cargo test (node)"],
+      "dependsOrder": "sequence"
+    },
+    {
       "label": "Tests: cargo test (filter)",
       "type": "shell",
       "command": "bash -lc 'cargo test --all --all-features ${input:testFilter}'",
       "group": "test",
       "problemMatcher": [],
       "presentation": { "reveal": "always", "clear": true }
-    },
-    {
-      "label": "Tests: with Scylla",
-      "dependsOn": ["Scylla: start", "Tests: cargo test (node)"],
-      "dependsOrder": "sequence"
     },
 
     {
