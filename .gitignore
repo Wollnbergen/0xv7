@@ -14,3 +14,7 @@ scylla-data/
 .vscode/*
 !.vscode/tasks.json
 !.vscode/settings.json
+.cargo/
+.cargo-ws/
+*.pid
+target/
