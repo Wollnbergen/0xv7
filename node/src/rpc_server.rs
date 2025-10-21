@@ -79,37 +79,70 @@ use std::thread;
 use tiny_http::{Header, Method, Response, Server as TinyServer};
 fn start_metrics_server() {
     thread::spawn(|| {
-        // Read primary bind from env with fallback to +1 port if busy
+        // Allow disabling via env
+        let disabled = std::env::var("SULTAN_METRICS_DISABLE")
+            .ok()
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("yes"))
+            .unwrap_or(false);
+        if disabled {
+            info!("Prometheus metrics disabled via SULTAN_METRICS_DISABLE");
+            return;
+        }
+
+        // Primary bind with sane default
         let primary =
             std::env::var("SULTAN_METRICS_ADDR").unwrap_or_else(|_| "0.0.0.0:9100".to_string());
-        let fallback = {
-            let (host, port) = primary
-                .rsplit_once(':')
-                .map_or(("0.0.0.0", "9100"), |(h, p)| {
-                    (if h.is_empty() { "0.0.0.0" } else { h }, p)
-                });
-            let p = port.parse::<u16>().unwrap_or(9100);
-            format!("{}:{}", host, p.saturating_add(1))
-        };
 
-        let server = match TinyServer::http(&primary) {
-            Ok(s) => {
-                info!(
-                    "Prometheus metrics endpoint running on http://{}/metrics",
-                    primary
-                );
-                s
+        // Parse host:port (simple IPv4/host:port handling)
+        let (host, port_str) = primary
+            .rsplit_once(':')
+            .map_or(("0.0.0.0", "9100"), |(h, p)| {
+                (if h.is_empty() { "0.0.0.0" } else { h }, p)
+            });
+        let base_port = port_str.parse::<u16>().unwrap_or(9100);
+
+        // Try base + up to 10 fallback ports
+        let mut server = None;
+        for off in 0..=10 {
+            let addr = format!("{}:{}", host, base_port.saturating_add(off));
+            match TinyServer::http(&addr) {
+                Ok(s) => {
+                    if off == 0 {
+                        info!(
+                            "Prometheus metrics endpoint running on http://{}/metrics",
+                            addr
+                        );
+                    } else {
+                        warn!(
+                            "Metrics port {} busy; using fallback http://{}/metrics",
+                            base_port.saturating_add(off - 1),
+                            addr
+                        );
+                        info!(
+                            "Prometheus metrics endpoint active on http://{}/metrics",
+                            addr
+                        );
+                    }
+                    server = Some(s);
+                    break;
+                }
+                Err(e) => {
+                    if off == 0 {
+                        warn!("Port {} busy ({}); trying fallbacks", primary, e);
+                    }
+                    continue;
+                }
             }
-            Err(e) => {
-                warn!("Port {} busy ({}); trying {}", primary, e, fallback);
-                TinyServer::http(&fallback).expect("Failed to bind fallback metrics port")
-            }
+        }
+
+        let Some(server) = server else {
+            warn!(
+                "Metrics disabled: could not bind any port in [{}..={}]",
+                base_port,
+                base_port.saturating_add(10)
+            );
+            return;
         };
-        let addr = server.server_addr();
-        info!(
-            "Prometheus metrics endpoint active on http://{}/metrics",
-            addr
-        );
 
         for request in server.incoming_requests() {
             let url = request.url().to_string();
@@ -154,13 +187,14 @@ impl Metadata for RpcMeta {}
 // Load JWT secret from environment (.env supported via dotenvy)
 fn load_jwt_secret() -> String {
     let _ = dotenvy::dotenv();
-    match std::env::var("SULTAN_JWT_SECRET") {
-        Ok(v) if !v.is_empty() => v,
-        _ => {
+    std::env::var("SULTAN_JWT_SECRET")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| {
             warn!("SULTAN_JWT_SECRET missing; using insecure dev default (all tokens will validate with dev secret)");
             "devsecret_change_me_32_bytes_min".to_string()
-        }
-    }
+        })
 }
 
 fn jsonrpc_err(code: RpcErrorCode, msg: &str) -> RpcResult<Value> {

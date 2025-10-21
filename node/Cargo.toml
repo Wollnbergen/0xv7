@@ -9,11 +9,11 @@ path = "src/p2p_node.rs"
 
 [[bin]]
 name = "telegram_bot"
-path = "src/telegram_bot.rs"
+path = "src/bin/telegram_bot.rs"
 
 [[bin]]
 name = "grpc_client"
-path = "src/grpc_client.rs"
+path = "src/bin/grpc_client.rs"
 
 [dependencies]
 libp2p = { version = "0.53", features = ["tcp", "relay", "ping", "dns", "async-std", "noise", "yamux"] }
@@ -38,8 +38,7 @@ tonic = { workspace = true, features = ["tls", "tls-webpki-roots"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 tonic-build = { workspace = true }
 tracing-subscriber = { workspace = true }
-warp = "0.3"
-rocksdb = "0.24.0"
+rocksdb = "=0.22.0"
 bincode = "2.0.1"
 serde_json = "1.0.145"
 tokio-stream = "0.1.17"
@@ -52,9 +51,17 @@ tiny_http = "0.12"
 lazy_static = "1.4"
 dotenvy = "0.15"
 
+warp = "0.3"
 [dev-dependencies]
 tokio = { version = "1.47", features = ["test-util"] }
 tracing-test = "0.2.5"
 
 [build-dependencies]
 tonic-build.workspace = true
+
+[profile.dev]
+opt-level = 0
+debug = 0
+incremental = false
+strip = "debuginfo"
+panic = "abort"

@@ -1,3 +1,8 @@
+[package]
+name = "sultan-workspace"
+version = "0.1.0"
+edition = "2021"
+
 [workspace]
 members = ["node", "sultan-interop"]
 resolver = "2"
@@ -9,3 +14,13 @@ tonic-build = "0.12"
 tracing-subscriber = "0.3"
 libp2p-ping = "0.39"
 libp2p-swarm-derive = "0.39"
+
+[dependencies]
+anyhow = "1"
+tokio = { version = "1.47", features = ["full"] }
+tracing-subscriber = { workspace = true }
+node = { package = "sultan-coordinator", path = "node" }
+
+[[bin]]
+name = "sultan-main"
+path = "main_updated.rs"

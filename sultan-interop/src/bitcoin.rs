@@ -100,7 +100,7 @@ impl BitcoinBridge {
             },
             PrivateKey {
                 inner: sender_sk,
-                network: self.network.into(),
+                network: self.network, // removed useless `.into()`
                 compressed: true,
             },
         )]);

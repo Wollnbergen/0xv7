@@ -1,10 +1,11 @@
 use anyhow::Result;
 use futures::future::join_all;
-use pqcrypto_traits::sign::{PublicKey, SecretKey};
+// removed unused imports:
+// use pqcrypto_traits::sign::{PublicKey, SecretKey};
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::info;
-// ...existing code...
+
 use crate::scylla_db::ScyllaCluster;
 use crate::transaction_validator::TransactionValidator;
 use crate::types::{Block, SultanToken, Transaction};
@@ -129,7 +130,7 @@ impl Blockchain {
     }
 
     pub async fn process_block(&self, block: Block) -> Result<()> {
-        let start = Instant::now();
+        let _start = Instant::now();
         self.validator.validate_block(&block)?;
         if let Some(db) = &self.db {
             db.insert_block(block.shard_id as i32, &block).await?;
@@ -143,14 +144,14 @@ impl Blockchain {
 
     pub async fn sharded_process(&self, blocks: Vec<Block>) -> Result<()> {
         let futures = (0..self.shards)
-            .map(|shard_id| {
+            .map(|_shard_id| {
                 let shard_blocks = blocks.clone();
                 let this = self;
                 async move {
                     for block in shard_blocks {
                         this.process_block(block).await?;
                     }
-                    Ok(())
+                    Ok::<(), anyhow::Error>(())
                 }
             })
             .collect::<Vec<_>>();

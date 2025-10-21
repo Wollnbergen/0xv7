@@ -4,6 +4,7 @@ pub mod sultan {
 }
 pub mod bitcoin;
 pub mod zk_proofs;
+
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -38,8 +39,15 @@ impl EthBridge {
 
 #[allow(dead_code)]
 pub struct SharedQuantumCrypto(Arc<RwLock<()>>); // Stub for quantum sig (no serde for runtime stub)
+
 impl SharedQuantumCrypto {
     pub fn new() -> Self {
         Self(Arc::new(RwLock::new(())))
+    }
+}
+
+impl Default for SharedQuantumCrypto {
+    fn default() -> Self {
+        Self::new()
     }
 }

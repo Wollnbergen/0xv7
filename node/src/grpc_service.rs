@@ -71,7 +71,7 @@ impl ChainService for SultanGrpcService {
             from_block
         );
         let (tx, rx) = tokio::sync::mpsc::channel(128);
-        let blockchain_clone = self.blockchain.clone();
+        let _blockchain = self.blockchain.clone(); // reserved for future use
         tokio::spawn(async move {
             let mut height = from_block;
             loop {

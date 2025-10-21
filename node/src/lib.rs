@@ -310,7 +310,8 @@ pub async fn run() -> Result<()> {
     tx.send("Interop tx: Sultan <-> TON atomic swap").await?;
     info!("Received interop: {}", rx.recv().await.unwrap());
     let mut dispatcher = Dispatcher::builder(bot, handler).build();
-    let _ = tokio::join!(dispatcher.dispatch(), server);
+    tokio::spawn(server);
+    dispatcher.dispatch().await;
     unreachable!();
 }
 
