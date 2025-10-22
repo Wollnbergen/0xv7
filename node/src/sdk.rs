@@ -1,11 +1,16 @@
 //! Production Scylla-backed SDK (scylla 1.3.x).
+//
+// - Enforces minimum initial stake
+// - Records transfers (stake/vote/swap/mint) to transfers table
+// - LWT-protected minting
+// - Optional interop finalization via SULTAN_INTEROP_URL
+// - Ensures keyspace/tables and runs migrations on connect
 
 use anyhow::{anyhow, Context, Result};
 use scylla::{
     client::session::Session, client::session_builder::SessionBuilder, client::Compression,
 };
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::sleep;
 use tracing::{info, warn};
 
@@ -105,6 +110,16 @@ impl SultanSDK {
             if let Some(row) = it.next() {
                 let (applied,) = row.context("applied decode")?;
                 if applied {
+                    // also record a transfer audit
+                    let tx_id = format!("mint:{to}:{amount}:{now}");
+                    let _ = self
+                        .session
+                        .query_unpaged(
+                            "INSERT INTO sultan.transfers (tx_id, from_address, to_address, amount, status, created_at, updated_at, last_error)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (tx_id, "mint", to, amount as i64, "completed", now, now, ""),
+                        )
+                        .await;
                     return Ok("ok".to_string());
                 }
             }
@@ -188,14 +203,16 @@ impl SultanSDK {
         description: Option<&str>,
         status: Option<&str>,
     ) -> Result<()> {
+        let now = now_ms();
         self.session
             .query_unpaged(
                 "INSERT INTO sultan.proposals (proposal_id, title, description, created_at, status)
-                 VALUES (?, ?, ?, toTimestamp(now()), ?) IF NOT EXISTS",
+                 VALUES (?, ?, ?, ?, ?) IF NOT EXISTS",
                 (
                     proposal_id.to_string(),
                     title.unwrap_or(""),
                     description.unwrap_or(""),
+                    now,
                     status.unwrap_or("open"),
                 ),
             )
@@ -208,7 +225,7 @@ impl SultanSDK {
         let res = self
             .session
             .query_unpaged(
-                "SELECT proposal_id, title, description, toUnixTimestamp(created_at), status
+                "SELECT proposal_id, title, description, created_at, status
                  FROM sultan.proposals WHERE proposal_id = ?",
                 (proposal_id.to_string(),),
             )
@@ -217,13 +234,7 @@ impl SultanSDK {
 
         let rows_res = res.into_rows_result().context("proposal_get rows_result")?;
         let mut it = rows_res
-            .rows::<(
-                String,
-                Option<String>,
-                Option<String>,
-                Option<i64>,
-                Option<String>,
-            )>()
+            .rows::<(String, Option<String>, Option<String>, Option<i64>, Option<String>)>()
             .context("proposal_get rows()")?;
         if let Some(row) = it.next() {
             let (pid, title, desc, created_at_ms, status) = row.context("proposal row decode")?;
@@ -246,11 +257,12 @@ impl SultanSDK {
         validator_id: &str,
         vote_yes: bool,
     ) -> Result<()> {
+        let now = now_ms();
         self.session
             .query_unpaged(
                 "INSERT INTO sultan.votes (proposal_id, validator_id, vote, ts)
-                 VALUES (?, ?, ?, toTimestamp(now()))",
-                (proposal_id.to_string(), validator_id.to_string(), vote_yes),
+                 VALUES (?, ?, ?, ?)",
+                (proposal_id.to_string(), validator_id.to_string(), vote_yes, now),
             )
             .await
             .context("vote_cast")?;
@@ -312,9 +324,34 @@ impl SultanSDK {
         Ok(())
     }
 
-    // Staking, APY, governance placeholders (recorded to transfers)
+    // Staking, APY, governance (production)
 
     pub async fn stake(&self, validator_id: &str, amount: u64) -> Result<bool> {
+        if amount == 0 {
+            return Err(anyhow!("stake amount must be > 0"));
+        }
+        let min = self.chain.min_stake as i64;
+
+        // Load existing validator to enforce minimum on first stake
+        let current = self.validator_get(validator_id).await?;
+        let current_stake = current.as_ref().map(|v| v.stake).unwrap_or(0);
+
+        if current_stake == 0 && (amount as i64) < min {
+            return Err(anyhow!(
+                "minimum initial stake is {} SLTN",
+                self.chain.min_stake
+            ));
+        }
+
+        // Upsert/register then update stake
+        if current.is_none() {
+            self.validator_register(validator_id, validator_id, 0, None)
+                .await?;
+        }
+        let new_stake = current_stake.saturating_add(amount as i64);
+        self.validator_update_stake(validator_id, new_stake).await?;
+
+        // Audit into transfers
         let now = now_ms();
         let tx_id = format!("stake:{validator_id}:{amount}:{now}");
         self.session
@@ -325,6 +362,7 @@ impl SultanSDK {
             )
             .await
             .context("record stake")?;
+
         Ok(true)
     }
 
@@ -339,6 +377,10 @@ impl SultanSDK {
         vote: bool,
         validator_id: &str,
     ) -> Result<bool> {
+        // Persist vote row
+        self.vote_cast(proposal_id, validator_id, vote).await?;
+
+        // Audit into transfers
         let now = now_ms();
         let tx_id = format!("vote:{proposal_id}:{vote}:{now}");
         self.session
@@ -362,16 +404,51 @@ impl SultanSDK {
     }
 
     pub async fn cross_chain_swap(&self, from: &str, amount: u64) -> Result<bool> {
+        if from.is_empty() || amount == 0 {
+            return Err(anyhow!("invalid swap parameters"));
+        }
         let now = now_ms();
         let tx_id = format!("xswap:{amount}:{now}");
+
+        // Mark initiated
         self.session
             .query_unpaged(
                 "INSERT INTO sultan.transfers (tx_id, from_address, to_address, amount, status, created_at, updated_at, last_error)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (tx_id, from, "bridge", amount as i64, "initiated", now, now, ""),
+                (tx_id.clone(), from, "bridge", amount as i64, "initiated", now, now, ""),
             )
             .await
-            .context("record cross_chain_swap")?;
+            .context("record cross_chain_swap initiated")?;
+
+        // If an interop URL is configured, call it and update status accordingly
+        if let Ok(url) = std::env::var("SULTAN_INTEROP_URL") {
+            let client = reqwest::Client::new();
+            let res = client
+                .post(format!("{url}/atomic_swap"))
+                .json(&serde_json::json!({ "from": from, "amount": amount }))
+                .send()
+                .await;
+
+            let ok = res.as_ref().map(|r| r.status().is_success()).unwrap_or(false);
+            let updated_at = now_ms();
+            self.session
+                .query_unpaged(
+                    "UPDATE sultan.transfers SET status = ?, updated_at = ?, last_error = ? WHERE tx_id = ?",
+                    (
+                        if ok { "completed" } else { "failed" },
+                        updated_at,
+                        res.err().map(|e| e.to_string()).unwrap_or_default(),
+                        tx_id,
+                    ),
+                )
+                .await
+                .context("update cross_chain_swap status")?;
+
+            if !ok {
+                return Err(anyhow!("interop call failed"));
+            }
+        }
+
         Ok(true)
     }
 
@@ -464,10 +541,15 @@ async fn ensure_keyspace(session: &Session) -> Result<()> {
 
 async fn ensure_extra_tables(session: &Session) -> Result<()> {
     let stmts = [
+        "CREATE TABLE IF NOT EXISTS sultan.wallets (address text PRIMARY KEY, balance bigint, created_at bigint, updated_at bigint, last_update_tx text)",
         "CREATE TABLE IF NOT EXISTS sultan.validators (validator_id text PRIMARY KEY, address text, stake bigint, metadata text)",
-        "CREATE TABLE IF NOT EXISTS sultan.proposals (proposal_id text PRIMARY KEY, title text, description text, created_at timestamp, status text)",
-        "CREATE TABLE IF NOT EXISTS sultan.votes (proposal_id text, validator_id text, vote boolean, ts timestamp, PRIMARY KEY (proposal_id, validator_id))",
+        "CREATE TABLE IF NOT EXISTS sultan.proposals (proposal_id text PRIMARY KEY, title text, description text, created_at bigint, status text)",
+        "CREATE TABLE IF NOT EXISTS sultan.votes (proposal_id text, validator_id text, vote boolean, ts bigint, PRIMARY KEY (proposal_id, validator_id))",
         "CREATE TABLE IF NOT EXISTS sultan.token_supply (name text PRIMARY KEY, total bigint)",
+        "CREATE TABLE IF NOT EXISTS sultan.transfers (tx_id text PRIMARY KEY, from_address text, to_address text, amount bigint, status text, created_at bigint, updated_at bigint, last_error text)",
+        "CREATE INDEX IF NOT EXISTS transfers_status_idx ON sultan.transfers (status)",
+        "CREATE INDEX IF NOT EXISTS transfers_from_idx ON sultan.transfers (from_address)",
+        "CREATE INDEX IF NOT EXISTS transfers_to_idx ON sultan.transfers (to_address)",
     ];
     for cql in stmts {
         let _ = session.query_unpaged(cql, ()).await;
