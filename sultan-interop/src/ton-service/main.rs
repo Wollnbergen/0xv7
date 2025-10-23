@@ -20,7 +20,7 @@ pub struct TonService;
 impl ChainService for TonService {
     async fn verify_state(
         &self,
-        request: tonic::Request<VerifyStateRequest>,
+        _request: tonic::Request<VerifyStateRequest>,
     ) -> Result<tonic::Response<VerifyStateResponse>, tonic::Status> {
         info!("gRPC VerifyState request for chain: ton");
         Ok(tonic::Response::new(VerifyStateResponse {

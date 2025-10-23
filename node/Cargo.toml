@@ -3,6 +3,10 @@ name = "sultan-coordinator"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "sultan_coordinator"
+path = "src/lib.rs"
+
 [[bin]]
 name = "p2p_node"
 path = "src/p2p_node.rs"
@@ -50,8 +54,9 @@ prometheus = "0.13"
 tiny_http = "0.12"
 lazy_static = "1.4"
 dotenvy = "0.15"
-
 warp = "0.3"
+sha2 = "0.10"
+
 [dev-dependencies]
 tokio = { version = "1.47", features = ["test-util"] }
 tracing-test = "0.2.5"

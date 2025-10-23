@@ -20,6 +20,7 @@ anyhow = "1"
 tokio = { version = "1.47", features = ["full"] }
 tracing-subscriber = { workspace = true }
 node = { package = "sultan-coordinator", path = "node" }
+sha2 = "0.10.9"
 
 [[bin]]
 name = "sultan-main"

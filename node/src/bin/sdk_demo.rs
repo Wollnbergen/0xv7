@@ -3,7 +3,7 @@ use sultan_coordinator::ChainConfig;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let mut sdk = SultanSDK::new(
+    let sdk = SultanSDK::new(
         ChainConfig {
             inflation_rate: 8.0,
             total_supply: 0,

@@ -1,50 +1,49 @@
-//! Sultan JSON-RPC server.
-//! Endpoints for wallet, token, staking, governance, and chain queries.
-//! Hardened: Authorization: Bearer JWT, Redis rate limiting, Prometheus metrics.
+use std::sync::Mutex;
 
-use crate::sdk::SultanSDK;
-use crate::ChainConfig;
+use dotenvy;
+use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use jsonrpc_core::{
-    Error as RpcError, ErrorCode as RpcErrorCode, MetaIoHandler, Metadata, Params,
-    Result as RpcResult, Value,
+    Error as RpcError, ErrorCode as RpcErrorCode, Metadata, MetaIoHandler, Params, Value,
 };
-use jsonrpc_http_server::{hyper, ServerBuilder};
+use jsonrpc_http_server::ServerBuilder;
+use jsonrpc_http_server::hyper; // use re-exported hyper from jsonrpc_http_server
+use lazy_static::lazy_static;
+use redis;
+use redis::Commands; // bring Redis command trait into scope
 use serde::Deserialize;
 use serde_json::json;
-use std::sync::Mutex;
+use sha2::{Digest, Sha256};
 use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
 
-// JWT authentication
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+// SDK (use the lib crate root)
+use crate::ChainConfig;
+use crate::sdk::SultanSDK;
 
-// Shared SDK instance for all RPC calls
-use lazy_static::lazy_static;
+// Globals
+
 lazy_static! {
     static ref SDK: Mutex<Option<SultanSDK>> = Mutex::new(None);
-}
-
-// Distributed rate limiting (Redis)
-use redis::{Client as RedisClient, Commands};
-use std::env;
-lazy_static! {
-    static ref REDIS: Option<RedisClient> = {
-        let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
-        match RedisClient::open(url.as_str()) {
-            Ok(c) => Some(c),
-            Err(e) => {
-                error!("Redis init failed (rate limiting disabled): {:?}", e);
-                None
-            }
+    static ref REDIS: Option<redis::Client> = {
+        let url = std::env::var("SULTAN_REDIS_URL").ok();
+        match url {
+            Some(u) if !u.is_empty() => match redis::Client::open(u) {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    warn!("Redis disabled (connect failed): {:?}", e);
+                    None
+                }
+            },
+            _ => None,
         }
     };
-    static ref RATE_LIMIT_RPS: i32 = env::var("SULTAN_RATE_LIMIT_RPS")
+    static ref RATE_LIMIT_RPS: usize = std::env::var("SULTAN_RATE_LIMIT_RPS")
         .ok()
-        .and_then(|v| v.parse().ok())
+        .and_then(|s| s.parse().ok())
         .unwrap_or(5);
-    static ref RATE_LIMIT_WINDOW_SECS: u64 = env::var("SULTAN_RATE_LIMIT_WINDOW_SECS")
+    static ref RATE_LIMIT_WINDOW_SECS: usize = std::env::var("SULTAN_RATE_LIMIT_WINDOW_SECS")
         .ok()
-        .and_then(|v| v.parse().ok())
+        .and_then(|s| s.parse().ok())
         .unwrap_or(1);
 }
 
@@ -175,6 +174,7 @@ fn start_metrics_server() {
 #[derive(Debug, Deserialize)]
 struct Claims {
     sub: String,
+    #[allow(dead_code)]
     exp: usize,
 }
 
@@ -197,7 +197,15 @@ fn load_jwt_secret() -> String {
         })
 }
 
-fn jsonrpc_err(code: RpcErrorCode, msg: &str) -> RpcResult<Value> {
+fn secret_fingerprint(secret: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(secret.as_bytes());
+    let d = hasher.finalize();
+    let hex = format!("{:x}", d);
+    hex.chars().take(12).collect()
+}
+
+fn jsonrpc_err(code: RpcErrorCode, msg: &str) -> Result<Value, RpcError> {
     Err(RpcError {
         code,
         message: msg.to_string(),
@@ -205,7 +213,7 @@ fn jsonrpc_err(code: RpcErrorCode, msg: &str) -> RpcResult<Value> {
     })
 }
 
-fn require_auth(meta: &RpcMeta, method: &str) -> RpcResult<String> {
+fn require_auth(meta: &RpcMeta, method: &str) -> Result<String, RpcError> {
     meta.sub.clone().ok_or_else(|| {
         warn!("Unauthorized {} attempt", method);
         RpcError {
@@ -228,7 +236,7 @@ fn check_rate_limit(method: &str, client_id: &str) -> bool {
                 let window = *RATE_LIMIT_WINDOW_SECS as i64;
                 let _expire_res: redis::RedisResult<bool> = con.expire(&key, window);
             }
-            if count > *RATE_LIMIT_RPS {
+            if count > *RATE_LIMIT_RPS as i32 {
                 RATE_LIMIT_BLOCKS.inc();
                 warn!("Rate limit exceeded for {} by {}", method, client_id);
                 false
@@ -329,7 +337,12 @@ struct SwapParams {
 
 // Endpoints
 
-fn wallet_create(params: Params, meta: RpcMeta) -> RpcResult<Value> {
+fn auth_ping(_params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
+    let client_id = require_auth(&meta, "auth_ping")?;
+    Ok(json!({ "ok": true, "client_id": client_id }))
+}
+
+fn wallet_create(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "wallet_create")?;
 
@@ -370,7 +383,7 @@ fn wallet_create(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     }
 }
 
-fn wallet_balance(params: Params, meta: RpcMeta) -> RpcResult<Value> {
+fn wallet_balance(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "wallet_balance")?;
     let address = if let Ok((addr,)) = params.clone().parse::<(String,)>() {
@@ -405,7 +418,7 @@ fn wallet_balance(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     }
 }
 
-fn token_mint(params: Params, meta: RpcMeta) -> RpcResult<Value> {
+fn token_mint(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "token_mint")?;
 
@@ -455,7 +468,7 @@ fn token_mint(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     }
 }
 
-fn stake(params: Params, meta: RpcMeta) -> RpcResult<Value> {
+fn stake(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "stake")?;
 
@@ -505,7 +518,7 @@ fn stake(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     }
 }
 
-fn query_apy(params: Params, meta: RpcMeta) -> RpcResult<Value> {
+fn query_apy(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "query_apy")?;
 
@@ -538,7 +551,7 @@ fn query_apy(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     }
 }
 
-fn vote_on_proposal(params: Params, meta: RpcMeta) -> RpcResult<Value> {
+fn vote_on_proposal(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "vote_on_proposal")?;
 
@@ -599,7 +612,7 @@ fn vote_on_proposal(params: Params, meta: RpcMeta) -> RpcResult<Value> {
     }
 }
 
-fn cross_chain_swap(params: Params, meta: RpcMeta) -> RpcResult<Value> {
+fn cross_chain_swap(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
     let client_id = require_auth(&meta, "cross_chain_swap")?;
 
@@ -675,6 +688,14 @@ pub fn main() {
     if jwt_secret == "devsecret_change_me_32_bytes_min" {
         warn!("Running with dev JWT secret; do NOT use in production");
     }
+    let allow_raw = std::env::var("SULTAN_JWT_ALLOW_RAW")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    info!(
+        "JWT configured (HS256). Secret fingerprint={} allow_raw={}",
+        secret_fingerprint(&jwt_secret),
+        allow_raw
+    );
 
     info!(
         "Rate limiting: {} req/{}s window",
@@ -682,6 +703,7 @@ pub fn main() {
     );
 
     let mut io = MetaIoHandler::default();
+    io.add_method_with_meta("auth_ping", |p, m| async move { auth_ping(p, m) });
     io.add_method_with_meta("wallet_create", |p, m| async move { wallet_create(p, m) });
     io.add_method_with_meta("wallet_balance", |p, m| async move { wallet_balance(p, m) });
     io.add_method_with_meta("token_mint", |p, m| async move { token_mint(p, m) });
@@ -710,12 +732,13 @@ pub fn main() {
                 .as_deref()
                 .and_then(|s| s.strip_prefix("Bearer ").map(|t| t.to_string()));
 
-            // Optional dev passthrough: if enabled and token equals the secret, accept without JWT structure
+            // Optional dev passthrough: token equals secret
             let allow_raw = std::env::var("SULTAN_JWT_ALLOW_RAW")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false);
 
-            if let (Some(token), true) = (bearer, !secret_for_extractor.is_empty()) {
+            // Avoid tuple pattern that inferred unsized str; use Option<String> directly
+            if let Some(token) = bearer {
                 if allow_raw && token == secret_for_extractor {
                     return RpcMeta {
                         sub: Some("dev-user".to_string()),
@@ -723,7 +746,7 @@ pub fn main() {
                 }
                 let mut validation = Validation::new(Algorithm::HS256);
                 validation.validate_exp = true;
-                match decode::<Claims>(
+                match jsonwebtoken::decode::<Claims>(
                     &token,
                     &DecodingKey::from_secret(secret_for_extractor.as_bytes()),
                     &validation,

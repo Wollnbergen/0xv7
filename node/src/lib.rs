@@ -16,7 +16,9 @@ pub struct RelayPingBehaviour {
 }
 
 pub struct P2PNode {
+    #[allow(dead_code)]
     swarm: Swarm<RelayPingBehaviour>,
+    // ...existing code...
 }
 
 impl P2PNode {
@@ -59,9 +61,9 @@ pub use self::quantum::quantum_sign;
 pub mod grpc_service;
 pub mod migrations;
 pub mod quantum;
-pub mod rpc_server;
 pub mod scylla_db;
 pub mod sdk;
+pub mod rpc_server;
 
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};

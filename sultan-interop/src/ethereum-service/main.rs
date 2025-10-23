@@ -12,6 +12,7 @@ use sultan_interop::sultan::{
     GetStateProofResponse, SubscribeRequest,
 };
 use tonic::Status;
+use anyhow::Result;
 
 #[derive(Debug, Default)]
 pub struct EthereumService;
@@ -54,15 +55,7 @@ impl ChainService for EthereumService {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-    info!("🚀 Initializing Ethereum Service with gRPC");
-    let addr = "0.0.0.0:50051".parse()?;
-    let service = EthereumService::default();
-    info!("⚡ Starting Ethereum gRPC server on {}", addr);
-    Server::builder()
-        .add_service(ChainServiceServer::new(service))
-        .serve(addr)
-        .await?;
+async fn main() -> Result<()> {
+    println!("ethereum-service stub up");
     Ok(())
 }

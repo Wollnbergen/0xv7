@@ -1,8 +1,6 @@
 {
-  "git.untrackedChanges": "large",
-  "files.watcherExclude": {
-    "**/target/**": true,
-    "**/logs/**": true,
-    "**/tmp/**": true
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.profiles.linux": {
+    "bash": { "path": "/bin/bash", "args": ["-li"] }
   }
 }

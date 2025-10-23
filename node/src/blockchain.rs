@@ -1,7 +1,5 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures::future::join_all;
-// removed unused imports:
-// use pqcrypto_traits::sign::{PublicKey, SecretKey};
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::info;
@@ -10,6 +8,10 @@ use crate::scylla_db::ScyllaCluster;
 use crate::transaction_validator::TransactionValidator;
 use crate::types::{Block, SultanToken, Transaction};
 use crate::ChainConfig;
+
+// Interop bridges
+use sultan_interop::bitcoin::BitcoinBridge;
+use sultan_interop::EthBridge;
 
 #[derive(Default, Debug, Clone)]
 pub struct Stats {
@@ -24,10 +26,10 @@ pub struct Blockchain {
     pub shards: usize,
     pub validator: TransactionValidator,
     pub token: SultanToken,
+    pub config: ChainConfig,
 }
 
 impl Blockchain {
-    /// Initialize genesis validators: 100 mobile + 20 professional (stake >= 5k SLTN, APY ~26.67%)
     pub fn init_genesis_validators(&self) -> Result<()> {
         info!("Genesis validators: 100 mobile + 20 professional (stake >= 5k SLTN, APY ~26.67%)");
         Ok(())
@@ -43,9 +45,11 @@ impl Blockchain {
             shards,
             validator,
             token,
+            config: chain_config,
         })
     }
 
+    /// Enforce min-stake, upsert validator, persist stake and wallet audit.
     pub async fn stake_to_validator(
         &self,
         validator_id: &str,
@@ -56,9 +60,26 @@ impl Blockchain {
             "Staking {} SLTN to validator {} (signed: {})",
             amount, validator_id, signed
         );
+
+        if amount < self.config.min_stake as u64 {
+            return Err(anyhow!(
+                "Stake amount {} below minimum required {}",
+                amount,
+                self.config.min_stake
+            ));
+        }
+
         if let Some(db) = &self.db {
-            db.update_wallet_balance(validator_id, amount as i64)
-                .await?;
+            if let Some(existing) = db.get_validator(validator_id).await? {
+                let new_stake = existing.stake.saturating_add(amount as i64);
+                db.update_validator_stake(validator_id, new_stake).await?;
+                info!("Updated validator {} stake -> {}", validator_id, new_stake);
+            } else {
+                db.register_validator(validator_id, validator_id, amount as i64, None)
+                    .await?;
+                info!("Registered new validator {} stake -> {}", validator_id, amount);
+            }
+            db.update_wallet_balance(validator_id, amount as i64).await?;
         }
         Ok(())
     }
@@ -67,6 +88,7 @@ impl Blockchain {
         Ok(26.67)
     }
 
+    /// Atomic swap via interop bridges, then persist balance deltas.
     pub async fn atomic_swap(
         &self,
         from: &str,
@@ -75,10 +97,28 @@ impl Blockchain {
         signed: String,
     ) -> Result<()> {
         info!(
-            "Atomic swap: {} {} -> {} (signed: {})",
+            "Atomic swap requested: {} {} -> {} (signed: {})",
             amount, from, to, signed
         );
-        // TODO: Integrate with interop service for real swaps
+
+        match to.to_lowercase().as_str() {
+            "bitcoin" | "btc" => {
+                let bridge = BitcoinBridge::new().await?;
+       bridge.atomic_swap(amount).await?;
+        info!("Atomic swap to Bitcoin completed (amount {})", amount);
+    }
+    "ethereum" | "eth" => {
+        let bridge = EthBridge::new().await?;
+        bridge.atomic_swap(amount).await?;
+        info!("Atomic swap to Ethereum completed (amount {})", amount);
+    }
+    other => return Err(anyhow!("Unsupported interop chain: {}", other)),
+}
+
+        if let Some(db) = &self.db {
+            db.update_wallet_balance(from, -(amount as i64)).await?;
+            db.update_wallet_balance(to, amount as i64).await?;
+        }
         Ok(())
     }
 
@@ -111,10 +151,7 @@ impl Blockchain {
     pub async fn run_validator(&self, num: u64) -> Result<Stats> {
         let blocks = vec![Block::default(); num as usize];
         self.sharded_process(blocks).await?;
-        info!(
-            "Production run_validator complete with {} nodes (2M+ TPS)",
-            num
-        );
+        info!("Production run_validator complete with {} nodes (2M+ TPS)", num);
         Ok(Stats {
             tps: 2_000_000.0,
             uptime: 100.0,
@@ -135,10 +172,7 @@ impl Blockchain {
         if let Some(db) = &self.db {
             db.insert_block(block.shard_id as i32, &block).await?;
         }
-        info!(
-            "Processed block {} with ScyllaDB (production)",
-            block.height
-        );
+        info!("Processed block {} with ScyllaDB (production)", block.height);
         Ok(())
     }
 
@@ -193,6 +227,7 @@ impl Default for Blockchain {
             shards: chain_config.shards,
             validator,
             token: SultanToken::default(),
+            config: chain_config,
         }
     }
 }
