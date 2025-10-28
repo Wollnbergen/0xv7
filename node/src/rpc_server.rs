@@ -45,6 +45,10 @@ lazy_static! {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(1);
+    static ref IDEMP_TTL_SECS: usize = std::env::var("SULTAN_IDEMP_TTL_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(600);
 }
 
 // Prometheus metrics
@@ -60,11 +64,15 @@ lazy_static! {
         "Total requests blocked by rate limiting"
     )
     .unwrap();
+    static ref RPC_ERRORS: IntCounter =
+        IntCounter::new("rpc_errors_total", "Total RPC errors (any JSON-RPC error response)")
+            .unwrap();
 }
 fn register_metrics() {
     let _ = REGISTRY.register(Box::new(RPC_CALLS.clone()));
     let _ = REGISTRY.register(Box::new(ACTIVE_WALLETS.clone()));
     let _ = REGISTRY.register(Box::new(RATE_LIMIT_BLOCKS.clone()));
+    let _ = REGISTRY.register(Box::new(RPC_ERRORS.clone()));
 }
 fn gather_metrics() -> String {
     let encoder = TextEncoder::new();
@@ -206,6 +214,7 @@ fn secret_fingerprint(secret: &str) -> String {
 }
 
 fn jsonrpc_err(code: RpcErrorCode, msg: &str) -> Result<Value, RpcError> {
+    RPC_ERRORS.inc();
     Err(RpcError {
         code,
         message: msg.to_string(),
@@ -359,7 +368,7 @@ fn wallet_create(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
     if let Some(k) = idempotency_key_opt.as_deref() {
-        if !check_idempotency("wallet_create", &client_id, k, 600) {
+        if !check_idempotency("wallet_create", &client_id, k, *IDEMP_TTL_SECS) {
             return jsonrpc_err(RpcErrorCode::ServerError(409), "duplicate request");
         }
     }
@@ -445,20 +454,45 @@ fn token_mint(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
     if let Some(k) = idempotency_key_opt.as_deref() {
-        if !check_idempotency("token_mint", &client_id, k, 600) {
+        if !check_idempotency("token_mint", &client_id, k, *IDEMP_TTL_SECS) {
             return jsonrpc_err(RpcErrorCode::ServerError(409), "duplicate request");
         }
     }
 
     let sdk = SDK.lock().unwrap();
     if let Some(sdk) = sdk.as_ref() {
+        // Balance before to detect applied writes even if SDK returns an error.
+        let before = run_on_rt(sdk.get_balance(&to)).unwrap_or(0);
+
         let res = run_on_rt(sdk.mint_token(&to, amount));
         match res {
             Ok(msg) => {
                 info!("Minted {} SLTN to {}", amount, to);
-                Ok(json!({ "to": to, "amount": amount, "status": msg }))
+                let after = run_on_rt(sdk.get_balance(&to)).unwrap_or(before);
+                Ok(json!({ "to": to, "amount": amount, "status": msg, "balance": after }))
             }
             Err(e) => {
+                let after = run_on_rt(sdk.get_balance(&to)).unwrap_or(before);
+
+                // If balance increased by expected amount, treat as success.
+                if after >= before.saturating_add(amount) {
+                    warn!("token_mint applied but SDK returned error: {:?}", e);
+                    return Ok(json!({ "to": to, "amount": amount, "status": "ok", "balance": after }));
+                }
+
+                // Heuristic: idempotent duplicate or not-applied LWT.
+                let emsg = e.to_string().to_lowercase();
+                let looks_idempotent = emsg.contains("idempot")
+                    || emsg.contains("applied: false")
+                    || emsg.contains("if not exists")
+                    || emsg.contains("already exists")
+                    || emsg.contains("unique");
+
+                if looks_idempotent {
+                    info!("token_mint idempotent duplicate");
+                    return Ok(json!({ "to": to, "amount": 0, "status": "idempotent", "balance": after }));
+                }
+
                 error!("Mint token failed: {:?}", e);
                 jsonrpc_err(RpcErrorCode::InternalError, "mint failed")
             }
@@ -495,7 +529,7 @@ fn stake(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
     if let Some(k) = idempotency_key_opt.as_deref() {
-        if !check_idempotency("stake", &client_id, k, 600) {
+        if !check_idempotency("stake", &client_id, k, *IDEMP_TTL_SECS) {
             return jsonrpc_err(RpcErrorCode::ServerError(409), "duplicate request");
         }
     }
@@ -581,7 +615,7 @@ fn vote_on_proposal(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
     if let Some(k) = idempotency_key_opt.as_deref() {
-        if !check_idempotency("vote_on_proposal", &client_id, k, 600) {
+        if !check_idempotency("vote_on_proposal", &client_id, k, *IDEMP_TTL_SECS) {
             return jsonrpc_err(RpcErrorCode::ServerError(409), "duplicate request");
         }
     }
@@ -639,7 +673,7 @@ fn cross_chain_swap(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
     if let Some(k) = idempotency_key_opt.as_deref() {
-        if !check_idempotency("cross_chain_swap", &client_id, k, 600) {
+        if !check_idempotency("cross_chain_swap", &client_id, k, *IDEMP_TTL_SECS) {
             return jsonrpc_err(RpcErrorCode::ServerError(409), "duplicate request");
         }
     }

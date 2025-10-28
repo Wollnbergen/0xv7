@@ -49,7 +49,7 @@ tokio-stream = "0.1.17"
 jsonrpc-core = "18"
 jsonrpc-http-server = "18"
 jsonwebtoken = "9"
-redis = "0.25"
+redis = { workspace = true }
 prometheus = "0.13"
 tiny_http = "0.12"
 lazy_static = "1.4"
@@ -63,10 +63,3 @@ tracing-test = "0.2.5"
 
 [build-dependencies]
 tonic-build.workspace = true
-
-[profile.dev]
-opt-level = 0
-debug = 0
-incremental = false
-strip = "debuginfo"
-panic = "abort"
