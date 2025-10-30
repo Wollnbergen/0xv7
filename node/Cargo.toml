@@ -57,6 +57,13 @@ dotenvy = "0.15"
 warp = "0.3"
 sha2 = "0.10"
 
+# Added for secure wallet key generation/storage
+aes-gcm = { version = "0.10", features = ["aes"] }
+hkdf = "0.12"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+base64 = "0.22"
+
 [dev-dependencies]
 tokio = { version = "1.47", features = ["test-util"] }
 tracing-test = "0.2.5"

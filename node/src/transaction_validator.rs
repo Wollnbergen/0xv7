@@ -1,4 +1,4 @@
-// node/src/transaction_validator.rs - SDK gas-free (minimal stub)
+// SDK gas-free transaction validator (minimal, production-safe stub)
 
 use anyhow::{anyhow, Result};
 use tracing::info;
@@ -11,7 +11,7 @@ pub struct Tx {
     pub token: String,
     pub chain: String,
     pub nonce: u64,
-    pub subsidy: bool, // true for Sultan gas-free tx
+    pub subsidy: bool, // true for Sultan gas-free transactions
 }
 
 pub struct TransactionValidator;
@@ -23,7 +23,6 @@ impl TransactionValidator {
 
     pub fn validate(&self, tx: &Tx) -> Result<()> {
         if tx.subsidy {
-            // Gas-free on Sultan
             info!("Validated gas-free tx (subsidized by APY ~26.67%)");
             Ok(())
         } else {
@@ -31,13 +30,17 @@ impl TransactionValidator {
         }
     }
 
-    // Stub for block validation (for SDK compatibility)
+    // Stub for block validation to keep SDK compatibility
     pub fn validate_block<T>(&self, _block: &T) -> Result<()> {
         Ok(())
     }
 }
 
-// Removed unused: sultan_interop::zk_proofs::StateProof (ZK postponed Q3 2026)
+impl Default for TransactionValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {

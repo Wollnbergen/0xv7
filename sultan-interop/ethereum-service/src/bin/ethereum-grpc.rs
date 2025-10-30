@@ -6,10 +6,8 @@ pub mod sultan {
 
 use sultan::{
     chain_service_server::{ChainService, ChainServiceServer},
-    BlockInfo, GetBlockInfoRequest, GetBlockInfoResponse,
-    GetStateProofRequest, GetStateProofResponse,
-    SubscribeRequest, VerifyStateRequest, VerifyStateResponse,
-    StateProof,
+    BlockInfo, GetBlockInfoRequest, GetBlockInfoResponse, GetStateProofRequest,
+    GetStateProofResponse, StateProof, SubscribeRequest, VerifyStateRequest, VerifyStateResponse,
 };
 
 #[derive(Debug, Default)]
@@ -22,9 +20,9 @@ impl ChainService for EthereumGrpcService {
         request: Request<GetBlockInfoRequest>,
     ) -> Result<Response<GetBlockInfoResponse>, Status> {
         let height = request.into_inner().height;
-        
+
         println!("⚡ gRPC: GetBlockInfo for height {}", height);
-        
+
         let block = BlockInfo {
             chain: "ethereum".to_string(),
             height,
@@ -32,10 +30,8 @@ impl ChainService for EthereumGrpcService {
             state_root: format!("0xstate{:058x}", height),
             timestamp: chrono::Utc::now().timestamp(),
         };
-        
-        Ok(Response::new(GetBlockInfoResponse {
-            block: Some(block),
-        }))
+
+        Ok(Response::new(GetBlockInfoResponse { block: Some(block) }))
     }
 
     async fn get_state_proof(
@@ -47,7 +43,8 @@ impl ChainService for EthereumGrpcService {
         }))
     }
 
-    type SubscribeToBlocksStream = tokio_stream::wrappers::ReceiverStream<Result<BlockInfo, Status>>;
+    type SubscribeToBlocksStream =
+        tokio_stream::wrappers::ReceiverStream<Result<BlockInfo, Status>>;
 
     async fn subscribe_to_blocks(
         &self,
@@ -55,7 +52,9 @@ impl ChainService for EthereumGrpcService {
     ) -> Result<Response<Self::SubscribeToBlocksStream>, Status> {
         let (tx, rx) = tokio::sync::mpsc::channel(128);
         drop(tx); // For now
-        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(rx)))
+        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+            rx,
+        )))
     }
 
     async fn verify_state(

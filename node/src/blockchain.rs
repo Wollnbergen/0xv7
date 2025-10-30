@@ -61,7 +61,8 @@ impl Blockchain {
             amount, validator_id, signed
         );
 
-        if amount < self.config.min_stake as u64 {
+        if amount < self.config.min_stake {
+            // ...existing code...
             return Err(anyhow!(
                 "Stake amount {} below minimum required {}",
                 amount,
@@ -77,9 +78,13 @@ impl Blockchain {
             } else {
                 db.register_validator(validator_id, validator_id, amount as i64, None)
                     .await?;
-                info!("Registered new validator {} stake -> {}", validator_id, amount);
+                info!(
+                    "Registered new validator {} stake -> {}",
+                    validator_id, amount
+                );
             }
-            db.update_wallet_balance(validator_id, amount as i64).await?;
+            db.update_wallet_balance(validator_id, amount as i64)
+                .await?;
         }
         Ok(())
     }
@@ -104,16 +109,16 @@ impl Blockchain {
         match to.to_lowercase().as_str() {
             "bitcoin" | "btc" => {
                 let bridge = BitcoinBridge::new().await?;
-       bridge.atomic_swap(amount).await?;
-        info!("Atomic swap to Bitcoin completed (amount {})", amount);
-    }
-    "ethereum" | "eth" => {
-        let bridge = EthBridge::new().await?;
-        bridge.atomic_swap(amount).await?;
-        info!("Atomic swap to Ethereum completed (amount {})", amount);
-    }
-    other => return Err(anyhow!("Unsupported interop chain: {}", other)),
-}
+                bridge.atomic_swap(amount).await?;
+                info!("Atomic swap to Bitcoin completed (amount {})", amount);
+            }
+            "ethereum" | "eth" => {
+                let bridge = EthBridge::new().await?;
+                bridge.atomic_swap(amount).await?;
+                info!("Atomic swap to Ethereum completed (amount {})", amount);
+            }
+            other => return Err(anyhow!("Unsupported interop chain: {}", other)),
+        }
 
         if let Some(db) = &self.db {
             db.update_wallet_balance(from, -(amount as i64)).await?;
@@ -151,7 +156,10 @@ impl Blockchain {
     pub async fn run_validator(&self, num: u64) -> Result<Stats> {
         let blocks = vec![Block::default(); num as usize];
         self.sharded_process(blocks).await?;
-        info!("Production run_validator complete with {} nodes (2M+ TPS)", num);
+        info!(
+            "Production run_validator complete with {} nodes (2M+ TPS)",
+            num
+        );
         Ok(Stats {
             tps: 2_000_000.0,
             uptime: 100.0,
@@ -172,7 +180,10 @@ impl Blockchain {
         if let Some(db) = &self.db {
             db.insert_block(block.shard_id as i32, &block).await?;
         }
-        info!("Processed block {} with ScyllaDB (production)", block.height);
+        info!(
+            "Processed block {} with ScyllaDB (production)",
+            block.height
+        );
         Ok(())
     }
 

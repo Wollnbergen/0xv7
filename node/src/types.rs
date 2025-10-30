@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use bincode::{Decode, Encode};
 use pqcrypto_dilithium::dilithium3::keypair;
 use pqcrypto_traits::sign::{PublicKey, SecretKey};
@@ -46,8 +46,7 @@ pub struct ValidatorInfo {
     pub device_type: Option<String>,
 }
 
-// FIX: Remove Serialize/Deserialize from SultanToken, or skip db field
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SultanToken {
     pub balance: HashMap<String, u64>,
     pub supply: u64,
@@ -66,7 +65,7 @@ impl SultanToken {
 
     pub async fn mint(&mut self, to: &str, amount: u64) -> Result<()> {
         if amount == 0 {
-            return Err(anyhow::anyhow!("Cannot mint zero tokens"));
+            return Err(anyhow!("Cannot mint zero tokens"));
         }
         let entry = self.balance.entry(to.to_string()).or_insert(0);
         *entry += amount;
@@ -80,7 +79,7 @@ impl SultanToken {
 
     pub async fn generate_wallet_address(&self, telegram_id: &str) -> Result<String> {
         if telegram_id.is_empty() {
-            return Err(anyhow::anyhow!("Telegram ID cannot be empty"));
+            return Err(anyhow!("Telegram ID cannot be empty"));
         }
         let (pk, sk) = keypair();
         let address = format!("sultan1{}", hex::encode(pk.as_bytes()));
@@ -124,16 +123,6 @@ impl SultanToken {
     pub fn set_rate(&mut self, rate: f64) -> Result<()> {
         println!("Token rate set to {}", rate);
         Ok(())
-    }
-}
-
-impl Default for SultanToken {
-    fn default() -> Self {
-        Self {
-            balance: HashMap::new(),
-            supply: 0,
-            db: None,
-        }
     }
 }
 

@@ -1,5 +1,4 @@
 use std::sync::Mutex;
-
 use dotenvy;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use jsonrpc_core::{
@@ -8,6 +7,7 @@ use jsonrpc_core::{
 use jsonrpc_http_server::ServerBuilder;
 use jsonrpc_http_server::hyper; // use re-exported hyper from jsonrpc_http_server
 use lazy_static::lazy_static;
+use prometheus::{register_int_counter, Encoder, IntCounter, IntGauge, Registry, TextEncoder};
 use redis;
 use redis::Commands; // bring Redis command trait into scope
 use serde::Deserialize;
@@ -52,7 +52,6 @@ lazy_static! {
 }
 
 // Prometheus metrics
-use prometheus::{Encoder, IntCounter, IntGauge, Registry, TextEncoder};
 lazy_static! {
     static ref REGISTRY: Registry = Registry::new();
     static ref RPC_CALLS: IntCounter =
@@ -67,6 +66,22 @@ lazy_static! {
     static ref RPC_ERRORS: IntCounter =
         IntCounter::new("rpc_errors_total", "Total RPC errors (any JSON-RPC error response)")
             .unwrap();
+    static ref PROPOSAL_CREATES: IntCounter = register_int_counter!(
+        "rpc_proposals_created",
+        "Total number of proposals created"
+    ).unwrap();
+    static ref PROPOSAL_GETS: IntCounter = register_int_counter!(
+        "rpc_proposals_fetched", 
+        "Total number of proposals fetched"
+    ).unwrap();
+    static ref VOTES_CAST: IntCounter = register_int_counter!(
+        "rpc_votes_cast",
+        "Total number of votes cast"
+    ).unwrap();
+    static ref VOTE_TALLIES: IntCounter = register_int_counter!(
+        "rpc_vote_tallies",
+        "Total number of vote tallies requested"
+    ).unwrap();
 }
 fn register_metrics() {
     let _ = REGISTRY.register(Box::new(RPC_CALLS.clone()));
@@ -475,7 +490,7 @@ fn token_mint(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
                 let after = run_on_rt(sdk.get_balance(&to)).unwrap_or(before);
 
                 // If balance increased by expected amount, treat as success.
-                if after >= before.saturating_add(amount) {
+                if after >= before.saturating_add(amount as i64) {
                     warn!("token_mint applied but SDK returned error: {:?}", e);
                     return Ok(json!({ "to": to, "amount": amount, "status": "ok", "balance": after }));
                 }
@@ -587,6 +602,7 @@ fn query_apy(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
 
 fn vote_on_proposal(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
+    VOTES_CAST.inc();
     let client_id = require_auth(&meta, "vote_on_proposal")?;
 
     let (proposal_id, vote, validator_id, idempotency_key_opt) = if let Ok((pid, v, vid, key)) =
@@ -646,49 +662,124 @@ fn vote_on_proposal(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     }
 }
 
-fn cross_chain_swap(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
+fn proposal_create(params: Params, meta: RpcMeta) -> Result<Value, RpcError> {
     RPC_CALLS.inc();
-    let client_id = require_auth(&meta, "cross_chain_swap")?;
-
-    let (from, amount, idempotency_key_opt) =
-        if let Ok((from, amount, key)) = params.clone().parse::<(String, u64, Option<String>)>() {
-            (from, amount, key)
-        } else if let Ok(p) = params.parse::<SwapParams>() {
-            (p.from, p.amount, p.idempotency_key)
-        } else {
-            return jsonrpc_err(
-                RpcErrorCode::InvalidParams,
-                "valid 'from' and positive 'amount' required",
-            );
-        };
-
-    if from.is_empty() || !is_valid_address(&from) || amount == 0 {
-        return jsonrpc_err(
-            RpcErrorCode::InvalidParams,
-            "valid 'from' and positive 'amount' required",
-        );
-    }
-
-    if !check_rate_limit("cross_chain_swap", &client_id) {
+    PROPOSAL_CREATES.inc();
+    let client_id = require_auth(&meta, "proposal_create")?;
+    
+    let params_result = params.parse::<(String, String, String, Option<String>)>();
+    let (proposal_id, title, description, status) = match params_result {
+        Ok(p) => p,
+        Err(e) => {
+            error!("Invalid params for proposal_create: {:?}", e);
+            return jsonrpc_err(RpcErrorCode::InvalidParams, "invalid parameters");
+        }
+    };
+    
+    if !check_rate_limit("proposal_create", &client_id) {
         return jsonrpc_err(RpcErrorCode::ServerError(429), "rate limit exceeded");
     }
-    if let Some(k) = idempotency_key_opt.as_deref() {
-        if !check_idempotency("cross_chain_swap", &client_id, k, *IDEMP_TTL_SECS) {
-            return jsonrpc_err(RpcErrorCode::ServerError(409), "duplicate request");
-        }
-    }
-
+    
     let sdk = SDK.lock().unwrap();
     if let Some(sdk) = sdk.as_ref() {
-        let res = run_on_rt(sdk.cross_chain_swap(&from, amount));
+        let res = run_on_rt(sdk.proposal_create(
+            &proposal_id,
+            Some(&title),
+            Some(&description),
+            status.as_deref(),
+        ));
+        
         match res {
-            Ok(signed) => {
-                info!("Cross-chain swap: {} {}", amount, from);
-                Ok(json!({ "from": from, "amount": amount, "signed": signed }))
+            Ok(_) => {
+                info!("Created proposal: {} by {}", proposal_id, client_id);
+                Ok(json!({
+                    "proposal_id": proposal_id,
+                    "title": title,
+                    "status": "created"
+                }))
             }
             Err(e) => {
-                error!("Cross-chain swap failed: {:?}", e);
-                jsonrpc_err(RpcErrorCode::InternalError, "swap failed")
+                error!("Failed to create proposal: {:?}", e);
+                jsonrpc_err(RpcErrorCode::InternalError, "failed to create proposal")
+            }
+        }
+    } else {
+        jsonrpc_err(RpcErrorCode::ServerError(500), "SDK not initialized")
+    }
+}
+
+fn proposal_get(params: Params, _meta: RpcMeta) -> Result<Value, RpcError> {
+    RPC_CALLS.inc();
+    PROPOSAL_GETS.inc();
+    // Parse params - handle array or string
+    let proposal_id = if let Ok(arr) = params.clone().parse::<Vec<String>>() {
+        if arr.is_empty() {
+            return Err(RpcError::invalid_params("missing proposal_id"));
+        }
+        arr[0].clone()
+    } else if let Ok(id) = params.parse::<String>() {
+        id
+    } else {
+        return Err(RpcError::invalid_params("invalid parameters"));
+    };
+    
+    let sdk = SDK.lock().unwrap();
+    if let Some(sdk) = sdk.as_ref() {
+        let res = run_on_rt(sdk.proposal_get(&proposal_id));
+        match res {
+            Ok(Some(proposal)) => {
+                Ok(json!({
+                    "proposal_id": proposal.proposal_id,
+                    "title": proposal.title,
+                    "description": proposal.description,
+                    "status": proposal.state.to_string(),
+                    "created_at": proposal.created_at,
+                }))
+            }
+            Ok(None) => {
+                jsonrpc_err(RpcErrorCode::InvalidParams, "proposal not found")
+            }
+            Err(e) => {
+                error!("Failed to get proposal: {:?}", e);
+                jsonrpc_err(RpcErrorCode::InternalError, "failed to get proposal")
+            }
+        }
+    } else {
+        jsonrpc_err(RpcErrorCode::ServerError(500), "SDK not initialized")
+    }
+}
+
+fn votes_tally(params: Params, _meta: RpcMeta) -> Result<Value, RpcError> {
+    RPC_CALLS.inc();
+    VOTE_TALLIES.inc();
+    // Parse params - handle array or string
+    let proposal_id = if let Ok(arr) = params.clone().parse::<Vec<String>>() {
+        if arr.is_empty() {
+            return Err(RpcError::invalid_params("missing proposal_id"));
+        }
+        arr[0].clone()
+    } else if let Ok(id) = params.parse::<String>() {
+        id
+    } else {
+        return Err(RpcError::invalid_params("invalid parameters"));
+    };
+    
+    let sdk = SDK.lock().unwrap();
+    if let Some(sdk) = sdk.as_ref() {
+        let res = run_on_rt(sdk.votes_tally(&proposal_id));
+        match res {
+            Ok((yes_votes, no_votes)) => {
+                Ok(json!({
+                    "proposal_id": proposal_id,
+                    "yes_votes": yes_votes,
+                    "no_votes": no_votes,
+                    "total_votes": yes_votes + no_votes,
+                    "result": if yes_votes > no_votes { "passing" } else { "failing" }
+                }))
+            }
+            Err(e) => {
+                error!("Failed to tally votes: {:?}", e);
+                jsonrpc_err(RpcErrorCode::InternalError, "failed to tally votes")
             }
         }
     } else {
@@ -749,8 +840,15 @@ pub fn main() {
     );
     io.add_method_with_meta(
         "cross_chain_swap",
-        |p, m| async move { cross_chain_swap(p, m) },
+        |_p, _m| async move { 
+            jsonrpc_err(RpcErrorCode::InternalError, "not implemented") 
+        },
     );
+    
+    // Register governance methods
+    io.add_method_with_meta("proposal_create", |p, m| async move { proposal_create(p, m) });
+    io.add_method_with_meta("proposal_get", |p, m| async move { proposal_get(p, m) });
+    io.add_method_with_meta("votes_tally", |p, m| async move { votes_tally(p, m) });
 
     let secret_for_extractor = jwt_secret.clone();
 

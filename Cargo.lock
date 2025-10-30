@@ -1288,6 +1288,7 @@ checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
+ "rand_core 0.6.4",
  "serde",
  "sha2",
  "subtle",
@@ -4639,13 +4640,17 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 name = "sultan-coordinator"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "anyhow",
+ "base64 0.22.1",
  "bincode",
  "chrono",
  "clap",
  "dotenvy",
+ "ed25519-dalek",
  "futures",
  "hex",
+ "hkdf",
  "jsonrpc-core",
  "jsonrpc-http-server",
  "jsonwebtoken",
@@ -4656,6 +4661,7 @@ dependencies = [
  "pqcrypto-traits",
  "prometheus",
  "prost",
+ "rand 0.8.5",
  "redis",
  "reqwest",
  "rocksdb",

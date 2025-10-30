@@ -1,6 +1,7 @@
 {
-  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.shellIntegration.enabled": false,
   "terminal.integrated.profiles.linux": {
-    "bash": { "path": "/bin/bash", "args": ["-li"] }
-  }
+    "Clean Bash": { "path": "/workspaces/0xv7/.vscode/bash-clean.sh" }
+  },
+  "terminal.integrated.defaultProfile.linux": "Clean Bash"
 }

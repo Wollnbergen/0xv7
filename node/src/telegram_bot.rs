@@ -17,3 +17,9 @@ impl TelegramBot {
         Ok(())
     }
 }
+
+impl Default for TelegramBot {
+    fn default() -> Self {
+        Self::new()
+    }
+}
