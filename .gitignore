@@ -18,3 +18,14 @@ scylla-data/
 .cargo-ws/
 *.pid
 target/
+node_modules
+node_modules
+
+# Env files (keep example tracked)
+.env
+.env.*
+!.env.example
+
+# TLS keys and proxy logs
+deployment/rpc-proxy/secrets/
+deployment/rpc-proxy/logs/

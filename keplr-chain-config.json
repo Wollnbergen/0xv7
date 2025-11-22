@@ -1,0 +1,53 @@
+{
+  "chainId": "sultan-1",
+  "chainName": "Sultan L1",
+  "rpc": "http://localhost:26657",
+  "rest": "http://localhost:1317",
+  "bip44": {
+    "coinType": 118
+  },
+  "bech32Config": {
+    "bech32PrefixAccAddr": "cosmos",
+    "bech32PrefixAccPub": "cosmospub",
+    "bech32PrefixValAddr": "cosmosvaloper",
+    "bech32PrefixValPub": "cosmosvaloperpub",
+    "bech32PrefixConsAddr": "cosmosvalcons",
+    "bech32PrefixConsPub": "cosmosvalconspub"
+  },
+  "currencies": [
+    {
+      "coinDenom": "SULTAN",
+      "coinMinimalDenom": "stake",
+      "coinDecimals": 6,
+      "coinGeckoId": "sultan"
+    }
+  ],
+  "feeCurrencies": [
+    {
+      "coinDenom": "SULTAN",
+      "coinMinimalDenom": "stake",
+      "coinDecimals": 6,
+      "coinGeckoId": "sultan",
+      "gasPriceStep": {
+        "low": 0,
+        "average": 0,
+        "high": 0
+      }
+    }
+  ],
+  "stakeCurrency": {
+    "coinDenom": "SULTAN",
+    "coinMinimalDenom": "stake",
+    "coinDecimals": 6,
+    "coinGeckoId": "sultan"
+  },
+  "features": [
+    "ibc-transfer",
+    "ibc-go",
+    "cosmwasm",
+    "wasmd_0.24+",
+    "no-legacy-stdTx"
+  ],
+  "walletUrlForStaking": "http://localhost:1317",
+  "beta": true
+}
