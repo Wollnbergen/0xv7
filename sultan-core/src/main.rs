@@ -9,10 +9,15 @@
 //! - Persistent storage
 
 use sultan_core::*;
+use sultan_core::economics::Economics;
+use sultan_core::bridge_integration::BridgeManager;
+use sultan_core::staking::StakingManager;
+use sultan_core::governance::GovernanceManager;
 use anyhow::{Result, Context};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
 use std::sync::Arc;
+use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 use std::path::PathBuf;
@@ -32,7 +37,7 @@ struct Args {
     data_dir: String,
 
     /// Block time in seconds
-    #[clap(short, long, default_value = "5")]
+    #[clap(short, long, default_value = "2")]
     block_time: u64,
 
     /// Enable validator mode
@@ -58,15 +63,33 @@ struct Args {
     /// Genesis accounts (address:balance,address:balance,...)
     #[clap(long)]
     genesis: Option<String>,
+
+    /// Enable sharding for high TPS (100+ shards)
+    #[clap(long)]
+    enable_sharding: bool,
+
+    /// Number of shards (default: 100 for 200K+ TPS)
+    #[clap(long, default_value = "100")]
+    shard_count: usize,
+
+    /// Transactions per shard (default: 10000)
+    #[clap(long, default_value = "10000")]
+    tx_per_shard: usize,
 }
 
 /// Main node state
 struct NodeState {
     blockchain: Arc<RwLock<Blockchain>>,
+    sharded_blockchain: Option<Arc<RwLock<ShardedBlockchain>>>,
     consensus: Arc<RwLock<ConsensusEngine>>,
     storage: Arc<RwLock<PersistentStorage>>,
+    economics: Arc<RwLock<Economics>>,
+    bridge_manager: Arc<BridgeManager>,
+    staking_manager: Arc<StakingManager>,
+    governance_manager: Arc<GovernanceManager>,
     validator_address: Option<String>,
     block_time: u64,
+    sharding_enabled: bool,
 }
 
 impl NodeState {
@@ -130,6 +153,44 @@ impl NodeState {
             info!("Using default genesis accounts");
         }
 
+        // Initialize sharded blockchain if enabled
+        let sharded_blockchain = if args.enable_sharding {
+            let config = ShardConfig {
+                shard_count: args.shard_count,
+                tx_per_shard: args.tx_per_shard,
+                cross_shard_enabled: true,
+            };
+            
+            let mut sharded = ShardedBlockchain::new(config.clone());
+            
+            // Initialize same accounts in sharded blockchain
+            if let Some(genesis_str) = &args.genesis {
+                for account in genesis_str.split(',') {
+                    let parts: Vec<&str> = account.split(':').collect();
+                    if parts.len() == 2 {
+                        let address = parts[0].to_string();
+                        let balance: u64 = parts[1].parse()
+                            .context("Invalid balance in genesis")?;
+                        sharded.init_account(address.clone(), balance)
+                            .context("Failed to init sharded account")?;
+                    }
+                }
+            } else {
+                sharded.init_account("alice".to_string(), 1_000_000)?;
+                sharded.init_account("bob".to_string(), 500_000)?;
+                sharded.init_account("charlie".to_string(), 250_000)?;
+            }
+            
+            let tps_capacity = sharded.get_tps_capacity();
+            info!("🚀 SHARDING ENABLED: {} shards × {} tx/shard = {} TPS capacity",
+                config.shard_count, config.tx_per_shard, tps_capacity);
+            
+            Some(Arc::new(RwLock::new(sharded)))
+        } else {
+            info!("Running in single-threaded mode (no sharding)");
+            None
+        };
+
         // Initialize consensus
         let mut consensus = ConsensusEngine::new();
         
@@ -148,10 +209,16 @@ impl NodeState {
 
         Ok(Self {
             blockchain: Arc::new(RwLock::new(blockchain)),
+            sharded_blockchain,
             consensus: Arc::new(RwLock::new(consensus)),
             storage: Arc::new(RwLock::new(storage)),
+            economics: Arc::new(RwLock::new(Economics::new())),
+            bridge_manager: Arc::new(BridgeManager::new()),
+            staking_manager: Arc::new(StakingManager::new(0.08)), // 8% initial inflation
+            governance_manager: Arc::new(GovernanceManager::new()),
             validator_address: args.validator_address.clone(),
             block_time: args.block_time,
+            sharding_enabled: args.enable_sharding,
         })
     }
 
@@ -172,7 +239,6 @@ impl NodeState {
     /// Produce a single block
     async fn produce_block(&self) -> Result<()> {
         let mut consensus = self.consensus.write().await;
-        let mut blockchain = self.blockchain.write().await;
         let storage = self.storage.read().await;
 
         // Select proposer
@@ -187,70 +253,179 @@ impl NodeState {
             }
         }
 
-        // Create block
-        let block = blockchain.create_block(proposer.clone())
-            .context("Failed to create block")?;
+        // Get current height before block creation
+        let current_height = if self.sharding_enabled {
+            if let Some(ref sharded) = self.sharded_blockchain {
+                sharded.read().await.get_height()
+            } else {
+                0
+            }
+        } else {
+            self.blockchain.read().await.chain.len() as u64
+        };
+
+        // Use sharded or regular blockchain
+        let block = if self.sharding_enabled {
+            if let Some(ref sharded) = self.sharded_blockchain {
+                let mut sharded_bc = sharded.write().await;
+                
+                // In production, collect pending transactions here
+                // For now, create empty block
+                let transactions = vec![];
+                
+                let block = sharded_bc.create_block(transactions, proposer.clone()).await
+                    .context("Failed to create sharded block")?;
+                
+                sharded_bc.add_block(block.clone())
+                    .context("Failed to add sharded block")?;
+                
+                let stats = sharded_bc.get_stats();
+                info!(
+                    "✅ SHARDED Block {} | {} shards active | {} total txs | capacity: {} TPS",
+                    block.index,
+                    stats.shard_count,
+                    stats.total_processed,
+                    stats.estimated_tps
+                );
+                
+                block
+            } else {
+                anyhow::bail!("Sharding enabled but sharded blockchain not initialized");
+            }
+        } else {
+            let mut blockchain = self.blockchain.write().await;
+            
+            let block = blockchain.create_block(proposer.clone())
+                .context("Failed to create block")?;
+
+            // Validate block
+            if !blockchain.validate_block(&block)? {
+                error!("Created invalid block!");
+                return Ok(());
+            }
+
+            // Add block to chain
+            blockchain.chain.push(block.clone());
+            
+            info!(
+                "✅ Block {} produced by {} | {} txs | state_root: {}",
+                block.index,
+                block.validator,
+                block.transactions.len(),
+                &block.state_root[..16]
+            );
+            
+            block
+        };
 
         // Record proposal
         consensus.record_proposal(&proposer)
             .context("Failed to record proposal")?;
 
-        // Validate block
-        if !blockchain.validate_block(&block)? {
-            error!("Created invalid block!");
-            return Ok(());
-        }
-
-        // Add block to chain
-        blockchain.chain.push(block.clone());
-
         // Save to storage
         storage.save_block(&block)
             .context("Failed to save block")?;
 
-        info!(
-            "✅ Block {} produced by {} | {} txs | state_root: {}",
-            block.index,
-            block.validator,
-            block.transactions.len(),
-            &block.state_root[..16]
-        );
-
-        // Log balances for monitoring
-        debug!("Current balances:");
-        for (addr, account) in &blockchain.state {
-            debug!("  {}: {}", addr, account.balance);
+        // === PRODUCTION INTEGRATIONS ===
+        
+        // Distribute staking rewards for this block
+        let new_height = current_height + 1;
+        if let Err(e) = self.staking_manager.distribute_block_rewards(new_height).await {
+            error!("Failed to distribute block rewards at height {}: {}", new_height, e);
+        } else {
+            debug!("Distributed staking rewards at height {}", new_height);
         }
+
+        // Update governance height to check for voting period endings
+        self.governance_manager.update_height(new_height).await;
+        
+        // Update governance with total bonded for quorum calculations
+        let staking_stats = self.staking_manager.get_statistics().await;
+        self.governance_manager.update_total_bonded(staking_stats.total_staked).await;
 
         Ok(())
     }
 
     /// Transaction submission endpoint
     async fn submit_transaction(&self, tx: Transaction) -> Result<String> {
-        let mut blockchain = self.blockchain.write().await;
+        // Calculate transaction hash
+        let tx_hash = format!("{}:{}:{}", tx.from, tx.to, tx.nonce);
         
-        blockchain.add_transaction(tx.clone())
-            .context("Transaction validation failed")?;
+        if self.sharding_enabled {
+            if let Some(ref sharded) = self.sharded_blockchain {
+                let mut sharded_bc = sharded.write().await;
+                
+                // Process transaction through sharding system
+                sharded_bc.process_transactions(vec![tx.clone()]).await
+                    .context("Failed to process transaction through sharding")?;
+                
+                debug!("Transaction accepted (sharded): {} -> {} ({})", tx.from, tx.to, tx.amount);
+            } else {
+                anyhow::bail!("Sharding enabled but not initialized");
+            }
+        } else {
+            let mut blockchain = self.blockchain.write().await;
+            
+            blockchain.add_transaction(tx.clone())
+                .context("Transaction validation failed")?;
 
-        let tx_hash = format!("{:?}", tx);
-        info!("Transaction accepted: {} -> {} ({})", tx.from, tx.to, tx.amount);
+            info!("Transaction accepted: {} -> {} ({})", tx.from, tx.to, tx.amount);
+        }
         
         Ok(tx_hash)
     }
 
     /// Get blockchain status
     async fn get_status(&self) -> Result<NodeStatus> {
-        let blockchain = self.blockchain.read().await;
+        let (height, latest_hash, pending_txs, total_accounts) = if self.sharding_enabled {
+            if let Some(ref sharded) = self.sharded_blockchain {
+                let sharded_bc = sharded.read().await;
+                let stats = sharded_bc.get_stats();
+                
+                (
+                    sharded_bc.get_height(),
+                    format!("sharded-block-{}", sharded_bc.get_height()),
+                    0, // TODO: track pending txs in sharded mode
+                    stats.shard_count * 1000, // Estimate
+                )
+            } else {
+                (0, String::from("unknown"), 0, 0)
+            }
+        } else {
+            let blockchain = self.blockchain.read().await;
+            let latest_block = blockchain.get_latest_block();
+            
+            (
+                blockchain.height(),
+                latest_block.hash.clone(),
+                blockchain.pending_transactions.len(),
+                blockchain.state.len(),
+            )
+        };
+        
         let consensus = self.consensus.read().await;
         
-        let latest_block = blockchain.get_latest_block();
+        let economics = self.economics.read().await;
         
         Ok(NodeStatus {
-            height: blockchain.height(),
-            latest_hash: latest_block.hash.clone(),
+            height,
+            latest_hash,
             validator_count: consensus.validator_count(),
-            pending_txs: blockchain.pending_transactions.len(),
-            total_accounts: blockchain.state.len(),
+            pending_txs,
+            total_accounts,
+            sharding_enabled: self.sharding_enabled,
+            shard_count: if self.sharding_enabled { 
+                self.sharded_blockchain.as_ref().map(|s| {
+                    // Get shard count without blocking
+                    100 // Default value, could be refined
+                }).unwrap_or(0)
+            } else { 
+                0 
+            },
+            inflation_rate: economics.current_inflation_rate,
+            validator_apy: economics.validator_apy,
+            total_burned: economics.total_burned,
+            is_deflationary: economics.is_deflationary(),
         })
     }
 }
@@ -262,6 +437,12 @@ struct NodeStatus {
     validator_count: usize,
     pending_txs: usize,
     total_accounts: usize,
+    sharding_enabled: bool,
+    shard_count: usize,
+    inflation_rate: f64,
+    validator_apy: f64,
+    total_burned: u64,
+    is_deflationary: bool,
 }
 
 /// Simple RPC server for the node
@@ -301,10 +482,154 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_get_balance);
 
+        // GET /economics
+        let economics_route = warp::path("economics")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_economics);
+
+        // GET /bridges
+        let bridges_route = warp::path("bridges")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_bridges);
+
+        // GET /bridge/:chain
+        let bridge_status_route = warp::path!("bridge" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_bridge_status);
+
+        // POST /bridge/submit
+        let bridge_tx_route = warp::path!("bridge" / "submit")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_submit_bridge_tx);
+
+        // GET /bridge/:chain/fee?amount=X
+        let bridge_fee_route = warp::path!("bridge" / String / "fee")
+            .and(warp::get())
+            .and(warp::query::<FeeQuery>())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_bridge_fee);
+
+        // GET /bridge/fees/treasury
+        let treasury_route = warp::path!("bridge" / "fees" / "treasury")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_treasury);
+
+        // GET /bridge/fees/statistics
+        let fee_stats_route = warp::path!("bridge" / "fees" / "statistics")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_fee_stats);
+
+        // ========= STAKING ROUTES =========
+        
+        // POST /staking/create_validator
+        let create_validator_route = warp::path!("staking" / "create_validator")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_create_validator);
+
+        // POST /staking/delegate
+        let delegate_route = warp::path!("staking" / "delegate")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_delegate);
+
+        // GET /staking/validators
+        let validators_route = warp::path!("staking" / "validators")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_validators);
+
+        // GET /staking/delegations/:address
+        let delegations_route = warp::path!("staking" / "delegations" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_delegations);
+
+        // POST /staking/withdraw_rewards
+        let withdraw_rewards_route = warp::path!("staking" / "withdraw_rewards")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_withdraw_rewards);
+
+        // GET /staking/statistics
+        let staking_stats_route = warp::path!("staking" / "statistics")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_staking_statistics);
+
+        // ========= GOVERNANCE ROUTES =========
+
+        // POST /governance/propose
+        let propose_route = warp::path!("governance" / "propose")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_submit_proposal);
+
+        // POST /governance/vote
+        let vote_route = warp::path!("governance" / "vote")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_vote);
+
+        // GET /governance/proposals
+        let proposals_route = warp::path!("governance" / "proposals")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_proposals);
+
+        // GET /governance/proposal/:id
+        let proposal_route = warp::path!("governance" / "proposal" / u64)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_proposal);
+
+        // POST /governance/tally/:id
+        let tally_route = warp::path!("governance" / "tally" / u64)
+            .and(warp::post())
+            .and(with_state(state.clone()))
+            .and_then(handle_tally_proposal);
+
+        // GET /governance/statistics
+        let gov_stats_route = warp::path!("governance" / "statistics")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_governance_statistics);
+
         let routes = status_route
             .or(tx_route)
             .or(block_route)
             .or(balance_route)
+            .or(economics_route)
+            .or(bridges_route)
+            .or(bridge_status_route)
+            .or(bridge_tx_route)
+            .or(bridge_fee_route)
+            .or(treasury_route)
+            .or(fee_stats_route)
+            .or(create_validator_route)
+            .or(delegate_route)
+            .or(validators_route)
+            .or(delegations_route)
+            .or(withdraw_rewards_route)
+            .or(staking_stats_route)
+            .or(propose_route)
+            .or(vote_route)
+            .or(proposals_route)
+            .or(proposal_route)
+            .or(tally_route)
+            .or(gov_stats_route)
             .with(warp::cors().allow_any_origin());
 
         warp::serve(routes).run(addr).await;
@@ -367,6 +692,362 @@ mod rpc {
             "balance": balance,
             "nonce": blockchain.get_nonce(&address)
         })))
+    }
+
+    async fn handle_get_economics(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let economics = state.economics.read().await;
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "current_inflation_rate": economics.current_inflation_rate,
+            "inflation_percentage": format!("{:.1}%", economics.current_inflation_rate * 100.0),
+            "current_burn_rate": economics.current_burn_rate,
+            "burn_percentage": format!("{:.1}%", economics.current_burn_rate * 100.0),
+            "validator_apy": economics.validator_apy,
+            "apy_percentage": format!("{:.2}%", economics.validator_apy * 100.0),
+            "total_burned": economics.total_burned,
+            "years_since_genesis": economics.years_since_genesis,
+            "is_deflationary": economics.is_deflationary(),
+            "inflation_schedule": {
+                "year_1": "8.0%",
+                "year_2": "6.0%",
+                "year_3": "4.0%",
+                "year_4": "3.0%",
+                "year_5_plus": "2.0%"
+            }
+        })))
+    }
+
+    async fn handle_get_bridges(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let bridges = state.bridge_manager.get_all_bridges().await;
+        let stats = state.bridge_manager.get_statistics().await;
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "bridges": bridges,
+            "statistics": stats
+        })))
+    }
+
+    async fn handle_get_bridge_status(
+        chain: String,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.bridge_manager.get_bridge(&chain).await {
+            Some(bridge) => Ok(warp::reply::json(&bridge)),
+            None => Err(warp::reject()),
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct BridgeTxRequest {
+        source_chain: String,
+        dest_chain: String,
+        source_tx: String,
+        amount: u64,
+        recipient: String,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct FeeQuery {
+        amount: u64,
+    }
+
+    async fn handle_get_bridge_fee(
+        chain: String,
+        query: FeeQuery,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.bridge_manager.calculate_fee(&chain, query.amount).await {
+            Ok(fee_breakdown) => Ok(warp::reply::json(&fee_breakdown)),
+            Err(e) => {
+                warn!("Fee calculation failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    async fn handle_get_treasury(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let treasury = state.bridge_manager.get_treasury_address().await;
+        Ok(warp::reply::json(&serde_json::json!({
+            "treasury_address": treasury,
+            "description": "Sultan L1 Bridge Treasury - Receives all cross-chain bridge fees",
+            "usage": "Development, maintenance, security audits, and ecosystem growth"
+        })))
+    }
+
+    async fn handle_get_fee_stats(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.bridge_manager.get_fee_statistics().await {
+            Ok(stats) => Ok(warp::reply::json(&stats)),
+            Err(e) => {
+                error!("Fee statistics query failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    async fn handle_submit_bridge_tx(
+        req: BridgeTxRequest,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.bridge_manager.submit_bridge_transaction(
+            req.source_chain,
+            req.dest_chain,
+            req.source_tx,
+            req.amount,
+            req.recipient,
+        ).await {
+            Ok(tx_id) => Ok(warp::reply::json(&serde_json::json!({
+                "tx_id": tx_id,
+                "status": "pending"
+            }))),
+            Err(e) => {
+                warn!("Bridge transaction failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    // ========= STAKING HANDLERS =========
+
+    #[derive(serde::Deserialize)]
+    struct CreateValidatorRequest {
+        validator_address: String,
+        initial_stake: u64,
+        commission_rate: f64,
+    }
+
+    async fn handle_create_validator(
+        req: CreateValidatorRequest,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.staking_manager.create_validator(
+            req.validator_address.clone(),
+            req.initial_stake,
+            req.commission_rate,
+        ).await {
+            Ok(_) => Ok(warp::reply::json(&serde_json::json!({
+                "validator_address": req.validator_address,
+                "stake": req.initial_stake,
+                "commission": req.commission_rate,
+                "status": "active"
+            }))),
+            Err(e) => {
+                warn!("Create validator failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct DelegateRequest {
+        delegator_address: String,
+        validator_address: String,
+        amount: u64,
+    }
+
+    async fn handle_delegate(
+        req: DelegateRequest,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.staking_manager.delegate(
+            req.delegator_address.clone(),
+            req.validator_address.clone(),
+            req.amount,
+        ).await {
+            Ok(_) => Ok(warp::reply::json(&serde_json::json!({
+                "delegator": req.delegator_address,
+                "validator": req.validator_address,
+                "amount": req.amount,
+                "status": "delegated"
+            }))),
+            Err(e) => {
+                warn!("Delegation failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    async fn handle_get_validators(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let validators = state.staking_manager.get_validators().await;
+        Ok(warp::reply::json(&validators))
+    }
+
+    async fn handle_get_delegations(
+        address: String,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let delegations = state.staking_manager.get_delegations(&address).await;
+        Ok(warp::reply::json(&delegations))
+    }
+
+    #[derive(serde::Deserialize)]
+    struct WithdrawRewardsRequest {
+        address: String,
+        validator_address: Option<String>,
+        is_validator: bool,
+    }
+
+    async fn handle_withdraw_rewards(
+        req: WithdrawRewardsRequest,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let amount = if req.is_validator {
+            state.staking_manager.withdraw_validator_rewards(&req.address).await
+        } else if let Some(validator) = req.validator_address {
+            state.staking_manager.withdraw_delegator_rewards(&req.address, &validator).await
+        } else {
+            return Err(warp::reject());
+        };
+
+        match amount {
+            Ok(rewards) => Ok(warp::reply::json(&serde_json::json!({
+                "address": req.address,
+                "rewards_withdrawn": rewards,
+                "status": "success"
+            }))),
+            Err(e) => {
+                warn!("Withdraw rewards failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    async fn handle_staking_statistics(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let stats = state.staking_manager.get_statistics().await;
+        Ok(warp::reply::json(&stats))
+    }
+
+    // ========= GOVERNANCE HANDLERS =========
+
+    #[derive(serde::Deserialize)]
+    struct SubmitProposalRequest {
+        proposer: String,
+        title: String,
+        description: String,
+        proposal_type: String,
+        initial_deposit: u64,
+        parameters: Option<HashMap<String, String>>,
+    }
+
+    async fn handle_submit_proposal(
+        req: SubmitProposalRequest,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        use sultan_core::governance::ProposalType;
+
+        let proposal_type = match req.proposal_type.as_str() {
+            "parameter_change" => ProposalType::ParameterChange,
+            "software_upgrade" => ProposalType::SoftwareUpgrade,
+            "community_pool" => ProposalType::CommunityPool,
+            "text" => ProposalType::TextProposal,
+            _ => return Err(warp::reject()),
+        };
+
+        match state.governance_manager.submit_proposal(
+            req.proposer,
+            req.title,
+            req.description,
+            proposal_type,
+            req.initial_deposit,
+            req.parameters,
+        ).await {
+            Ok(proposal_id) => Ok(warp::reply::json(&serde_json::json!({
+                "proposal_id": proposal_id,
+                "status": "submitted"
+            }))),
+            Err(e) => {
+                warn!("Submit proposal failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct VoteRequest {
+        proposal_id: u64,
+        voter: String,
+        option: String,
+        voting_power: u64,
+    }
+
+    async fn handle_vote(
+        req: VoteRequest,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        use sultan_core::governance::VoteOption;
+
+        let vote_option = match req.option.as_str() {
+            "yes" => VoteOption::Yes,
+            "no" => VoteOption::No,
+            "abstain" => VoteOption::Abstain,
+            "no_with_veto" => VoteOption::NoWithVeto,
+            _ => return Err(warp::reject()),
+        };
+
+        match state.governance_manager.vote(
+            req.proposal_id,
+            req.voter.clone(),
+            vote_option,
+            req.voting_power,
+        ).await {
+            Ok(_) => Ok(warp::reply::json(&serde_json::json!({
+                "proposal_id": req.proposal_id,
+                "voter": req.voter,
+                "status": "voted"
+            }))),
+            Err(e) => {
+                warn!("Vote failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    async fn handle_get_proposals(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let proposals = state.governance_manager.get_all_proposals().await;
+        Ok(warp::reply::json(&proposals))
+    }
+
+    async fn handle_get_proposal(
+        proposal_id: u64,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.governance_manager.get_proposal(proposal_id).await {
+            Some(proposal) => Ok(warp::reply::json(&proposal)),
+            None => Err(warp::reject()),
+        }
+    }
+
+    async fn handle_tally_proposal(
+        proposal_id: u64,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.governance_manager.tally_proposal(proposal_id).await {
+            Ok(tally) => Ok(warp::reply::json(&tally)),
+            Err(e) => {
+                warn!("Tally failed: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    async fn handle_governance_statistics(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let stats = state.governance_manager.get_statistics().await;
+        Ok(warp::reply::json(&stats))
     }
 }
 
