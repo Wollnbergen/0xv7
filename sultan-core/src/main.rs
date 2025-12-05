@@ -15,6 +15,8 @@ use sultan_core::staking::StakingManager;
 use sultan_core::governance::GovernanceManager;
 use sultan_core::token_factory::TokenFactory;
 use sultan_core::native_dex::NativeDex;
+use sultan_core::sharding_production::ShardConfig;
+use sultan_core::ShardedBlockchainProduction;
 use anyhow::{Result, Context};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
@@ -66,23 +68,27 @@ struct Args {
     #[clap(long)]
     genesis: Option<String>,
 
-    /// Enable sharding for high TPS (100+ shards)
+    /// Enable sharding for high TPS (8→8000 shards with auto-expansion)
     #[clap(long)]
     enable_sharding: bool,
 
-    /// Number of shards (default: 100 for 200K+ TPS)
-    #[clap(long, default_value = "100")]
+    /// Initial number of shards (default: 8 for 64K TPS)
+    #[clap(long, default_value = "8")]
     shard_count: usize,
 
-    /// Transactions per shard (default: 10000)
-    #[clap(long, default_value = "10000")]
+    /// Maximum shards for auto-expansion (default: 8000 for 64M TPS)
+    #[clap(long, default_value = "8000")]
+    max_shards: usize,
+
+    /// Transactions per shard (default: 8000)
+    #[clap(long, default_value = "8000")]
     tx_per_shard: usize,
 }
 
 /// Main node state
 struct NodeState {
     blockchain: Arc<RwLock<Blockchain>>,
-    sharded_blockchain: Option<Arc<RwLock<ShardedBlockchain>>>,
+    sharded_blockchain: Option<Arc<RwLock<ShardedBlockchainProduction>>>,
     consensus: Arc<RwLock<ConsensusEngine>>,
     storage: Arc<RwLock<PersistentStorage>>,
     economics: Arc<RwLock<Economics>>,
@@ -161,11 +167,15 @@ impl NodeState {
         let sharded_blockchain = if args.enable_sharding {
             let config = ShardConfig {
                 shard_count: args.shard_count,
+                max_shards: args.max_shards,
                 tx_per_shard: args.tx_per_shard,
                 cross_shard_enabled: true,
+                byzantine_tolerance: 1,
+                enable_fraud_proofs: true,
+                auto_expand_threshold: 0.80,
             };
             
-            let mut sharded = ShardedBlockchain::new(config.clone());
+            let mut sharded = ShardedBlockchainProduction::new(config.clone());
             
             // Initialize same accounts in sharded blockchain
             if let Some(genesis_str) = &args.genesis {
@@ -186,8 +196,9 @@ impl NodeState {
             }
             
             let tps_capacity = sharded.get_tps_capacity();
-            info!("🚀 SHARDING ENABLED: {} shards × {} tx/shard = {} TPS capacity",
-                config.shard_count, config.tx_per_shard, tps_capacity);
+            info!("🚀 PRODUCTION SHARDING: {} shards (expandable to {}) = {} TPS (up to {}M TPS)",
+                config.shard_count, config.max_shards, tps_capacity, 
+                (config.max_shards * config.tx_per_shard) / 1_000_000);
             
             Some(Arc::new(RwLock::new(sharded)))
         } else {
