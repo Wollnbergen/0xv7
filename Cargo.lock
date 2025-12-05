@@ -3982,6 +3982,8 @@ dependencies = [
  "clap 4.5.51",
  "criterion",
  "ed25519-dalek",
+ "futures",
+ "hex",
  "libp2p",
  "lru",
  "parking_lot 0.12.5",

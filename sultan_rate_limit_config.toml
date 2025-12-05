@@ -1,0 +1,38 @@
+# Sultan Blockchain Rate Limiting Configuration
+
+[mempool]
+# Maximum number of transactions in mempool
+size = 5000
+# Maximum size of a single transaction
+max_tx_bytes = 1048576
+# Maximum gas wanted per block
+max_gas = 100000000
+# Rate limiting per account
+max_txs_per_account = 10
+
+[p2p]
+# Maximum number of inbound peers
+max_num_inbound_peers = 40
+# Maximum number of outbound peers  
+max_num_outbound_peers = 10
+# Connection rate limiting
+handshake_timeout = "20s"
+dial_timeout = "3s"
+
+[rpc]
+# Maximum number of simultaneous connections
+max_open_connections = 900
+# Read timeout
+read_timeout = "10s"
+# Write timeout  
+write_timeout = "10s"
+# Maximum request body size
+max_body_bytes = 1000000
+
+[api]
+# Enable rate limiting
+enabled = true
+# Requests per second per IP
+rate_limit = 100
+# Burst size
+burst_size = 200

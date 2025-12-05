@@ -1,0 +1,31 @@
+package app
+
+import (
+    "context"
+    "fmt"
+    "github.com/libp2p/go-libp2p/core/peer"
+)
+
+// P2PNode represents a peer in the network
+type P2PNode struct {
+    ID      peer.ID
+    Address string
+    Status  string
+}
+
+// GetP2PNodes returns connected P2P nodes
+func (app *SultanApp) GetP2PNodes() []P2PNode {
+    if app.P2PManager == nil {
+        return []P2PNode{}
+    }
+    
+    nodes := []P2PNode{}
+    for _, peerID := range app.P2PManager.GetConnectedPeers() {
+        nodes = append(nodes, P2PNode{
+            ID:      peerID,
+            Address: peerID.String(),
+            Status:  "connected",
+        })
+    }
+    return nodes
+}

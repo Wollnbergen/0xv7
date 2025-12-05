@@ -1,0 +1,83 @@
+{
+  "chain_id": "sultan-1",
+  "app_state": {
+    "auth": {
+      "params": {
+        "max_memo_characters": "256",
+        "tx_size_cost_per_byte": "0",
+        "sig_verify_cost_ed25519": "0",
+        "sig_verify_cost_secp256k1": "0"
+      }
+    },
+    "bank": {
+      "params": {
+        "send_enabled": [],
+        "default_send_enabled": true
+      },
+      "balances": [
+        {
+          "address": "sultan1founder000000000000000000000000000000",
+          "coins": [
+            {
+              "denom": "usltn",
+              "amount": "1000000000000000"
+            }
+          ]
+        }
+      ]
+    },
+    "staking": {
+      "params": {
+        "unbonding_time": "1814400s",
+        "max_validators": 100,
+        "max_entries": 7,
+        "historical_entries": 10000,
+        "bond_denom": "usltn",
+        "min_commission_rate": "0.000000000000000000"
+      }
+    },
+    "mint": {
+      "params": {
+        "mint_denom": "usltn",
+        "inflation_rate_change": "0.130000000000000000",
+        "inflation_max": "0.800000000000000000",
+        "inflation_min": "0.070000000000000000",
+        "goal_bonded": "0.300000000000000000",
+        "blocks_per_year": "6311520"
+      }
+    },
+    "gov": {
+      "params": {
+        "min_deposit": [
+          {
+            "denom": "usltn",
+            "amount": "1000000"
+          }
+        ],
+        "voting_period": "172800s",
+        "quorum": "0.334000000000000000",
+        "threshold": "0.500000000000000000"
+      }
+    },
+    "zerofee": {
+      "enabled": true,
+      "gas_price": "0usltn",
+      "subsidy_from_inflation": true
+    },
+    "globalfee": {
+      "params": {
+        "minimum_gas_prices": [],
+        "bypass_min_fee_msg_types": [
+          "*"
+        ]
+      }
+    }
+  },
+  "initial_height": "1",
+  "consensus_params": {
+    "block": {
+      "max_bytes": "22020096",
+      "max_gas": "-1"
+    }
+  }
+}

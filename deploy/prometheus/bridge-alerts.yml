@@ -1,0 +1,152 @@
+# Bridge-Specific Alert Rules for Prometheus
+
+groups:
+  - name: bridge_alerts
+    interval: 30s
+    rules:
+      # Bitcoin Bridge Alerts
+      - alert: BitcoinBridgeDown
+        expr: up{job="bitcoin-bridge"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: bitcoin-bridge
+        annotations:
+          summary: "Bitcoin bridge service is down"
+          description: "Bitcoin bridge has been down for more than 1 minute"
+
+      - alert: BitcoinBridgeHighLatency
+        expr: bitcoin_bridge_confirmation_time_seconds > 1800
+        for: 5m
+        labels:
+          severity: warning
+          service: bitcoin-bridge
+        annotations:
+          summary: "Bitcoin bridge high confirmation latency"
+          description: "Bitcoin confirmations taking longer than 30 minutes"
+
+      # Ethereum Bridge Alerts
+      - alert: EthereumBridgeDown
+        expr: up{job="ethereum-bridge"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: ethereum-bridge
+        annotations:
+          summary: "Ethereum bridge service is down"
+          description: "Ethereum bridge has been down for more than 1 minute"
+
+      - alert: EthereumLightClientOutOfSync
+        expr: ethereum_light_client_blocks_behind > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: ethereum-bridge
+        annotations:
+          summary: "Ethereum light client out of sync"
+          description: "Light client is {{ $value }} blocks behind"
+
+      # Solana Bridge Alerts
+      - alert: SolanaBridgeDown
+        expr: up{job="solana-bridge"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: solana-bridge
+        annotations:
+          summary: "Solana bridge service is down"
+          description: "Solana bridge has been down for more than 1 minute"
+
+      - alert: SolanaHighSlotLag
+        expr: solana_bridge_slot_lag > 50
+        for: 2m
+        labels:
+          severity: warning
+          service: solana-bridge
+        annotations:
+          summary: "Solana bridge high slot lag"
+          description: "Solana bridge is {{ $value }} slots behind"
+
+      # TON Bridge Alerts
+      - alert: TONBridgeDown
+        expr: up{job="ton-bridge"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: ton-bridge
+        annotations:
+          summary: "TON bridge service is down"
+          description: "TON bridge has been down for more than 1 minute"
+
+      # IBC Relayer Alerts
+      - alert: IBCRelayerDown
+        expr: up{job="ibc-relayer"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: ibc-relayer
+        annotations:
+          summary: "IBC relayer is down"
+          description: "IBC relayer has been down for more than 2 minutes"
+
+      - alert: IBCPacketBacklog
+        expr: hermes_packets_pending > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: ibc-relayer
+        annotations:
+          summary: "IBC packet backlog detected"
+          description: "{{ $value }} IBC packets pending relay"
+
+      - alert: IBCRelayerErrors
+        expr: rate(hermes_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: ibc-relayer
+        annotations:
+          summary: "High IBC relayer error rate"
+          description: "IBC relayer experiencing {{ $value }} errors per second"
+
+      # Cross-Chain Transaction Alerts
+      - alert: BridgeTransactionFailureRate
+        expr: rate(bridge_transaction_failures_total[5m]) / rate(bridge_transactions_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: all-bridges
+        annotations:
+          summary: "High bridge transaction failure rate"
+          description: "{{ $value | humanizePercentage }} of bridge transactions are failing"
+
+      - alert: BridgeLowThroughput
+        expr: rate(bridge_transactions_total[5m]) < 1
+        for: 10m
+        labels:
+          severity: info
+          service: all-bridges
+        annotations:
+          summary: "Low bridge transaction throughput"
+          description: "Bridge processing less than 1 transaction per 5 minutes"
+
+      # Security Alerts
+      - alert: SuspiciousBridgeActivity
+        expr: rate(bridge_large_transactions_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: all-bridges
+        annotations:
+          summary: "Suspicious bridge activity detected"
+          description: "High volume of large bridge transactions detected"
+
+      - alert: BridgeValidationErrors
+        expr: rate(bridge_validation_errors_total[5m]) > 5
+        for: 3m
+        labels:
+          severity: warning
+          service: all-bridges
+        annotations:
+          summary: "High bridge validation error rate"
+          description: "{{ $value }} validation errors per second"

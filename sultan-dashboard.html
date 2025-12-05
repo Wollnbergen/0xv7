@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sultan Chain - Live Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { text-align: center; font-size: 3em; margin-bottom: 30px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 25px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+        .card h2 { margin-top: 0; color: #ffd700; }
+        .metric { display: flex; justify-content: space-between; margin: 15px 0; font-size: 1.1em; }
+        .value { font-weight: bold; color: #00ff88; }
+        .status-online { color: #00ff88; }
+        .status-offline { color: #ff4444; }
+        .highlight { background: rgba(255,215,0,0.2); padding: 5px 10px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ SULTAN CHAIN - COSMOS INTEGRATED</h1>
+        <div class="stats">
+            <div class="card">
+                <h2>💎 Economics</h2>
+                <div class="metric">
+                    <span>Staking APY:</span>
+                    <span class="value highlight">26.67%</span>
+                </div>
+                <div class="metric">
+                    <span>Gas Fees:</span>
+                    <span class="value highlight">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span>Inflation:</span>
+                    <span class="value">8%</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>🚀 Performance</h2>
+                <div class="metric">
+                    <span>Target TPS:</span>
+                    <span class="value">1,230,000</span>
+                </div>
+                <div class="metric">
+                    <span>Sultan API:</span>
+                    <span class="value status-online">ONLINE ✓</span>
+                </div>
+                <div class="metric">
+                    <span>Unified API:</span>
+                    <span class="value status-online">ONLINE ✓</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>🌐 Cosmos Features</h2>
+                <div class="metric">
+                    <span>IBC Protocol:</span>
+                    <span class="value">Enabled ✓</span>
+                </div>
+                <div class="metric">
+                    <span>CosmWasm:</span>
+                    <span class="value">Enabled ✓</span>
+                </div>
+                <div class="metric">
+                    <span>Quantum Safe:</span>
+                    <span class="value">Active ✓</span>
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 40px;">
+            <h3>🔗 API Endpoints</h3>
+            <p>Sultan Core: http://localhost:3030</p>
+            <p>Cosmos RPC: http://localhost:26657</p>
+            <p>Unified API: http://localhost:8080</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+
+// Simplified Transfer type for database
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Transfer {
+    pub id: String,
+    pub from: String,
+    pub to: String,
+    pub amount: u64,
+    pub fee: u64,
+    pub timestamp: i64,
+    pub memo: Option<String>,
+}

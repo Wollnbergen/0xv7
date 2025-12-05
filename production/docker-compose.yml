@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  sultan-db:
+    image: scylladb/scylla:5.2
+    ports:
+      - "9042:9042"
+    command: --smp 1 --memory 1G --developer-mode 1
+    
+  sultan-api:
+    image: python:3.9-slim
+    ports:
+      - "1317:1317"
+    volumes:
+      - ./api:/app
+    command: python /app/server.py
+    
+  sultan-web:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ../public:/usr/share/nginx/html
+
+volumes:
+  sultan_data:

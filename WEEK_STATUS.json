@@ -1,0 +1,31 @@
+{
+  "week1": {
+    "status": "complete",
+    "percentage": 100,
+    "items": {
+      "cosmos_sdk": true,
+      "tendermint": true,
+      "p2p_networking": true,
+      "account_system": true,
+      "transaction_processing": true
+    }
+  },
+  "week2": {
+    "status": "in_progress",
+    "percentage": 80,
+    "items": {
+      "cosmwasm_integration": true,
+      "cw20_token": true,
+      "cw721_nft": true,
+      "defi_contracts": false,
+      "zero_gas_verification": true
+    }
+  },
+  "current_week": 2,
+  "chain_status": {
+    "running": true,
+    "block_height": "",
+    "gas_fees": "bash.00",
+    "apy": "26.67%"
+  }
+}

@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     info!("🚀 Initializing TON Service with gRPC");
     let addr = "0.0.0.0:50053".parse()?;
-    let service = TonService::default();
+    let service = TonService; // unit struct; `default()` unnecessary
     info!("⚡ Starting TON gRPC server on {}", addr);
     Server::builder()
         .add_service(ChainServiceServer::new(service))

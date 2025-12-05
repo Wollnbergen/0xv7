@@ -1,0 +1,20 @@
+[sultan_chain]
+chain_id = "sultan-1"
+min_gas_prices = "0usltn"
+target_tps = 1_230_000
+
+[performance]
+hyper_module = true
+parallel_execution = true
+state_sharding = 256
+worker_threads = 32
+
+[monitoring]
+prometheus_port = 9090
+grafana_port = 3001
+metrics_interval = 5
+
+[security]
+rate_limiting = true
+ddos_protection = true
+ssl_enabled = false # Enable in production

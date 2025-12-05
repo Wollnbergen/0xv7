@@ -1,0 +1,13 @@
+[Unit]
+Description=Sultan Chain Node
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sultand start
+Restart=always
+Environment="GAS_PRICE=0"
+Environment="CHAIN_ID=sultan-1"
+
+[Install]
+WantedBy=multi-user.target

@@ -15,7 +15,7 @@ impl Default for Config {
         Config {
             chain_id: String::from("sultan-1"),
             gas_price: 0, // Zero gas fees!
-            block_time: 5, // 5 second blocks
+            block_time: 2, // 2 second blocks
             max_block_size: 1000,
             min_stake: 1000,
             inflation_rate: 0.08, // 8% annual inflation

@@ -1,0 +1,39 @@
+#!/bin/bash
+
+case "$1" in
+    start)
+        echo "🚀 Starting Sultan Chain..."
+        /workspaces/0xv7/START_SULTAN_TESTNET.sh
+        ;;
+    stop)
+        echo "🛑 Stopping Sultan Chain..."
+        pkill -f "node.*sultan_api"
+        pkill -f "node.*simple_server"
+        echo "✅ Stopped"
+        ;;
+    status)
+        /workspaces/0xv7/STATUS_REPORT.sh
+        ;;
+    test)
+        /workspaces/0xv7/TEST_ALL_FEATURES.sh
+        ;;
+    web)
+        "$BROWSER" https://orange-telegram-pj6qgwgv59jjfrj9j-3030.app.github.dev/
+        ;;
+    logs)
+        tail -f /tmp/sultan_api.log
+        ;;
+    *)
+        echo "🚀 Sultan Chain Manager"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Usage: ./sultan_manager [command]"
+        echo ""
+        echo "Commands:"
+        echo "  start   - Start the testnet"
+        echo "  stop    - Stop the testnet"
+        echo "  status  - Show status report"
+        echo "  test    - Run feature tests"
+        echo "  web     - Open web interface"
+        echo "  logs    - View logs"
+        ;;
+esac

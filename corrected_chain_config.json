@@ -1,0 +1,46 @@
+{
+  "chain_id": "sultan-1",
+  "chain_name": "Sultan Chain",
+  "native_token": {
+    "denom": "usltn",
+    "display": "sltn",
+    "name": "Sultan Token",
+    "symbol": "SLTN",
+    "decimals": 6,
+    "initial_supply": "500000000000000",
+    "initial_supply_human": "500,000,000 SLTN",
+    "max_supply": null,
+    "dynamic_supply": true
+  },
+  "tokenomics": {
+    "distribution": {
+      "validator_rewards": "200000000000000",
+      "development_fund": "100000000000000",
+      "community_treasury": "100000000000000",
+      "initial_liquidity": "50000000000000",
+      "team_vesting": "50000000000000"
+    },
+    "vesting": {
+      "team_vesting_years": 4,
+      "team_cliff_months": 12
+    }
+  },
+  "inflation": {
+    "year_1": "8%",
+    "year_2": "7%",
+    "year_3": "6%",
+    "year_4": "5%",
+    "year_5_onwards": "4%",
+    "distribution": {
+      "staking_rewards": "70%",
+      "community_treasury": "20%",
+      "development_fund": "10%"
+    }
+  },
+  "economics": {
+    "staking_apy": "26.67%",
+    "gas_price": "0usltn",
+    "zero_fee": true,
+    "min_stake": "5000000000"
+  }
+}

@@ -14,11 +14,15 @@ pub mod config;
 pub mod economics;
 pub mod transaction_validator;
 pub mod sharding;
+pub mod sharding_production;
 pub mod sharded_blockchain;
+pub mod sharded_blockchain_production;
 pub mod bridge_integration;
 pub mod bridge_fees;
 pub mod staking;
 pub mod governance;
+pub mod token_factory;
+pub mod native_dex;
 
 // Re-export main types for convenience
 pub use blockchain::{Blockchain, Block, Transaction, Account};
@@ -30,7 +34,9 @@ pub use types::Address;
 pub use config::Config;
 pub use transaction_validator::TransactionValidator;
 pub use sharding::{ShardingCoordinator, ShardConfig, ShardStats};
+pub use sharding_production::{ShardingCoordinator as ProductionShardingCoordinator};
 pub use sharded_blockchain::ShardedBlockchain;
+pub use sharded_blockchain_production::ShardedBlockchainProduction;
 
 /// Sultan Core version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

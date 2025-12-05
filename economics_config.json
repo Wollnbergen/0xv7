@@ -1,0 +1,42 @@
+{
+  "tokenomics": {
+    "total_supply": 500000000,
+    "initial_supply_human": "500,000,000 SLTN",
+    "initial_inflation": 8.0,
+    "inflation_schedule": {
+      "year_1": 8.0,
+      "year_2": 7.0,
+      "year_3": 6.0,
+      "year_4": 5.0,
+      "year_5_onwards": 4.0
+    },
+    "inflation_distribution": {
+      "validator_rewards": 0.70,
+      "community_treasury": 0.20,
+      "development_fund": 0.10
+    },
+    "burn_mechanism": {
+      "enabled": false,
+      "comment": "No burning - inflation covers zero gas fees"
+    },
+    "distribution": {
+      "validators": 200000000,
+      "development": 100000000,
+      "community": 100000000,
+      "liquidity": 50000000,
+      "team_vesting": 50000000
+    }
+  },
+  "staking": {
+    "apy": 26.67,
+    "min_stake": 5000,
+    "unbonding_period_days": 21,
+    "max_validators": 100
+  },
+  "fees": {
+    "transaction_fee": 0,
+    "smart_contract_fee": 0,
+    "ibc_transfer_fee": 0,
+    "comment": "All fees are $0.00 - subsidized by inflation"
+  }
+}

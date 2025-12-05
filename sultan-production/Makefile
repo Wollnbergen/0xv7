@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-VERSION := $(shell echo $(shell git describe --tags --always 2>/dev/null || echo "v0.1.0") | sed 's/^v//')
+VERSION := $(shell git describe --tags --always 2>/dev/null || echo "v0.1.0")
 COMMIT := $(shell git log -1 --format='%H' 2>/dev/null || echo "dev")
 BUILDDIR ?= $(CURDIR)/build
 
@@ -34,7 +34,4 @@ go.sum: go.mod
 clean:
     rm -rf $(BUILDDIR)
 
-run: build
-    $(BUILDDIR)/sultand start --minimum-gas-prices=0stake
-
-.PHONY: all build install clean run
+.PHONY: all build install clean

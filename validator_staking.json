@@ -1,0 +1,18 @@
+{
+  "validator_requirements": {
+    "minimum_stake": "5000000000usltn",
+    "minimum_stake_human": "5,000 SLTN",
+    "maximum_validators": 100,
+    "unbonding_period": "21 days"
+  },
+  "rewards": {
+    "validator_commission": "10%",
+    "delegator_apy": "26.67%",
+    "distribution_frequency": "every block"
+  },
+  "slashing": {
+    "double_sign_penalty": "5%",
+    "downtime_penalty": "0.01%",
+    "jail_duration": "600 seconds"
+  }
+}

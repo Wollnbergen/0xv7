@@ -1,0 +1,77 @@
+# Prometheus Configuration for Bridge Monitoring
+# Updated to include bridge service metrics
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'sultan-bridges'
+    environment: 'production'
+
+# Alert manager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load alert rules
+rule_files:
+  - 'alerts.yml'
+  - 'bridge-alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Sultan Node Metrics
+  - job_name: 'sultan-node'
+    static_configs:
+      - targets: ['sultan-node:26657']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+
+  # Bitcoin Bridge Service
+  - job_name: 'bitcoin-bridge'
+    static_configs:
+      - targets: ['bitcoin-service:9001']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Ethereum Bridge Service (gRPC)
+  - job_name: 'ethereum-bridge'
+    static_configs:
+      - targets: ['ethereum-service:50051']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Solana Bridge Service (gRPC)
+  - job_name: 'solana-bridge'
+    static_configs:
+      - targets: ['solana-service:50052']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # TON Bridge Service
+  - job_name: 'ton-bridge'
+    static_configs:
+      - targets: ['ton-service:9004']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # IBC Relayer Telemetry
+  - job_name: 'ibc-relayer'
+    static_configs:
+      - targets: ['ibc-relayer:3001']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+
+  # Node Exporter (System Metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # Docker Container Metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s

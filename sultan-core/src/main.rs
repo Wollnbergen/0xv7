@@ -13,6 +13,8 @@ use sultan_core::economics::Economics;
 use sultan_core::bridge_integration::BridgeManager;
 use sultan_core::staking::StakingManager;
 use sultan_core::governance::GovernanceManager;
+use sultan_core::token_factory::TokenFactory;
+use sultan_core::native_dex::NativeDex;
 use anyhow::{Result, Context};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
@@ -87,6 +89,8 @@ struct NodeState {
     bridge_manager: Arc<BridgeManager>,
     staking_manager: Arc<StakingManager>,
     governance_manager: Arc<GovernanceManager>,
+    token_factory: Arc<TokenFactory>,
+    native_dex: Arc<NativeDex>,
     validator_address: Option<String>,
     block_time: u64,
     sharding_enabled: bool,
@@ -216,6 +220,8 @@ impl NodeState {
             bridge_manager: Arc::new(BridgeManager::new()),
             staking_manager: Arc::new(StakingManager::new(0.08)), // 8% initial inflation
             governance_manager: Arc::new(GovernanceManager::new()),
+            token_factory: Arc::new(TokenFactory::new()),
+            native_dex: Arc::new(NativeDex::new(Arc::new(TokenFactory::new()))),
             validator_address: args.validator_address.clone(),
             block_time: args.block_time,
             sharding_enabled: args.enable_sharding,
@@ -607,6 +613,100 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_governance_statistics);
 
+        // Token Factory Routes
+        // POST /tokens/create
+        let create_token_route = warp::path!("tokens" / "create")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_create_token);
+
+        // POST /tokens/mint
+        let mint_token_route = warp::path!("tokens" / "mint")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_mint_token);
+
+        // POST /tokens/transfer
+        let transfer_token_route = warp::path!("tokens" / "transfer")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_transfer_token);
+
+        // POST /tokens/burn
+        let burn_token_route = warp::path!("tokens" / "burn")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_burn_token);
+
+        // GET /tokens/:denom/metadata
+        let token_metadata_route = warp::path!("tokens" / String / "metadata")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_token_metadata);
+
+        // GET /tokens/:denom/balance/:address
+        let token_balance_route = warp::path!("tokens" / String / "balance" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_token_balance);
+
+        // GET /tokens/list
+        let list_tokens_route = warp::path!("tokens" / "list")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_list_tokens);
+
+        // DEX Routes
+        // POST /dex/create_pair
+        let create_pair_route = warp::path!("dex" / "create_pair")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_create_pair);
+
+        // POST /dex/swap
+        let swap_route = warp::path!("dex" / "swap")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_swap);
+
+        // POST /dex/add_liquidity
+        let add_liquidity_route = warp::path!("dex" / "add_liquidity")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_add_liquidity);
+
+        // POST /dex/remove_liquidity
+        let remove_liquidity_route = warp::path!("dex" / "remove_liquidity")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_remove_liquidity);
+
+        // GET /dex/pool/:pair_id
+        let get_pool_route = warp::path!("dex" / "pool" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_pool);
+
+        // GET /dex/pools
+        let list_pools_route = warp::path!("dex" / "pools")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_list_pools);
+
+        // GET /dex/price/:pair_id
+        let get_price_route = warp::path!("dex" / "price" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_price);
+
         let routes = status_route
             .or(tx_route)
             .or(block_route)
@@ -630,6 +730,20 @@ mod rpc {
             .or(proposal_route)
             .or(tally_route)
             .or(gov_stats_route)
+            .or(create_token_route)
+            .or(mint_token_route)
+            .or(transfer_token_route)
+            .or(burn_token_route)
+            .or(token_metadata_route)
+            .or(token_balance_route)
+            .or(list_tokens_route)
+            .or(create_pair_route)
+            .or(swap_route)
+            .or(add_liquidity_route)
+            .or(remove_liquidity_route)
+            .or(get_pool_route)
+            .or(list_pools_route)
+            .or(get_price_route)
             .with(warp::cors().allow_any_origin());
 
         warp::serve(routes).run(addr).await;
@@ -1112,4 +1226,331 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+// Token Factory Handlers
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize)]
+struct CreateTokenRequest {
+    creator: String,
+    name: String,
+    symbol: String,
+    decimals: u8,
+    initial_supply: u128,
+    max_supply: Option<u128>,
+    logo_url: Option<String>,
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MintTokenRequest {
+    denom: String,
+    to_address: String,
+    amount: u128,
+}
+
+#[derive(Debug, Deserialize)]
+struct TransferTokenRequest {
+    denom: String,
+    from_address: String,
+    to_address: String,
+    amount: u128,
+}
+
+#[derive(Debug, Deserialize)]
+struct BurnTokenRequest {
+    denom: String,
+    from_address: String,
+    amount: u128,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreatePairRequest {
+    creator: String,
+    token_a: String,
+    token_b: String,
+    amount_a: u128,
+    amount_b: u128,
+}
+
+#[derive(Debug, Deserialize)]
+struct SwapRequest {
+    from_address: String,
+    pair_id: String,
+    token_in: String,
+    amount_in: u128,
+    min_amount_out: u128,
+}
+
+#[derive(Debug, Deserialize)]
+struct AddLiquidityRequest {
+    provider: String,
+    pair_id: String,
+    amount_a: u128,
+    amount_b: u128,
+}
+
+#[derive(Debug, Deserialize)]
+struct RemoveLiquidityRequest {
+    provider: String,
+    pair_id: String,
+    liquidity: u128,
+}
+
+async fn handle_create_token(
+    request: CreateTokenRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.token_factory.create_token(
+        &request.creator,
+        request.name,
+        request.symbol,
+        request.decimals,
+        request.initial_supply,
+        request.max_supply,
+        request.logo_url,
+        request.description,
+    ).await {
+        Ok(denom) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "denom": denom
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn handle_mint_token(
+    request: MintTokenRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.token_factory.mint_to(
+        &request.denom,
+        &request.to_address,
+        request.amount,
+    ).await {
+        Ok(_) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn handle_transfer_token(
+    request: TransferTokenRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.token_factory.transfer(
+        &request.denom,
+        &request.from_address,
+        &request.to_address,
+        request.amount,
+    ).await {
+        Ok(_) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn handle_burn_token(
+    request: BurnTokenRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.token_factory.burn(
+        &request.denom,
+        &request.from_address,
+        request.amount,
+    ).await {
+        Ok(_) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn handle_get_token_metadata(
+    denom: String,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.token_factory.get_metadata(&denom).await {
+        Some(metadata) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "metadata": metadata
+        }))),
+        None => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Token not found"
+        }))),
+    }
+}
+
+async fn handle_get_token_balance(
+    denom: String,
+    address: String,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let balance = state.token_factory.get_balance(&denom, &address).await;
+    Ok(warp::reply::json(&serde_json::json!({
+        "success": true,
+        "balance": balance.to_string()
+    })))
+}
+
+async fn handle_list_tokens(
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // TokenFactory doesn't expose list_tokens yet, return empty array
+    Ok(warp::reply::json(&serde_json::json!({
+        "success": true,
+        "tokens": []
+    })))
+}
+
+// DEX Handlers
+async fn handle_create_pair(
+    request: CreatePairRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.native_dex.create_pair(
+        &request.creator,
+        &request.token_a,
+        &request.token_b,
+        request.amount_a,
+        request.amount_b,
+    ).await {
+        Ok(pair_id) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "pair_id": pair_id
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn handle_swap(
+    request: SwapRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.native_dex.swap(
+        &request.from_address,
+        &request.pair_id,
+        &request.token_in,
+        request.amount_in,
+        request.min_amount_out,
+    ).await {
+        Ok(amount_out) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "amount_out": amount_out
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn handle_add_liquidity(
+    request: AddLiquidityRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.native_dex.add_liquidity(
+        &request.pair_id,
+        &request.provider,
+        request.amount_a,
+        request.amount_b,
+        0, // amount_a_min
+        0, // amount_b_min
+    ).await {
+        Ok((amount_a, amount_b, liquidity)) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "liquidity": liquidity.to_string(),
+            "amount_a": amount_a.to_string(),
+            "amount_b": amount_b.to_string()
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn handle_remove_liquidity(
+    request: RemoveLiquidityRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.native_dex.remove_liquidity(
+        &request.pair_id,
+        &request.provider,
+        request.liquidity,
+        0, // amount_a_min
+        0, // amount_b_min
+    ).await {
+        Ok((amount_a, amount_b)) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "amount_a": amount_a.to_string(),
+            "amount_b": amount_b.to_string()
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+async fn handle_get_pool(
+    pair_id: String,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.native_dex.get_pool(&pair_id).await {
+        Some(pool) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "pool": pool
+        }))),
+        None => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Pool not found"
+        }))),
+    }
+}
+
+async fn handle_list_pools(
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // NativeDex doesn't expose list_pools yet, return empty array
+    Ok(warp::reply::json(&serde_json::json!({
+        "success": true,
+        "pools": []
+    })))
+}
+
+async fn handle_get_price(
+    pair_id: String,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.native_dex.get_price(&pair_id).await {
+        Ok(price) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "price_a_to_b": price,
+            "price_b_to_a": 1.0 / price
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
 }

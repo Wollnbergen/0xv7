@@ -1,0 +1,36 @@
+# SOVEREIGN Chain Configuration
+# Optimized for 10M TPS
+
+[consensus]
+timeout_propose = "100ms"
+timeout_commit = "200ms"
+skip_timeout_commit = false
+
+[mempool]
+size = 100000
+max_txs_bytes = 10737418240
+cache_size = 100000
+version = "v1"
+
+[p2p]
+max_num_inbound_peers = 100
+max_num_outbound_peers = 100
+persistent_peers = ""
+
+[performance]
+parallel_execution = true
+num_shards = 1024
+target_tps = 10000000
+zero_gas_fees = true
+
+[quantum]
+enabled = true
+algorithm = "dilithium3"
+
+[ai]
+enabled = false
+model = "gpt-mini"
+
+[ibc]
+enabled = true
+chains = ["ethereum", "solana", "bitcoin", "cosmos"]

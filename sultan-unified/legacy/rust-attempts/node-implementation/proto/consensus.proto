@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package consensus;
+
+service Consensus {
+    rpc ProposeBlock(ProposeBlockRequest) returns (ProposeBlockResponse);
+    rpc ValidateBlock(ValidateBlockRequest) returns (ValidateBlockResponse);
+}
+
+message ProposeBlockRequest {
+    uint64 height = 1;
+    string validator_id = 2;
+    bytes block_data = 3;
+}
+
+message ProposeBlockResponse {
+    bool success = 1;
+    string block_hash = 2;
+}
+
+message ValidateBlockRequest {
+    string block_hash = 1;
+}
+
+message ValidateBlockResponse {
+    bool valid = 1;
+}

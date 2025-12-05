@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sultan Chain - Tokenomics Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+        }
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .card h2 {
+            margin-top: 0;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            padding-bottom: 10px;
+        }
+        .highlight {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        .distribution {
+            margin: 10px 0;
+        }
+        .bar {
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            margin: 5px 0;
+            position: relative;
+            height: 30px;
+        }
+        .bar-fill {
+            background: linear-gradient(90deg, #00ff88, #00cc88);
+            border-radius: 5px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+        }
+        .inflation-schedule {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+        }
+        .year {
+            text-align: center;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+            flex: 1;
+            margin: 0 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <h1>💎 SULTAN CHAIN TOKENOMICS</h1>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>📊 Token Supply</h2>
+                <div class="highlight">500,000,000 SLTN</div>
+                <p>Initial Supply</p>
+                <div style="margin-top: 20px;">
+                    <strong>Dynamic Supply:</strong> ✅ Enabled<br>
+                    <strong>Max Supply:</strong> None (Inflationary)<br>
+                    <strong>Current Inflation:</strong> 8% (Year 1)
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>💰 Distribution</h2>
+                <div class="distribution">
+                    <div class="bar">
+                        <div class="bar-fill" style="width: 40%;">
+                            Validators: 200M (40%)
+                        </div>
+                    </div>
+                    <div class="bar">
+                        <div class="bar-fill" style="width: 20%;">
+                            Development: 100M (20%)
+                        </div>
+                    </div>
+                    <div class="bar">
+                        <div class="bar-fill" style="width: 20%;">
+                            Community: 100M (20%)
+                        </div>
+                    </div>
+                    <div class="bar">
+                        <div class="bar-fill" style="width: 10%;">
+                            Liquidity: 50M (10%)
+                        </div>
+                    </div>
+                    <div class="bar">
+                        <div class="bar-fill" style="width: 10%;">
+                            Team: 50M (10%)
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>📈 Inflation Schedule</h2>
+                <div class="inflation-schedule">
+                    <div class="year">
+                        <strong>Year 1</strong><br>8%
+                    </div>
+                    <div class="year">
+                        <strong>Year 2</strong><br>7%
+                    </div>
+                    <div class="year">
+                        <strong>Year 3</strong><br>6%
+                    </div>
+                    <div class="year">
+                        <strong>Year 4</strong><br>5%
+                    </div>
+                    <div class="year">
+                        <strong>Year 5+</strong><br>4%
+                    </div>
+                </div>
+                <p style="margin-top: 15px;">
+                    <strong>Purpose:</strong> Subsidize zero gas fees & pay validators
+                </p>
+            </div>
+            
+            <div class="card">
+                <h2>🎯 Key Economics</h2>
+                <table style="width: 100%;">
+                    <tr><td>Staking APY:</td><td style="text-align: right;"><strong>26.67%</strong></td></tr>
+                    <tr><td>Gas Fees:</td><td style="text-align: right;"><strong>$0.00</strong></td></tr>
+                    <tr><td>Min Stake:</td><td style="text-align: right;"><strong>5,000 SLTN</strong></td></tr>
+                    <tr><td>Unbonding:</td><td style="text-align: right;"><strong>21 days</strong></td></tr>
+                    <tr><td>Validators:</td><td style="text-align: right;"><strong>100 max</strong></td></tr>
+                </table>
+            </div>
+            
+            <div class="card">
+                <h2>🔥 Inflation Distribution</h2>
+                <div class="distribution">
+                    <div class="bar">
+                        <div class="bar-fill" style="width: 70%; background: linear-gradient(90deg, #ff6b6b, #ff8787);">
+                            Staking Rewards: 70%
+                        </div>
+                    </div>
+                    <div class="bar">
+                        <div class="bar-fill" style="width: 20%; background: linear-gradient(90deg, #4ecdc4, #44a39f);">
+                            Community: 20%
+                        </div>
+                    </div>
+                    <div class="bar">
+                        <div class="bar-fill" style="width: 10%; background: linear-gradient(90deg, #95e1d3, #75c7b8);">
+                            Development: 10%
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>✨ Zero Fee Model</h2>
+                <p><strong>How it works:</strong></p>
+                <ul>
+                    <li>Users pay 0 SLTN for transactions</li>
+                    <li>Validators still get paid (26.67% APY)</li>
+                    <li>Costs covered by inflation pool</li>
+                    <li>Sustainable long-term model</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

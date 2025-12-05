@@ -1,0 +1,27 @@
+{
+    "week2_status": "60% Complete",
+    "contracts": {
+        "cw20_token": {
+            "name": "Sultan Token (SLTN)",
+            "status": "deployed",
+            "code_id": "1",
+            "gas_fees": "bash.00"
+        },
+        "cw721_nft": {
+            "name": "Sultan NFT Collection",
+            "status": "deployed",
+            "code_id": "2",
+            "gas_fees": "bash.00"
+        },
+        "defi_amm": {
+            "name": "Sultan AMM",
+            "status": "pending",
+            "gas_fees": "bash.00"
+        },
+        "defi_staking": {
+            "name": "Sultan Staking (26.67% APY)",
+            "status": "pending",
+            "gas_fees": "bash.00"
+        }
+    }
+}
