@@ -1567,10 +1567,10 @@ const balance = await fetch(
         // Production RPC endpoints (falls back to localhost for development)
         let rpcEndpoint = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
             ? 'http://localhost:8080' 
-            : 'https://rpc.sltn.io';
+            : 'http://rpc.sltn.io';  // TODO: Change to https:// after SSL setup
         let restEndpoint = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:8080'
-            : 'https://rpc.sltn.io';
+            : 'http://rpc.sltn.io';  // TODO: Change to https:// after SSL setup
         let connectedAddress = null;
         let networkStatsInterval = null;
 
