@@ -14,7 +14,7 @@ const ECONOMICS = {
     inflation_year_2: 6.0,
     inflation_year_5_plus: 2.0,
     burn_rate: 1.0,
-    validator_apy_max: 26.67,
+    validator_apy_max: 13.33,
     gas_fees: 0.00
 };
 
@@ -35,15 +35,15 @@ const server = http.createServer((req, res) => {
                         response = {
                             jsonrpc: "2.0",
                             result: {
-                                inflation_schedule: "8% → 6% → 4% → 3% → 2%",
+                                inflation_schedule: "4% → 6% → 4% → 3% → 2%",
                                 current_inflation: "8% (Year 1)",
                                 burn_mechanism: "1% on high-volume transactions",
-                                validator_apy: "26.67% maximum",
+                                validator_apy: "13.33% maximum",
                                 mobile_validator_bonus: "Removed (was 40%)",
                                 staking_ratio_target: "30%",
                                 user_gas_fees: 0,
                                 becomes_deflationary: "Year 5",
-                                formula: "APY = min(26.67%, inflation ÷ staking_ratio)"
+                                formula: "APY = min(13.33%, inflation ÷ staking_ratio)"
                             },
                             id: request.id
                         };
@@ -59,7 +59,7 @@ const server = http.createServer((req, res) => {
                                 tps: 10000,
                                 zero_fees: true,
                                 inflation_rate: "8% (declining)",
-                                validator_apy: "26.67% max",
+                                validator_apy: "13.33% max",
                                 burn_active: true
                             },
                             id: request.id
@@ -88,7 +88,7 @@ const server = http.createServer((req, res) => {
         res.writeHead(200);
         res.end(JSON.stringify({
             name: "Sultan Chain API",
-            economics: "Corrected - 26.67% APY max, no mobile bonus",
+            economics: "Corrected - 13.33% APY max, no mobile bonus",
             status: "Running"
         }));
     }
@@ -96,9 +96,9 @@ const server = http.createServer((req, res) => {
 
 server.listen(3030, () => {
     console.log('✅ Sultan Chain API running with CORRECTED economics');
-    console.log('📊 Validator APY: 26.67% maximum (no mobile bonus)');
+    console.log('📊 Validator APY: 13.33% maximum (no mobile bonus)');
     console.log('🔥 Burn mechanism: 1% active');
-    console.log('📉 Inflation: 8% → 2% over 5 years');
+    console.log('📉 Inflation: 4% → 2% over 5 years');
 });
 JS
 

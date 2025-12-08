@@ -39,7 +39,7 @@
 - **Token:** SLTN (6 decimals)
 - **Total Supply:** 500,000,000 SLTN
 - **Min Validator Stake:** 10,000 SLTN
-- **Validator APY:** 26.67%
+- **Validator APY:** 13.33%
 - **Delegator APY:** 10%
 - **Gas Fees:** $0.00
 
@@ -67,9 +67,9 @@ cargo build --release -p sultan-cosmos
 # Add genesis account with initial supply (500M SLTN)
 ./target/release/sultand add-genesis-account genesis 500000000000000usltn
 
-# Configure staking parameters (26.67% APY, 10K min stake)
+# Configure staking parameters (13.33% APY, 10K min stake)
 # Edit ~/.sultand/config/genesis.json:
-# - inflation: 0.2667
+# - inflation: 0.1333
 # - min_validator_stake: 10000000000usltn
 ```
 
@@ -248,7 +248,7 @@ git push origin main
 ### Token Economics (Verified)
 - Total Supply: 500,000,000 SLTN
 - Genesis Allocation: 500,000,000 SLTN to genesis wallet
-- Validator Rewards: 26.67% APY (from inflation)
+- Validator Rewards: 13.33% APY (from inflation)
 - Delegator Rewards: 10% APY
 - Min Validator Stake: 10,000 SLTN
 - Example: 10,000 SLTN stake = 2,667 SLTN/year rewards

@@ -13,8 +13,8 @@ curl -s -X POST http://localhost:3030 \
 
 echo ""
 echo "✅ VERIFIED CHANGES:"
-echo "  • Validator APY: 26.67% max (no bonus)"
-echo "  • Inflation: Dynamic (8% → 2%)"
+echo "  • Validator APY: 13.33% max (no bonus)"
+echo "  • Inflation: Dynamic (4% → 2%)"
 echo "  • Burn: 1% active"
 echo "  • Gas Fees: Still $0.00"
 echo ""

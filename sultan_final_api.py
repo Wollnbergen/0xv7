@@ -87,21 +87,21 @@ class SultanHandler(BaseHTTPRequestHandler):
 <body>
     <div class="container">
         <h1>🚀 Sultan Chain API</h1>
-        <div class="subtitle">Zero Gas Fees • 26.67% Validator APY • Mobile Validators</div>
+        <div class="subtitle">Zero Gas Fees • 13.33% Validator APY • Mobile Validators</div>
         
         <div class="economics-box">
             <h2>💰 FINAL Economics (Resolved from Codebase)</h2>
             <p>✅ <span class="highlight">8% Annual Inflation</span> - Creates the reward pool</p>
-            <p>📈 <span class="highlight">26.67% APY for Validators</span> - When 30% of tokens are staked</p>
-            <p>📱 <span class="highlight">40% Mobile Validator Bonus</span> - Total ~37.33% APY</p>
-            <p>⛽ <span class="highlight">ZERO Gas Fees Forever</span> - Subsidized by 8% inflation</p>
+            <p>📈 <span class="highlight">13.33% APY for Validators</span> - When 30% of tokens are staked</p>
+            <p>📱 <span class="highlight">40% Mobile Validator Bonus</span> - Total ~18.66% APY</p>
+            <p>⛽ <span class="highlight">ZERO Gas Fees Forever</span> - Subsidized by 4% inflation</p>
             
             <div class="formula">
                 <strong>The Formula:</strong><br>
                 Validator APY = Inflation Rate ÷ Staking Ratio<br>
-                26.67% = 8% ÷ 0.3 (30% staked)<br>
+                13.33% = 8% ÷ 0.3 (30% staked)<br>
                 <br>
-                Mobile Validator APY = 26.67% × 1.4 = 37.33%
+                Mobile Validator APY = 13.33% × 1.4 = 18.66%
             </div>
         </div>
         
@@ -155,27 +155,27 @@ class SultanHandler(BaseHTTPRequestHandler):
                     'tps': 10000,
                     'zero_fees': True,
                     'inflation_rate': '8% annually',
-                    'validator_apy': '26.67%',  # THIS IS CORRECT!
-                    'mobile_validator_apy': '37.33%',  # With 40% bonus
+                    'validator_apy': '13.33%',  # THIS IS CORRECT!
+                    'mobile_validator_apy': '18.66%',  # With 40% bonus
                     'ibc_enabled': True
                 }
             elif method == 'get_economics':
                 result = {
                     'inflation_rate': '8% annually',
-                    'validator_apy': '26.67%',  # 8% ÷ 0.3 staking ratio
+                    'validator_apy': '13.33%',  # 8% ÷ 0.3 staking ratio
                     'mobile_validator_bonus': '+40%',
-                    'mobile_validator_total_apy': '37.33%',
+                    'mobile_validator_total_apy': '18.66%',
                     'staking_ratio_assumption': '30%',
                     'user_gas_fees': 0,
-                    'fee_subsidy_source': '8% inflation pool',
-                    'formula': 'APY = 8% inflation ÷ 0.3 staking ratio = 26.67%'
+                    'fee_subsidy_source': '4% inflation pool',
+                    'formula': 'APY = 4% inflation ÷ 0.3 staking ratio = 13.33%'
                 }
             elif method == 'get_apy':
                 result = {
-                    'base_apy': '26.67%',
+                    'base_apy': '13.33%',
                     'mobile_validator_bonus': '40%',
-                    'total_possible': '37.33%',
-                    'calculation': '8% inflation ÷ 30% staked = 26.67% APY'
+                    'total_possible': '18.66%',
+                    'calculation': '4% inflation ÷ 30% staked = 13.33% APY'
                 }
             elif method == 'wallet_create':
                 username = params[0] if params else 'user'
@@ -229,9 +229,9 @@ print('🚀 Sultan Chain API - FINAL CORRECTED Economics')
 print('📍 Server: http://0.0.0.0:3030')
 print('')
 print('✅ CORRECT ECONOMICS:')
-print('  • 8% inflation rate')
-print('  • 26.67% validator APY (8% ÷ 0.3 staking ratio)')
-print('  • 37.33% mobile validator APY (with 40% bonus)')
+print('  • 4% inflation rate')
+print('  • 13.33% validator APY (8% ÷ 0.3 staking ratio)')
+print('  • 18.66% mobile validator APY (with 40% bonus)')
 print('  • Zero gas fees (subsidized by inflation)')
 print('')
 

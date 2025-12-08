@@ -22,7 +22,7 @@ type SultanApp struct {
     // Zero fee configuration
     ZeroFees bool
     
-    // Staking APY: 26.67%
+    // Staking APY: 13.33%
     StakingAPY float64
     
     // IBC enabled
@@ -33,7 +33,7 @@ func NewSultanApp() *SultanApp {
     app := &SultanApp{
         BaseApp: baseapp.NewBaseApp(AppName, nil, nil, nil),
         ZeroFees: true,           // ZERO GAS FEES
-        StakingAPY: 0.2667,       // 26.67% APY
+        StakingAPY: 0.1333,       // 13.33% APY
         IBCEnabled: true,         // IBC Cross-chain
     }
     return app

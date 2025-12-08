@@ -6,7 +6,7 @@
 - **TPS**: 1,247,000+ (1.2 Million+) ✅
 - **Finality**: 85ms (sub-second) ✅
 - **Gas Fees**: $0.00 (forever) ✅
-- **Validator APY**: 26.67% ✅
+- **Validator APY**: 13.33% ✅
 - **Uptime**: 100% ✅
 
 ### 🌉 Native Interoperability
@@ -20,7 +20,7 @@
 2. **Cheapest**: $0.00 fees (vs $0.00025 Solana, $5+ Ethereum)
 3. **Instant**: 85ms finality (vs 400ms Solana, 12s Ethereum)
 4. **Universal**: Native bridges to all major chains
-5. **Profitable**: 26.67% APY for validators
+5. **Profitable**: 13.33% APY for validators
 
 ### 🔧 Technical Architecture
 - 1,024 parallel shards
@@ -39,4 +39,4 @@ Sultan Chain is now the most advanced blockchain with:
 - Fastest finality (85ms)
 - Zero fees ($0.00)
 - Universal interoperability
-- Maximum validator rewards (26.67% APY)
+- Maximum validator rewards (13.33% APY)

@@ -114,7 +114,7 @@
 
 2. **Validator Economics** (Day 4)
    - Stake tracking
-   - Reward distribution (26.67% APY)
+   - Reward distribution (13.33% APY)
    - Slashing conditions
    - Delegation management
 

@@ -85,8 +85,8 @@ impl SultanNode {
         println!("   • Height: {}", blocks.len() - 1);
         println!("   • Validators: {}", validators.len());
         println!("   • Gas Fees: $0.00 (subsidized)");
-        println!("   • Validator APY: 26.67%");
-        println!("   • Mobile APY: 37.33%");
+        println!("   • Validator APY: 13.33%");
+        println!("   • Mobile APY: 18.66%");
     }
 }
 

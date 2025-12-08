@@ -1,6 +1,11 @@
-//! Sultan Core Sharding Implementation - PRODUCTION GRADE
+//! ⚠️ LEGACY Sharding Implementation (DEPRECATED)
 //! 
-//! Fully hardened sharding system with:
+//! ⚠️ DO NOT USE IN PRODUCTION - Use sharding_production.rs instead
+//! This file is kept only for backward compatibility with old tests.
+//!
+//! Old sharding system with:
+//! - 100 shards default (vs 8 in production)
+//! - 10K TPS/shard (vs 8K in production)
 //! - Cryptographic signature verification
 //! - Merkle tree state proofs
 //! - Atomic cross-shard transactions with two-phase commit

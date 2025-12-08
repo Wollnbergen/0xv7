@@ -195,11 +195,11 @@ curl -s http://localhost:26657/status | jq '{height, validator_count}'
 **Distribution:**
 - Genesis Account: 500,000,000 SLTN (100%)
 - Minimum Validator Stake: 10,000 SLTN
-- Validator APY: 26.67% (fixed)
+- Validator APY: 13.33% (fixed)
 - Transaction Fees: $0.00 (zero fees forever)
 
 **Inflation Schedule:**
-- Year 1: 8% → 2: 7% → 3: 6% → 4: 5% → 5+: 4%
+- Year 1: 4% → 2: 7% → 3: 6% → 4: 5% → 5+: 4%
 - All inflation goes to validator rewards
 - Zero gas fees subsidized by inflation
 
@@ -349,7 +349,7 @@ Website:
 **Key Differentiators:**
 - 🚀 First zero-fee blockchain powered by Rust
 - 🔒 Quantum-resistant from day one
-- 💎 Fixed 26.67% validator APY
+- 💎 Fixed 13.33% validator APY
 - ⚡ 5-second block finality
 - 🌐 Cosmos ecosystem compatible (via bridge)
 - 🦀 Memory-safe Rust core

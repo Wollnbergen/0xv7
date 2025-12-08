@@ -27,7 +27,7 @@ if curl -s http://localhost:26657/status > /dev/null 2>&1; then
     echo "  • Active Validators: $VALIDATORS"
     echo "  • Consensus: Tendermint BFT ✅"
     echo "  • Gas Fees: $0.00 (ZERO FEES) ✅"
-    echo "  • APY: 26.67% ✅"
+    echo "  • APY: 13.33% ✅"
 else
     echo "❌ Cosmos chain not running"
     echo "   Run: /workspaces/0xv7/COMPLETE_COSMOS_BUILD.sh"
@@ -41,7 +41,7 @@ echo "  ✅ Real Consensus (BFT)"
 echo "  ✅ Real State Machine"
 echo "  ✅ Real Validators"
 echo "  ✅ Zero Gas Fees"
-echo "  ✅ 26.67% APY Staking"
+echo "  ✅ 13.33% APY Staking"
 echo ""
 echo "🚀 Sultan Chain is now a REAL BLOCKCHAIN powered by Cosmos SDK!"
 

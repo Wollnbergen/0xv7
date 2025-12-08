@@ -41,7 +41,7 @@ economics: Arc::new(RwLock::new(Economics::new()))
   "sharding_enabled": true,
   "shard_count": 100,
   "inflation_rate": 0.08,
-  "validator_apy": 0.2667,
+  "validator_apy": 0.1333,
   "total_burned": 0,
   "is_deflationary": false
 }
@@ -54,8 +54,8 @@ economics: Arc::new(RwLock::new(Economics::new()))
   "inflation_percentage": "8.0%",
   "current_burn_rate": 0.01,
   "burn_percentage": "1.0%",
-  "validator_apy": 0.2667,
-  "apy_percentage": "26.67%",
+  "validator_apy": 0.1333,
+  "apy_percentage": "13.33%",
   "total_burned": 0,
   "years_since_genesis": 0,
   "is_deflationary": false,
@@ -81,7 +81,7 @@ New economics stats section with live updates (every 5 seconds):
     <div class="label">Inflation Rate</div>
   </div>
   <div class="stat-box">
-    <div class="number" id="validatorAPY">26.67%</div>
+    <div class="number" id="validatorAPY">13.33%</div>
     <div class="label">Validator APY</div>
   </div>
   <div class="stat-box">
@@ -135,14 +135,14 @@ setInterval(updateNetworkStats, 5000);
 ```rust
 pub fn calculate_validator_apy(&self, staking_ratio: f64) -> f64 {
     // If 30% of supply is staked:
-    // APY = 8% / 0.30 = 26.67%
+    // APY = 8% / 0.30 = 13.33%
     let calculated_apy = self.current_inflation_rate / staking_ratio;
-    calculated_apy.min(0.2667)  // Cap at 26.67%
+    calculated_apy.min(0.1333)  // Cap at 13.33%
 }
 ```
 
 **Example with 100,000 SLTN staked:**
-- **Yearly:** 26,670 SLTN (26.67%)
+- **Yearly:** 26,670 SLTN (13.33%)
 - **Monthly:** 2,222 SLTN
 - **Daily:** 73 SLTN
 
@@ -201,12 +201,12 @@ RESULT: ALL TESTS PASSED ✅
 
 2. **Validator Perspective:**
    - Earns rewards from **inflation**, not gas fees
-   - Receives **26.67% APY** on staked tokens
+   - Receives **13.33% APY** on staked tokens
    - Predictable, sustainable income
 
 3. **Network Perspective:**
    - Security maintained through validator rewards
-   - Inflation decreases over time (8% → 2%)
+   - Inflation decreases over time (4% → 2%)
    - Can become deflationary long-term
 
 ### **Economic Sustainability**
@@ -231,7 +231,7 @@ Year 5+:
 $ curl http://localhost:26657/economics | jq
 
 Inflation Rate:    8.0%
-Validator APY:     26.67%
+Validator APY:     13.33%
 Burn Rate:         1.0%
 Total Burned:      0 SLTN
 Economic Status:   📈 Inflationary
@@ -262,9 +262,9 @@ All sections update automatically every 5 seconds!
 | Economics Module         | ✅ Production | Integrated into NodeState            |
 | RPC Endpoints            | ✅ Production | /status + /economics                 |
 | Website Integration      | ✅ Production | Live stats, auto-update              |
-| Inflation Schedule       | ✅ Production | 8% → 2% over 5 years                 |
+| Inflation Schedule       | ✅ Production | 4% → 2% over 5 years                 |
 | Burn Mechanism           | ✅ Production | 1% burn rate active                  |
-| Validator APY            | ✅ Production | 26.67% cap implemented               |
+| Validator APY            | ✅ Production | 13.33% cap implemented               |
 | Deflationary Path        | ✅ Production | Triggers when burn > inflation       |
 | Tests                    | ✅ Passing    | 6/6 comprehensive tests              |
 
@@ -278,7 +278,7 @@ All sections update automatically every 5 seconds!
 - True microtransaction support
 
 ### 2. **Sustainable Validator Rewards**
-- 26.67% APY from inflation
+- 13.33% APY from inflation
 - Predictable income stream
 - Decreases over 5 years for long-term sustainability
 
@@ -348,9 +348,9 @@ Sultan L1's **dynamic inflation system** is now fully operational in production.
 **Key Achievement:**  
 The world's first blockchain with:
 - ✅ **Zero transaction fees** for users
-- ✅ **26.67% APY** for validators
+- ✅ **13.33% APY** for validators
 - ✅ **200,000+ TPS** through sharding
-- ✅ **Dynamic inflation** (8% → 2%)
+- ✅ **Dynamic inflation** (4% → 2%)
 - ✅ **Deflationary path** via burn mechanism
 
 ---

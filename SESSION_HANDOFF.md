@@ -237,14 +237,14 @@ bash /workspaces/0xv7/start-sultan.sh
 - [x] Block production (5s blocks)
 - [x] Transaction processing
 - [x] Sharding (200K TPS)
-- [x] Economics module (8% inflation)
+- [x] Economics module (4% inflation)
 - [x] Persistent storage (RocksDB)
 - [x] P2P networking
 
 **Staking System:**
 - [x] Validator creation (min 5,000 SLTN)
 - [x] Delegation with commission
-- [x] Automatic reward distribution (26.67% APY)
+- [x] Automatic reward distribution (13.33% APY)
 - [x] Slashing mechanisms (5-10% + jail)
 - [x] Reward withdrawal
 - [x] 6 RPC endpoints + handlers
@@ -518,7 +518,7 @@ watch -n 5 'curl -s http://localhost:26657/governance/statistics | jq'
 - **Chain ID:** sultan-1
 - **Token:** SLTN (9 decimals)
 - **Min Validator Stake:** 5,000 SLTN
-- **APY:** 26.67%
+- **APY:** 13.33%
 - **Inflation:** 8%
 - **Block Time:** 5 seconds
 - **Shards:** 100
@@ -531,7 +531,7 @@ watch -n 5 'curl -s http://localhost:26657/governance/statistics | jq'
 You have a **production-ready Layer 1 blockchain** with:
 
 ✅ **200,000 TPS** (100 shards × 2,000 TPS each)  
-✅ **Real staking** (26.67% APY, automatic rewards)  
+✅ **Real staking** (13.33% APY, automatic rewards)  
 ✅ **Real governance** (weighted voting, on-chain execution)  
 ✅ **5 bridges** (Bitcoin, Ethereum, Solana, TON, Cosmos)  
 ✅ **Zero fees** on Sultan (only external chain costs)  

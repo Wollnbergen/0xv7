@@ -260,7 +260,7 @@ impl SultanSDK {
     
     pub async fn query_apy(&self, _compound: bool) -> Result<f64> {
         // Fixed APY for now, would be dynamic in production
-        Ok(26.67)
+        Ok(13.33)
     }
 }
 

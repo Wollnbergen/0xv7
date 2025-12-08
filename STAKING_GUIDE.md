@@ -11,7 +11,7 @@ Sultan L1 features a **production-ready Proof of Stake (PoS) system** with autom
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | **Minimum Validator Stake** | 5,000 SLTN | Required to create a validator |
-| **Base APY** | 26.67% | Annual percentage yield for validators |
+| **Base APY** | 13.33% | Annual percentage yield for validators |
 | **Inflation Rate** | 8% | Initial network inflation (governance adjustable) |
 | **Block Time** | 2 seconds | Time between blocks |
 | **Blocks Per Year** | 15,768,000 | Used for reward calculations |
@@ -335,7 +335,7 @@ Get network-wide staking statistics.
   "active_validators": 48,
   "jailed_validators": 2,
   "total_staked": 500000000000000,
-  "current_apy": 0.2667,
+  "current_apy": 0.1333,
   "inflation_rate": 0.08,
   "current_height": 150000
 }
@@ -571,7 +571,7 @@ curl -X POST http://localhost:3030/staking/withdraw_rewards \
 | Metric | Value |
 |--------|-------|
 | **Target Staking Ratio** | 66.67% of supply |
-| **Current APY** | 26.67% |
+| **Current APY** | 13.33% |
 | **Inflation Rate** | 8% (adjustable via governance) |
 | **Min Validator Stake** | 5,000 SLTN |
 | **Block Reward** | ~0.01268 SLTN per block |

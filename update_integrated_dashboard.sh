@@ -10,7 +10,7 @@ cat >> /workspaces/0xv7/sultan_security_dashboard.sh << 'DASHBOARD_PATCH'
     
     # Check Sultan
     if curl -s http://localhost:3030 > /dev/null 2>&1; then
-        echo "  Sultan Core: ✅ ONLINE (26.67% APY)"
+        echo "  Sultan Core: ✅ ONLINE (13.33% APY)"
     else
         echo "  Sultan Core: ❌ OFFLINE"
     fi

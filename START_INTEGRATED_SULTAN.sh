@@ -5,8 +5,8 @@ echo "╔═══════════════════════�
 echo "║         STARTING INTEGRATED SULTAN + COSMOS                   ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
-# Start Sultan (Rust) - Primary chain with 26.67% APY
-echo -e "\n1️⃣ Starting Sultan Core (26.67% APY)..."
+# Start Sultan (Rust) - Primary chain with 13.33% APY
+echo -e "\n1️⃣ Starting Sultan Core (13.33% APY)..."
 if [ -f "/workspaces/0xv7/sultan" ]; then
     /workspaces/0xv7/sultan --port 3030 &
     SULTAN_PID=$!
@@ -44,14 +44,14 @@ echo "   ✅ Unified API running on port 8080"
 
 echo -e "\n✨ INTEGRATION COMPLETE!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "• Sultan Core: http://localhost:3030 (26.67% APY)"
+echo "• Sultan Core: http://localhost:3030 (13.33% APY)"
 echo "• Cosmos SDK: http://localhost:26657 (IBC/WASM)"
 echo "• Unified API: http://localhost:8080"
 echo "• Dashboard: http://localhost:3000"
 echo ""
 echo "Features:"
 echo "✅ Zero Gas Fees (Sultan)"
-echo "✅ 26.67% APY (Sultan Economics)"
+echo "✅ 13.33% APY (Sultan Economics)"
 echo "✅ IBC Support (Cosmos SDK)"
 echo "✅ Smart Contracts (CosmWasm)"
 echo "✅ Quantum Safe (Sultan)"

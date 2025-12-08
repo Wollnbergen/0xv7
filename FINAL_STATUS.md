@@ -74,7 +74,7 @@ block_time = 2               # 2-second blocks
 
 [genesis]
 total_supply = 500000000     # 500M SLTN
-inflation_rate = 8.0         # 8% → 7% → 6% → 5% → 4%
+inflation_rate = 8.0         # 4% → 7% → 6% → 5% → 4%
 min_stake = 10000            # 10K SLTN minimum
 blocks_per_year = 15768000   # 2-second blocks
 

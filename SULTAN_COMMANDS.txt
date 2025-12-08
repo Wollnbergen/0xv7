@@ -15,7 +15,7 @@ SULTAN CHAIN - QUICK COMMAND REFERENCE
   # Chain Status
   curl -X POST http://localhost:3030 -d '{"jsonrpc":"2.0","method":"chain_status","id":1}' | jq
 
-  # Get Economics (26.67% APY)
+  # Get Economics (13.33% APY)
   curl -X POST http://localhost:3030 -d '{"jsonrpc":"2.0","method":"get_economics","id":1}' | jq
 
   # Zero-Fee Transfer
@@ -27,8 +27,8 @@ SULTAN CHAIN - QUICK COMMAND REFERENCE
 
 📊 KEY METRICS
   • Gas Fees: $0.00 (forever)
-  • Validator APY: 26.67%
-  • Mobile Validator APY: 37.33%
+  • Validator APY: 13.33%
+  • Mobile Validator APY: 18.66%
   • Block Time: 5 seconds
   • Inflation: 8% annually
 

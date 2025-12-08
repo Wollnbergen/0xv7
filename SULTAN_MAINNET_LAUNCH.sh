@@ -13,7 +13,7 @@ echo ""
 echo "📊 CURRENT STATUS:"
 echo "  ✅ Testnet: LIVE (https://orange-telegram-pj6qgwgv59jjfrj9j-3030.app.github.dev/)"
 echo "  ✅ Zero Fees: Working ($0.00 forever)"
-echo "  ✅ APY: 26.67% base + 40% mobile bonus"
+echo "  ✅ APY: 13.33% base + 40% mobile bonus"
 echo "  ✅ Binary: Compiled (2.7MB)"
 echo ""
 

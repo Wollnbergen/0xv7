@@ -16,7 +16,7 @@ if [ -f "/workspaces/0xv7/server/server.js" ]; then
     echo "   • /validator command"
     echo "   • /stake command" 
     echo "   • /balance command"
-    echo "   • Single-tier staking (26.67% APY)"
+    echo "   • Single-tier staking (13.33% APY)"
     echo "   • Min stake: 5,000 SLTN"
 fi
 

@@ -9,10 +9,10 @@
 ### 💰 How Sultan Economics Works:
 
 #### The Innovation:
-- **8-9% annual inflation** creates a sustainable pool
+- **4% annual inflation** creates a sustainable pool
 - This pool **subsidizes ALL gas fees** - users pay NOTHING
-- Validators earn **26.67% APY** from staking rewards
-- Mobile validators get **+40% bonus** (total 37.33% APY)
+- Validators earn **13.33% APY** from staking rewards
+- Mobile validators get **+40% bonus** (total 18.66% APY)
 
 #### Why It's Sustainable:
 

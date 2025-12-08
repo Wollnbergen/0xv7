@@ -39,8 +39,8 @@
 | Completion | ✅ | 100% (was 70%) |
 | Gas Fees | ✅ | $0.00 Forever |
 | Performance | ✅ | 1.23M TPS |
-| Staking APY | ✅ | 26.67% |
-| Mobile APY | ✅ | 37.33% |
+| Staking APY | ✅ | 13.33% |
+| Mobile APY | ✅ | 18.66% |
 | Security | ✅ | Quantum-Safe |
 | Bridges | ✅ | 4 Chains Active |
 | IBC | ✅ | Fully Compatible |
@@ -72,7 +72,7 @@ Starting from 70% complete, we:
 
 - **First blockchain with true $0.00 fees**
 - **Fastest finality at 85ms**
-- **Highest sustainable APY at 26.67%**
+- **Highest sustainable APY at 13.33%**
 - **Quantum-resistant from day one**
 - **Universal bridge to all major chains**
 

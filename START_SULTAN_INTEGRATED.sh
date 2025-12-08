@@ -29,7 +29,7 @@ fi
 echo "   ✅ All checks passed"
 
 # Step 1: Start Cosmos node with Sultan economics
-echo -e "\n1️⃣ Starting Cosmos SDK with Sultan Economics (26.67% APY)..."
+echo -e "\n1️⃣ Starting Cosmos SDK with Sultan Economics (13.33% APY)..."
 
 # Check if container exists and remove it
 docker rm -f cosmos-sultan 2>/dev/null || true
@@ -70,7 +70,7 @@ app.get('/', (req, res) => {
     res.json({
         chain: 'Sultan',
         version: '1.0.0',
-        apy: '26.67%',
+        apy: '13.33%',
         gas_fees: '$0.00',
         status: 'operational'
     });
@@ -80,8 +80,8 @@ app.get('/status', (req, res) => {
     res.json({
         height: Math.floor(Math.random() * 100000),
         validators: 100,
-        apy: '26.67%',
-        inflation: '8%',
+        apy: '13.33%',
+        inflation: '4%',
         gas: '$0.00'
     });
 });
@@ -123,8 +123,8 @@ if [ -f "/workspaces/0xv7/update_integrated_dashboard.sh" ]; then
     echo "   ✅ Dashboard updated"
 fi
 
-echo -e "\n✨ SULTAN-COSMOS INTEGRATION ACTIVE!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ SULTAN-COSMOS INTEGRATION ACTIVE!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "📊 Endpoints:"
 echo "   • Sultan Core API: http://localhost:3030"
 echo "   • Cosmos RPC: http://localhost:26657"
@@ -132,7 +132,7 @@ echo "   • Cosmos REST: http://localhost:1317"
 echo "   • Unified API: http://localhost:8080"
 echo ""
 echo "💎 Features Active:"
-echo "   ✅ 26.67% APY (Sultan economics)"
+echo "   ✅ 13.33% APY (Sultan economics)"
 echo "   ✅ \$0.00 Gas Fees (Sultan zero-fee)"
 echo "   ✅ IBC Protocol (Cosmos SDK)"
 echo "   ✅ Smart Contracts (CosmWasm)"

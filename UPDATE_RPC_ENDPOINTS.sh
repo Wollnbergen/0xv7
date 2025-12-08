@@ -56,7 +56,7 @@ pub fn create_routes(config: crate::ChainConfig) -> impl Filter<Extract = impl w
                     sharding_enabled: cfg.shards > 1,
                     shard_count: cfg.shards,
                     inflation_rate: crate::calculate_inflation_rate(&cfg) / 100.0,
-                    validator_apy: 26.67 / 100.0,
+                    validator_apy: 13.33 / 100.0,
                     total_burned: 0,
                     is_deflationary: false,
                     total_supply: cfg.total_supply,

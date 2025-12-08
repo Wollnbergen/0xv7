@@ -19,7 +19,7 @@ def get_corrected_tokenomics():
             "year_4": "5%",
             "year_5+": "4%"
         },
-        "staking_apy": "26.67%",
+        "staking_apy": "13.33%",
         "gas_fees": "$0.00",
         "min_stake": "5,000 SLTN"
     }

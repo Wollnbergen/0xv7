@@ -26,7 +26,7 @@ bot.command('register_validator', async (ctx) => {
     ctx.reply(`🎉 Validator Registered!
 📍 Address: ${validatorAddr}
 💰 Min Stake: 5,000 SLTN
-📈 APY: 26.67% (37.33% mobile)
+📈 APY: 13.33% (18.66% mobile)
 ⏰ Start earning in: 1 block
 
 Next: Send /stake 5000 to activate`);
@@ -43,7 +43,7 @@ bot.command('stake', async (ctx) => {
     if (amount >= 5000) {
         validators.set(userId, {
             stake: amount,
-            apy: amount >= 100000 ? 0.2667 : 0.2000,
+            apy: amount >= 100000 ? 0.1333 : 0.2000,
             mobile: ctx.message.from_device === 'mobile',
             joined: Date.now()
         });
@@ -69,7 +69,7 @@ bot.command('validators', (ctx) => {
     ctx.reply(`🌐 Sultan Chain Validators
 👥 Active: ${count}
 💎 Total Staked: ${totalStake.toLocaleString()} SLTN
-📈 Network APY: 26.67%
+📈 Network APY: 13.33%
 🔥 Zero Gas Fees: ACTIVE`);
 });
 BOTCODE
@@ -98,7 +98,7 @@ let blockHeight = 0;
 // Validator registration endpoint
 app.post('/register', (req, res) => {
     const { address, stake } = req.body;
-    validators.push({ address, stake, apy: 0.2667, joined: Date.now() });
+    validators.push({ address, stake, apy: 0.1333, joined: Date.now() });
     res.json({ success: true, validators: validators.length });
 });
 
@@ -235,7 +235,7 @@ cat > /workspaces/0xv7/validator_portal_live.html << 'HTML'
                 <div class="stat-label">Active Validators</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">26.67%</div>
+                <div class="stat-value">13.33%</div>
                 <div class="stat-label">Base APY</div>
             </div>
             <div class="stat-card">
@@ -272,12 +272,12 @@ cat > /workspaces/0xv7/validator_portal_live.html << 'HTML'
                 validators.push({
                     name: name,
                     stake: stake,
-                    apy: stake >= 100000 ? 26.67 : 20.00,
+                    apy: stake >= 100000 ? 13.33 : 20.00,
                     joined: new Date()
                 });
                 
                 updateUI();
-                alert(`✅ Validator registered! You'll earn ${(stake * 0.2667 / 365).toFixed(2)} SLTN daily!`);
+                alert(`✅ Validator registered! You'll earn ${(stake * 0.1333 / 365).toFixed(2)} SLTN daily!`);
             } else {
                 alert('Minimum stake is 5,000 SLTN');
             }
@@ -300,8 +300,8 @@ cat > /workspaces/0xv7/validator_portal_live.html << 'HTML'
         
         // Simulate some validators
         validators = [
-            { name: 'Genesis Validator', stake: 100000, apy: 26.67 },
-            { name: 'Mobile Validator', stake: 50000, apy: 37.33 },
+            { name: 'Genesis Validator', stake: 100000, apy: 13.33 },
+            { name: 'Mobile Validator', stake: 50000, apy: 18.66 },
             { name: 'Community Node', stake: 10000, apy: 20.00 }
         ];
         updateUI();

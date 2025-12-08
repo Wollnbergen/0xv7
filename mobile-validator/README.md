@@ -47,7 +47,7 @@ https://testflight.apple.com/join/sultanvalidator
 2. **Create or import wallet**
 3. **Stake minimum 5,000 SLTN**
 4. **Start validator** (one tap)
-5. **Earn ~26.67% APY**
+5. **Earn ~13.33% APY**
 
 ## Technical Details
 

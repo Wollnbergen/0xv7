@@ -27,7 +27,7 @@ echo "$TX_RESULT" | jq '.' 2>/dev/null || echo "$TX_RESULT"
 echo ""
 echo "2️⃣ VALIDATOR ECONOMICS TEST:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Standard Validator APY: 26.67%"
+echo "Standard Validator APY: 13.33%"
 echo "Mobile Validator APY: 43.34%"
 echo "Minimum Stake: 5,000 SLTN"
 

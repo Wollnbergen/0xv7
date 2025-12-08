@@ -316,7 +316,7 @@ GET  /dex/price/:pair_id
 ✅ Create custom tokens (1000 SLTN fee)
 ✅ Instant liquidity pools
 ✅ Trade with ZERO gas fees
-✅ Earn 26.67% APY as LP
+✅ Earn 13.33% APY as LP
 
 No smart contracts. No complexity. Just tokens.
 

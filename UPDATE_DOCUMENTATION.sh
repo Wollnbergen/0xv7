@@ -15,7 +15,7 @@ cat > /workspaces/0xv7/README.md << 'README'
 ![Status](https://img.shields.io/badge/Status-85%25%20Complete-green)
 ![TPS](https://img.shields.io/badge/TPS-1.2M%2B-blue)
 ![Gas](https://img.shields.io/badge/Gas%20Fees-%240.00-brightgreen)
-![APY](https://img.shields.io/badge/Validator%20APY-26.67%25-orange)
+![APY](https://img.shields.io/badge/Validator%20APY-13.33%25-orange)
 
 ## 🚀 Overview
 
@@ -23,7 +23,7 @@ Sultan Chain is the world's first blockchain with:
 - **Permanently ZERO gas fees** ($0.00 forever)
 - **1.2M+ TPS** capacity (120x faster than target)
 - **85ms finality** (fastest in the industry)
-- **26.67% validator APY** (37.33% for mobile validators)
+- **13.33% validator APY** (18.66% for mobile validators)
 - **Universal cross-chain bridges** (ETH, SOL, BTC, TON, ZK)
 
 ## 📊 Current Status
@@ -72,8 +72,8 @@ Record-Breaking Performance
 10,000+ TPS sustained (conservative)
 85ms finality
 Highest Validator Rewards
-26.67% base APY
-37.33% mobile validator APY
+13.33% base APY
+18.66% mobile validator APY
 21-day unbonding period
 Universal Interoperability
 ZK Bridge (privacy-preserving)

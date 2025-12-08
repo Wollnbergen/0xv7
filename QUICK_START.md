@@ -161,7 +161,7 @@ Layer 3 (FUTURE):
 - **Total Supply:** 500,000,000 SLTN
 - **Genesis Balance:** 500,000,000 SLTN
 - **Min Validator Stake:** 10,000 SLTN
-- **Validator APY:** 26.67% (fixed)
+- **Validator APY:** 13.33% (fixed)
 - **Transaction Fees:** $0.00 (zero forever)
 - **Inflation:** 8% Y1 → 4% Y5+ (all to validators)
 

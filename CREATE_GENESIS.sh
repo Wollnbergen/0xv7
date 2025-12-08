@@ -125,7 +125,7 @@ JSON
 echo "✅ Genesis block created with:"
 echo "  • Chain ID: sultan-mainnet-1"
 echo "  • Zero gas fees configured"
-echo "  • 8% inflation rate"
+echo "  • 4% inflation rate"
 echo "  • 30% target staking ratio"
 echo "  • 40% mobile validator bonus"
 echo "  • 5-second block times"

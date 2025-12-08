@@ -23,7 +23,7 @@ What Can You Build?
 **NEW (Honest)**:
 ```
 Available Now on Sultan
-💰 Staking & Delegation - Earn 26.67% APY validating or delegating SLTN
+💰 Staking & Delegation - Earn 13.33% APY validating or delegating SLTN
 🌉 Cross-Chain Transfers - Bridge to/from ETH, SOL, TON, BTC in <3 seconds
 🏛️ On-Chain Governance - Democratic voting on proposals and upgrades
 📱 Mobile Validators - Run a full validator from your smartphone
@@ -53,7 +53,7 @@ Auto-expansion scales to 8,000 shards supporting 64 million TPS as demand grows.
 ## 📊 What We NOW Communicate
 
 ### ✅ Features We ACTUALLY Have (Launch Ready)
-1. **Staking System** - 26.67% APY, fully functional
+1. **Staking System** - 13.33% APY, fully functional
 2. **Cross-Chain Bridges** - ETH/SOL/TON/BTC in <3 seconds
 3. **On-Chain Governance** - Democratic voting, proposal execution
 4. **Mobile Validators** - 15MB binary, 200-500MB RAM, Android/iOS
@@ -94,7 +94,7 @@ What makes Sultan special **right now**:
 1. **Mobile Validators** - Industry first, run from smartphone
 2. **Telegram Integration** - One-tap staking, no wallet complexity
 3. **Native Interop** - <3s cross-chain (vs 10-15min bridges)
-4. **26.67% APY** - Competitive with DeFi yields
+4. **13.33% APY** - Competitive with DeFi yields
 5. **Auto-Expanding Shards** - 8 → 8,000 seamless scaling
 6. **Zero Gas Fees** - Truly free transactions
 7. **Sub-3s Finality** - Faster than most L1s
@@ -128,13 +128,13 @@ What makes Sultan special **right now**:
 
 ### Key Stats (All Accurate)
 - **$0.00** Gas Fees Forever
-- **26.67%** Validator APY
+- **13.33%** Validator APY
 - **<3s** Finality
 - **64,000** TPS at Launch
 - **8 Shards** → **8,000 Shards** Auto-Expansion
 
 ### Value Propositions
-1. **For Validators**: Earn 26.67% APY from your phone
+1. **For Validators**: Earn 13.33% APY from your phone
 2. **For Users**: Telegram bot makes staking effortless
 3. **For Cross-Chain**: Native bridges (no custody risk)
 4. **For Developers**: Build wallets, explorers, analytics tools
@@ -175,7 +175,7 @@ When smart contracts launch Q2 2026, we can update:
 1. **Mobile Validators** - No one else has this
 2. **Telegram Integration** - Unique user onboarding
 3. **Native Interop** - Faster than bridges (5x)
-4. **High APY** - 26.67% beats most PoS chains
+4. **High APY** - 13.33% beats most PoS chains
 
 ### What Sultan Does DIFFERENTLY
 1. **Honest Marketing** - No vaporware promises

@@ -41,8 +41,8 @@ APY=$(curl -s -X POST http://localhost:3030 \
     -H 'Content-Type: application/json' \
     -d '{"jsonrpc":"2.0","method":"get_apy","id":1}')
 
-if echo "$APY" | grep -q "26.67"; then
-    echo "✅ PASSED: Validator APY is 26.67%"
+if echo "$APY" | grep -q "13.33"; then
+    echo "✅ PASSED: Validator APY is 13.33%"
     ((TESTS_PASSED++))
 else
     echo "❌ FAILED: Validator APY incorrect"

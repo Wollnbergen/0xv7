@@ -22,8 +22,8 @@ cat > /workspaces/0xv7/CERTIK_AUDIT_CHECKLIST.md << 'AUDIT'
 
 ### 2. Economics Module
 - [ ] Zero gas fee mechanism (`transaction_validator.rs`)
-- [ ] APY calculation (26.67% base)
-- [ ] Inflation schedule (8% → 2%)
+- [ ] APY calculation (13.33% base)
+- [ ] Inflation schedule (4% → 2%)
 - [ ] Burn mechanism (1% on high volume)
 
 ### 3. Cross-Chain Bridges

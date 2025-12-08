@@ -25,7 +25,7 @@
 | **Finality** | Immediate |
 | **Gas Fees** | $0 |
 | **TPS Capacity** | 64,000 → 64M |
-| **Validator APY** | 26.67% |
+| **Validator APY** | 13.33% |
 | **Network Status** | ✅ **MAINNET LIVE** |
 
 ---
@@ -128,9 +128,10 @@ We built a blockchain from first principles—no frameworks, no compromises.
 
 ---
 
-**📈 26.67% Validator APY**
-- Sustainable inflation-based rewards
-- Attractive economics for quality validators
+**📈 13.33% Validator APY**
+- Sustainable inflation-based rewards (4% inflation)
+- Covers real infrastructure costs (~$100-150/year)
+- Attractive economics without excessive dilution
 - Low hardware requirements (1GB RAM minimum)
 - Global decentralization by design
 
@@ -237,13 +238,13 @@ Sultan L1 is **live on mainnet** with verified metrics:
 
 | Blockchain | Block Time | Finality | TPS | Gas Fee | Validator APY |
 |------------|------------|----------|-----|---------|---------------|
-| **Sultan L1** | **2s** | **2s** | **64K-64M** | **$0** | **26.67%** |
+| **Sultan L1** | **2s** | **2s** | **64K-64M** | **$0** | **13.33%** |
 | Ethereum | 12s | 15 min | 15-30 | $5-50 | 3-5% |
 | Solana | 0.4s | 13s | 65K | $0.001 | 7% |
 | Cosmos Hub | 6s | 6s | 10K | $0.01 | 19% |
 | Avalanche | 2s | 1s | 4.5K | $0.10 | 8% |
 
-**Sultan L1: Fastest finality, zero fees, highest APY.**
+**Sultan L1: Fastest finality, zero fees, competitive APY.**
 
 ---
 
@@ -382,17 +383,21 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 
 ### Staking Economics
 
-**Inflation Model:** Decreasing over time
+**Inflation Model:** Conservative, decreasing over time
 
 | Year | Inflation | APY (at 30% staked) |
 |------|-----------|---------------------|
-| 1 | 8% | **26.67%** |
-| 2 | 7% | 23.33% |
-| 3 | 6% | 20.00% |
-| 4 | 5% | 16.67% |
-| 5+ | 4% (floor) | 13.33% |
+| 1 | 4% | **13.33%** |
+| 2 | 3.5% | 11.67% |
+| 3 | 3% | 10.00% |
+| 4 | 2.5% | 8.33% |
+| 5+ | 2% (floor) | 6.67% |
 
-**No validator rewards pool needed** — Inflation elegantly handles rewards.
+**Why this APY?**
+- Covers real validator costs (~$100-150/year infrastructure)
+- Provides reasonable profit margin
+- Sustainable long-term without excessive dilution
+- Still competitive (vs 3-7% industry average)
 
 ---
 
@@ -451,7 +456,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 
 - ✅ Faster finality than Ethereum/Cosmos
 - ✅ Zero fees (vs $0.01-50 elsewhere)
-- ✅ Higher APY than most L1s (26.67%)
+- ✅ Competitive APY (13.33% vs 3-7% industry avg)
 - ✅ Lower validator requirements (1GB RAM)
 - ✅ Post-quantum ready (only major L1)
 
@@ -463,7 +468,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 
 | Chain | Block Time | APY | Team % | Raise | Ecosystem % | Weakness |
 |-------|------------|-----|--------|-------|-------------|----------|
-| **Sultan** | **2s** | **26.67%** | **8%** | **$4M** | **40%** | New |
+| **Sultan** | **2s** | **13.33%** | **8%** | **$4M** | **40%** | New |
 | Cosmos Hub | 6s | 19% | 10% | $17M | 23% | Slower |
 | Celestia | 12s | 8-12% | 20% | $55M | 26% | DA-only |
 | Sei | 0.4s | 10% | 20% | $35M | 48% | High raise |
@@ -824,7 +829,7 @@ We are raising **$4,000,000** in two rounds:
 
 🔐 **Quantum-Ready** — Dilithium3 post-quantum security
 
-📈 **26.67% APY** — Attractive validator economics
+📈 **13.33% APY** — Sustainable validator economics
 
 🌍 **15 Validators** — Already globally distributed
 
@@ -888,9 +893,9 @@ A: We believe in lean operations and community alignment. 40% ecosystem allocati
 
 ---
 
-**Q: How is 26.67% APY sustainable?**
+**Q: How is 13.33% APY sustainable?**
 
-A: It's from 8% inflation divided by ~30% staking ratio. As more people stake, APY naturally decreases (economic equilibrium). Pure protocol inflation, no Ponzi mechanics.
+A: It's from 4% inflation divided by ~30% staking ratio. This APY is designed to cover real validator costs (~$100-150/year infrastructure) plus provide reasonable profit, without excessive token dilution. As more people stake, APY naturally decreases (economic equilibrium). Pure protocol inflation, no Ponzi mechanics.
 
 ---
 

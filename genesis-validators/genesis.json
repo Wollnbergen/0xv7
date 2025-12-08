@@ -203,7 +203,7 @@
     },
     "economics": {
       "inflation_rate": 0.08,
-      "validator_apy": 0.2667,
+      "validator_apy": 0.1333,
       "block_time": 2,
       "blocks_per_year": 15768000
     },

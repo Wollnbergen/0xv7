@@ -148,7 +148,7 @@ cat > /workspaces/0xv7/TOKEN_HIERARCHY.md << 'HIERARCHY'
 ## Layer 0: Native Token
 SLTN (Native)
 ├── Gas payments ($0.00 fees)
-├── Validator staking (26.67% APY)
+├── Validator staking (13.33% APY)
 ├── Governance voting
 └── IBC transfers
 

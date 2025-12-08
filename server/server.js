@@ -13,11 +13,11 @@ app.post('/webhook', (req, res) => {
 });
 
 bot.start((ctx) => ctx.reply('Welcome! Use /validator for info.'));
-bot.command('validator', (ctx) => ctx.reply('Single tier: 26.67% APY, min 5,000 SLTN'));
+bot.command('validator', (ctx) => ctx.reply('Single tier: 13.33% APY, min 5,000 SLTN'));
 bot.command('stake', (ctx) => {
   const amount = parseFloat(ctx.message.text.split(' ')[1]);
   if (amount >= 5000) {
-    ctx.reply(`Staked at 26.67% APY`);
+    ctx.reply(`Staked at 13.33% APY`);
   } else {
     ctx.reply('Min 5,000 SLTN required');
   }

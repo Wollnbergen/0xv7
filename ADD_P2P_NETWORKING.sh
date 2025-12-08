@@ -142,5 +142,5 @@ echo "🔨 Your Sultan Chain now has:"
 echo "  • Database persistence (ScyllaDB)"
 echo "  • P2P networking capability (libp2p)"
 echo "  • Zero gas fees"
-echo "  • 26.67% APY economics"
+echo "  • 13.33% APY economics"
 

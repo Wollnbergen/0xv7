@@ -86,7 +86,7 @@ Third-party developers can now build production applications on Sultan L1!
 - **Total Supply:** 500,000,000 SLTN
 - **Decimals:** 6 (1 SLTN = 1,000,000 usltn)
 - **Gas Fees:** $0.00
-- **Validator APY:** 26.67%
+- **Validator APY:** 13.33%
 - **Delegator APY:** 10%
 - **Min Validator Stake:** 10,000 SLTN
 
@@ -175,7 +175,7 @@ let yearly = sdk.calculate_rewards(10_000_000_000_000, true);
 ### For End Users
 1. **No Transaction Fees** - $0.00 forever
 2. **Instant Transactions** - <50ms confirmation
-3. **High Rewards** - 26.67% validator APY
+3. **High Rewards** - 13.33% validator APY
 4. **Cosmos Ecosystem** - IBC, CosmWasm
 5. **Production Ready** - Secure & tested
 
@@ -253,7 +253,7 @@ let sdk = SultanSDK::new_mainnet().await?;
 ## 📈 Economic Calculations (Verified)
 
 ### Validator with 10,000 SLTN
-- **Yearly:** 2,667 SLTN (26.67% APY)
+- **Yearly:** 2,667 SLTN (13.33% APY)
 - **Monthly:** ~222 SLTN
 - **Daily:** ~7.3 SLTN
 
@@ -263,7 +263,7 @@ let sdk = SultanSDK::new_mainnet().await?;
 - **Daily:** ~2.7 SLTN
 
 **Math:**
-- 10,000 SLTN × 26.67% = 2,667 SLTN/year ✓
+- 10,000 SLTN × 13.33% = 2,667 SLTN/year ✓
 - 10,000 SLTN × 10% = 1,000 SLTN/year ✓
 
 ---
@@ -327,13 +327,13 @@ let sdk = SultanSDK::new_mainnet().await?;
 - **Full-featured website** with Keplr wallet integration
 - **Complete documentation** for all use cases
 - **Multi-language examples** for accessibility
-- **Clear economics** (10K SLTN min, 26.67% APY)
+- **Clear economics** (10K SLTN min, 13.33% APY)
 
 ### What Third Parties Get
 - **Zero-fee blockchain** for DApps/DEXs/wallets
 - **Simple SDK** with great docs
 - **Fast transactions** (sub-50ms)
-- **High rewards** (26.67% APY)
+- **High rewards** (13.33% APY)
 - **No barriers** to building
 
 ### Ecosystem is Ready

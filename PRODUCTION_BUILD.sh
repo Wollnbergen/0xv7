@@ -68,7 +68,7 @@ address = "0.0.0.0:$GRPC_PORT"
 [sultan]
 zero_fees = true
 target_tps = 1250000
-staking_apy = 0.2667
+staking_apy = 0.1333
 APP
 
     echo "✅ Node initialized at $NODE_HOME"
@@ -143,7 +143,7 @@ case "$1" in
         echo "Account: $3"
         echo "Balance: 1,000,000 SLTN"
         echo "Staked: 100,000 SLTN"
-        echo "Rewards: 26,670 SLTN (26.67% APY)"
+        echo "Rewards: 26,670 SLTN (13.33% APY)"
         echo "Gas Spent: $0.00"
         ;;
       *)
@@ -211,7 +211,7 @@ class SultanAPI(BaseHTTPRequestHandler):
                 "tps": random.randint(1200000, 1250000),
                 "validators": 21,
                 "total_staked": "500000000 SLTN",
-                "apy": 26.67
+                "apy": 13.33
             })
         elif self.path.startswith('/account/'):
             address = self.path.split('/')[-1]

@@ -31,7 +31,7 @@ app.get('/', (req, res) => {
         status: 'operational',
         features: {
             gasFees: 0,
-            apy: '26.67%',
+            apy: '13.33%',
             tps: '1,247,000+',
             blockTime: '85ms'
         }

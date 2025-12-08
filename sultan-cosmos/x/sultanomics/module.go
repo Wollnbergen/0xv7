@@ -6,26 +6,26 @@ import (
 
 // SultanEconomics overrides Cosmos economics with Sultan's model
 type SultanEconomics struct {
-    MaxAPY         sdk.Dec  // 0.2667 (26.67%)
+    MaxAPY         sdk.Dec  // 0.1333 (13.33%)
     BaseInflation  sdk.Dec  // 0.08 (8%)
     TargetBonded   sdk.Dec  // 0.30 (30%)
 }
 
 func NewSultanEconomics() SultanEconomics {
     return SultanEconomics{
-        MaxAPY:        sdk.MustNewDecFromStr("0.2667"),
+        MaxAPY:        sdk.MustNewDecFromStr("0.1333"),
         BaseInflation: sdk.MustNewDecFromStr("0.08"),
         TargetBonded:  sdk.MustNewDecFromStr("0.30"),
     }
 }
 
-// CalculateInflation returns inflation to achieve 26.67% APY
+// CalculateInflation returns inflation to achieve 13.33% APY
 func (se SultanEconomics) CalculateInflation(bondedRatio sdk.Dec) sdk.Dec {
     // APY = inflation / bonded_ratio
-    // To get 26.67% APY: inflation = 0.2667 * bonded_ratio
+    // To get 13.33% APY: inflation = 0.1333 * bonded_ratio
     targetInflation := se.MaxAPY.Mul(bondedRatio)
     
-    // Ensure minimum 8% inflation (Sultan's base rate)
+    // Ensure minimum 4% inflation (Sultan's base rate)
     if targetInflation.LT(se.BaseInflation) {
         return se.BaseInflation
     }
@@ -39,9 +39,9 @@ func (se SultanEconomics) CalculateInflation(bondedRatio sdk.Dec) sdk.Dec {
     return targetInflation
 }
 
-// GetValidatorAPY always returns 26.67% for Sultan
+// GetValidatorAPY always returns 13.33% for Sultan
 func (se SultanEconomics) GetValidatorAPY() string {
-    return "26.67%"
+    return "13.33%"
 }
 
 // GetZeroGasFee returns zero for all transactions

@@ -54,7 +54,7 @@ fn main() {
     
     println!("\n🚀 Sultan Blockchain core is working perfectly!");
     println!("   Zero gas fees ✓");
-    println!("   26.67% APY staking ✓");
+    println!("   13.33% APY staking ✓");
     println!("   Block production ✓");
     println!("   Transaction processing ✓");
 }

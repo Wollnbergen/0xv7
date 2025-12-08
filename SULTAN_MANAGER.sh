@@ -71,7 +71,7 @@ while true; do
             while true; do
                 printf "\r"
                 BLOCK=$(curl -s http://localhost:4001/consensus_state 2>/dev/null | jq -r '.blockHeight' 2>/dev/null || echo "0")
-                printf "Block: #%-10s | TPS: 1,247,000+ | Gas: $0.00 | APY: 26.67%%" "$BLOCK"
+                printf "Block: #%-10s | TPS: 1,247,000+ | Gas: $0.00 | APY: 13.33%%" "$BLOCK"
                 sleep 1
             done
             ;;

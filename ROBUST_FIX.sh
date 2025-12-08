@@ -140,7 +140,7 @@ app.get('/', (req, res) => {
         status: 'operational',
         features: {
             gasFees: 0,
-            apy: '26.67%',
+            apy: '13.33%',
             tps: '1,247,000+',
             blockTime: '85ms'
         }
@@ -177,7 +177,7 @@ app.post('/', (req, res) => {
             chain: 'sultan',
             height: Math.floor(Math.random() * 10000) + 10000,
             gasFees: 0,
-            apy: 0.2667,
+            apy: 0.1333,
             tps: 1247000
         }
     });

@@ -3,8 +3,8 @@
 ## ✅ **FINAL ECONOMICS SPECIFICATION**
 
 ### 🎯 **Validator Rewards**
-- **Maximum APY:** 26.67% (no mobile bonus)
-- **Calculation:** `min(26.67%, inflation_rate ÷ staking_ratio)`
+- **Maximum APY:** 13.33% (no mobile bonus)
+- **Calculation:** `min(13.33%, inflation_rate ÷ staking_ratio)`
 - **Target Staking Ratio:** 30%
 
 ### 📉 **Dynamic Inflation Schedule**
@@ -32,12 +32,12 @@
 ### 📈 **Long-term Sustainability**
 - Years 1-4: Inflationary (funds growth)
 - Year 5+: Deflationary (increases scarcity)
-- Validator rewards remain attractive at 26.67% max
+- Validator rewards remain attractive at 13.33% max
 - Zero fees maintained indefinitely
 
 ## 🔄 **Changes from Original**
-- ❌ Removed 40% mobile validator bonus (37.33% APY)
-- ✅ Kept 26.67% maximum validator APY
+- ❌ Removed 40% mobile validator bonus (18.66% APY)
+- ✅ Kept 13.33% maximum validator APY
 - ✅ Added declining inflation schedule
 - ✅ Added 1% burn mechanism
 - ✅ Maintained zero gas fees

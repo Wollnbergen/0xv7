@@ -83,9 +83,9 @@ class SultanHandler(BaseHTTPRequestHandler):
             }
         elif method == 'get_apy':
             return {
-                'base_apy': '26.67%',
+                'base_apy': '13.33%',
                 'mobile_validator_bonus': '40%',
-                'total_possible': '37.33%'
+                'total_possible': '18.66%'
             }
         elif method == 'validator_list':
             validators = []
@@ -102,7 +102,7 @@ class SultanHandler(BaseHTTPRequestHandler):
                 'total': 40,
                 'bonus': '40%',
                 'requirements': 'Mobile device with Sultan app',
-                'apy': '37.33%'
+                'apy': '18.66%'
             }
         else:
             return {'error': 'Method not found'}
@@ -112,7 +112,7 @@ print('📍 Running on http://127.0.0.1:3030')
 print('')
 print('Features:')
 print('  ✅ Zero Gas Fees')
-print('  ✅ 26.67% APY Staking')
+print('  ✅ 13.33% APY Staking')
 print('  ✅ Mobile Validators (40% bonus)')
 print('  ✅ 10,000+ TPS')
 print('')

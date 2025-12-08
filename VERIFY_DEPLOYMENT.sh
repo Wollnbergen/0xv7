@@ -34,7 +34,7 @@ echo "  ✅ Native Token: SLTN"
 echo "  ✅ Decimals: 6"
 echo "  ✅ Gas Price: $0.00"
 echo "  ✅ Min Stake: 1,000 SLTN"
-echo "  ✅ Validator APY: 26.67%"
+echo "  ✅ Validator APY: 13.33%"
 
 echo ""
 echo "📊 Performance Specifications..."

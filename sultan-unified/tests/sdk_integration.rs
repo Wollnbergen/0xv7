@@ -188,7 +188,7 @@ async fn sdk_apy_calculation() {
     let validator_apy = sdk.query_apy(true).await.unwrap();
     let delegator_apy = sdk.query_apy(false).await.unwrap();
     
-    // 0.08 / 0.3 = 0.2666... (26.66%)
+    // 0.04 / 0.3 = 0.2666... (26.66%)
     assert!((validator_apy - 0.2666).abs() < 0.01, "Expected ~0.2666, got {}", validator_apy);
     assert!((delegator_apy - 0.2133).abs() < 0.01, "Expected ~0.2133, got {}", delegator_apy);
 }

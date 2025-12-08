@@ -126,7 +126,7 @@ Official website for Sultan L1 blockchain.
 - 2-second blocks
 - 500K TPS capacity
 - Zero transaction fees
-- 26.67% validator APY
+- 13.33% validator APY
 - Keplr wallet integration
 
 ## Local Development

@@ -79,7 +79,7 @@ async fn main() {
     println!("\n✅ Sultan Chain initialized");
     println!("   Chain ID: {}", config.chain_id);
     println!("   Gas Fees: $0.00 (Zero Forever!)");
-    println!("   Staking APY: 26.67%");
+    println!("   Staking APY: 13.33%");
     
     let blockchain_clone = blockchain.clone();
     

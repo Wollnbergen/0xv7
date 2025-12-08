@@ -164,7 +164,7 @@ fn main() {
     println!("   Total Blocks: {}", blockchain.chain.len());
     println!("   Latest Block: #{}", blockchain.chain.last().unwrap().index);
     println!("   Gas Price: $0.00 (Forever!)");
-    println!("   Staking APY: 26.67%");
+    println!("   Staking APY: 13.33%");
     println!("   Inflation: 8% Year 1");
     println!();
     

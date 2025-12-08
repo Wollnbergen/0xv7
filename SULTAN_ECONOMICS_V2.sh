@@ -29,11 +29,11 @@ cat > /workspaces/0xv7/economics_config.json << 'JSON'
     }
   },
   "validator_rewards": {
-    "base_apy": 26.67,
+    "base_apy": 13.33,
     "mobile_validator_bonus": 0,
     "calculation": "dynamic_based_on_staking_ratio",
     "min_apy": 5.0,
-    "max_apy": 26.67,
+    "max_apy": 13.33,
     "staking_ratio_target": 0.30
   },
   "gas_fees": {
@@ -53,9 +53,9 @@ echo "✅ Created corrected economics configuration"
 echo ""
 echo "📊 KEY CHANGES:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  • Dynamic inflation: 8% → 6% → 4% → 3% → 2%"
+echo "  • Dynamic inflation: 4% → 6% → 4% → 3% → 2%"
 echo "  • Burn mechanism: 1% of high-volume transactions"
-echo "  • Validator APY: 26.67% MAX (no mobile bonus)"
+echo "  • Validator APY: 13.33% MAX (no mobile bonus)"
 echo "  • Deflationary after year 5"
 echo "  • Gas fees: Still $0.00 for users"
 

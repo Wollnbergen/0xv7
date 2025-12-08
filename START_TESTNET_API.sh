@@ -40,14 +40,14 @@ app.use(express.static('public'));
 
 // Sultan Chain economics
 const ECONOMICS = {
-    inflation_rate: "8% annually",
-    validator_apy: "26.67%",
+    inflation_rate: "4% annually",
+    validator_apy: "13.33%",
     mobile_validator_bonus: "+40%",
-    mobile_validator_total_apy: "37.33%",
+    mobile_validator_total_apy: "18.66%",
     staking_ratio_assumption: "30%",
     user_gas_fees: 0,
-    fee_subsidy_source: "8% inflation pool",
-    formula: "APY = 8% inflation ÷ 0.3 staking ratio = 26.67%"
+    fee_subsidy_source: "4% inflation pool",
+    formula: "APY = 4% inflation ÷ 0.3 staking ratio = 13.33%"
 };
 
 // API endpoints
@@ -63,10 +63,10 @@ app.post('/', (req, res) => {
             res.json({ 
                 jsonrpc: "2.0", 
                 result: {
-                    base_apy: "26.67%",
+                    base_apy: "13.33%",
                     mobile_validator_bonus: "40%",
-                    total_possible: "37.33%",
-                    calculation: "8% inflation ÷ 30% staked = 26.67% APY"
+                    total_possible: "18.66%",
+                    calculation: "4% inflation ÷ 30% staked = 13.33% APY"
                 },
                 id 
             });
@@ -82,9 +82,9 @@ app.post('/', (req, res) => {
                     mobile_validators: 40,
                     tps: 10000,
                     zero_fees: true,
-                    inflation_rate: "8% annually",
-                    validator_apy: "26.67%",
-                    mobile_validator_apy: "37.33%",
+                    inflation_rate: "4% annually",
+                    validator_apy: "13.33%",
+                    mobile_validator_apy: "18.66%",
                     ibc_enabled: true
                 },
                 id
@@ -156,17 +156,17 @@ if (!fs.existsSync('public')) {
 <body>
     <h1>🚀 Sultan Chain API</h1>
     <div class="economics">
-        <h2>Zero Gas Fees • 26.67% Validator APY • Mobile Validators</h2>
+        <h2>Zero Gas Fees • 13.33% Validator APY • Mobile Validators</h2>
         <h3>💰 Economics (Resolved from Codebase)</h3>
-        <p>✅ 8% Annual Inflation - Creates the reward pool</p>
-        <p>📈 26.67% APY for Validators - When 30% of tokens are staked</p>
-        <p>📱 40% Mobile Validator Bonus - Total ~37.33% APY</p>
-        <p>⛽ ZERO Gas Fees Forever - Subsidized by 8% inflation</p>
+        <p>✅ 4% Annual Inflation - Creates the reward pool</p>
+        <p>📈 13.33% APY for Validators - When 30% of tokens are staked</p>
+        <p>📱 40% Mobile Validator Bonus - Total ~18.66% APY</p>
+        <p>⛽ ZERO Gas Fees Forever - Subsidized by 4% inflation</p>
         <pre>The Formula:
 Validator APY = Inflation Rate ÷ Staking Ratio
-26.67% = 8% ÷ 0.3 (30% staked)
+13.33% = 8% ÷ 0.3 (30% staked)
 
-Mobile Validator APY = 26.67% × 1.4 = 37.33%</pre>
+Mobile Validator APY = 13.33% × 1.4 = 18.66%</pre>
     </div>
     <div class="endpoint">
         <h3>Chain Status</h3>

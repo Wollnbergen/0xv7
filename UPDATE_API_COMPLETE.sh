@@ -17,7 +17,7 @@ const FEATURES = {
     tps: "1,247,000+",
     finality: "85ms",
     gas_fees: 0.00,
-    validator_apy: "26.67%",
+    validator_apy: "13.33%",
     interoperability: ["Ethereum", "Solana", "Bitcoin", "TON"]
 };
 
@@ -43,7 +43,7 @@ const server = http.createServer((req, res) => {
                             tps: currentTPS,
                             finality_ms: 85,
                             gas_fees: 0.00,
-                            validator_apy: "26.67%",
+                            validator_apy: "13.33%",
                             interop_chains: FEATURES.interoperability,
                             network: "Production Ready"
                         };
@@ -169,7 +169,7 @@ const server = http.createServer((req, res) => {
                 <div class="label">Gas Fees Forever</div>
             </div>
             <div class="feature">
-                <div class="metric">26.67%</div>
+                <div class="metric">13.33%</div>
                 <div class="label">Validator APY</div>
             </div>
             <div class="feature">

@@ -33,7 +33,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "⛽ Gas Fees:      $0.00 (Zero fees forever)"
 echo "⚡ TPS:           1.2M+ transactions per second"
 echo "🔒 Security:      Quantum-resistant cryptography"
-echo "💰 Staking APY:   26.67%"
+echo "💰 Staking APY:   13.33%"
 echo "🌉 Bridges:       BTC, ETH, SOL, TON ready"
 echo "🌌 Cosmos IBC:    ✅ Enabled"
 echo "📈 Completion:    70%"

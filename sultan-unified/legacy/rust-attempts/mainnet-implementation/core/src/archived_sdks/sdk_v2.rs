@@ -377,6 +377,6 @@ impl SDK {
     
     pub async fn query_apy(&self) -> Result<f64> {
         // Dynamic APY based on total stake
-        Ok(26.67)
+        Ok(13.33)
     }
 }

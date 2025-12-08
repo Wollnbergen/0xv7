@@ -90,7 +90,7 @@ class SultanHandler(BaseHTTPRequestHandler):
                     'tps': 10000,
                     'gas_fees': 0,
                     'inflation_rate': '8% annually',  # From blockchain.rs
-                    'fee_model': 'Subsidized by 8% inflation',
+                    'fee_model': 'Subsidized by 4% inflation',
                     'ibc_enabled': True
                 }
             elif method == 'get_economics':
@@ -101,8 +101,8 @@ class SultanHandler(BaseHTTPRequestHandler):
                     'delegator_apy': '8%',   # From rewards.rs (0.08)
                     'mobile_validator_target': '30%',  # From architecture docs
                     'user_gas_fees': 0,
-                    'fee_subsidy_source': '8% inflation pool',
-                    'economic_model': 'Zero-fee blockchain via 8% inflation subsidy',
+                    'fee_subsidy_source': '4% inflation pool',
+                    'economic_model': 'Zero-fee blockchain via 4% inflation subsidy',
                     'source': 'Values from Sultan Chain codebase (rewards.rs, blockchain.rs, config.rs)'
                 }
             elif method == 'get_rewards' or method == 'get_apy':
@@ -128,8 +128,8 @@ class SultanHandler(BaseHTTPRequestHandler):
                     'success': True,
                     'tx_hash': f'0x{uuid.uuid4().hex}',
                     'fee': 0,
-                    'fee_subsidy': 'Paid by 8% inflation pool',
-                    'message': 'Transfer complete - NO GAS FEES (subsidized by 8% inflation)!'
+                    'fee_subsidy': 'Paid by 4% inflation pool',
+                    'message': 'Transfer complete - NO GAS FEES (subsidized by 4% inflation)!'
                 }
             else:
                 result = {'error': 'Method not found', 'available_methods': ['chain_status', 'get_economics', 'get_rewards', 'wallet_create', 'token_transfer']}

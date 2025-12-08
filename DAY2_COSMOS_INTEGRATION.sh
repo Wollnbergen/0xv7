@@ -60,7 +60,7 @@ type SultanApp struct {
     // Zero fee configuration
     ZeroFees bool
     
-    // Staking APY: 26.67%
+    // Staking APY: 13.33%
     StakingAPY float64
     
     // IBC enabled
@@ -71,7 +71,7 @@ func NewSultanApp() *SultanApp {
     app := &SultanApp{
         BaseApp: baseapp.NewBaseApp(AppName, nil, nil, nil),
         ZeroFees: true,           // ZERO GAS FEES
-        StakingAPY: 0.2667,       // 26.67% APY
+        StakingAPY: 0.1333,       // 13.33% APY
         IBCEnabled: true,         // IBC Cross-chain
     }
     return app
@@ -100,7 +100,7 @@ type ZeroFeeModule struct{}
 
 // ProcessTransaction with ZERO fees
 func (m *ZeroFeeModule) ProcessTransaction(ctx sdk.Context, tx sdk.Tx) error {
-    // No fees charged - subsidized by 8% inflation
+    // No fees charged - subsidized by 4% inflation
     return nil
 }
 
@@ -109,9 +109,9 @@ func (m *ZeroFeeModule) GetTransactionFee() sdk.Coins {
     return sdk.NewCoins() // Empty = $0.00
 }
 
-// ValidatorAPY returns 26.67%
+// ValidatorAPY returns 13.33%
 func (m *ZeroFeeModule) GetValidatorAPY() float64 {
-    return 0.2667 // 26.67% APY
+    return 0.1333 // 13.33% APY
 }
 MODULE
 
@@ -243,12 +243,12 @@ echo "📊 What we accomplished:"
 echo "  ✅ Cosmos SDK v0.50.1 structure"
 echo "  ✅ IBC-Go v8 for cross-chain"
 echo "  ✅ Zero-fee module implemented"
-echo "  ✅ 26.67% APY staking configured"
-echo "  ✅ Genesis with 8% inflation"
+echo "  ✅ 13.33% APY staking configured"
+echo "  ✅ Genesis with 4% inflation"
 echo ""
 echo "🌐 Your Sultan Chain Features:"
 echo "  • Zero Gas Fees: $0.00 (subsidized by inflation)"
-echo "  • Staking APY: 26.67%"
+echo "  • Staking APY: 13.33%"
 echo "  • IBC: Connected to Cosmos Hub, Osmosis, Axelar"
 echo "  • Consensus: CometBFT (Tendermint)"
 echo "  • Token: SLTN (1,000,000,000 total supply)"

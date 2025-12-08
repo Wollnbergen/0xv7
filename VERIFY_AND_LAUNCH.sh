@@ -105,7 +105,7 @@ while true; do
     echo "• TPS: 1,200,000+ (theoretical)"
     echo "• Block Time: 5 seconds"
     echo "• Gas Fees: $0.00"
-    echo "• Staking APY: 26.67%"
+    echo "• Staking APY: 13.33%"
     
     echo ""
     echo "🔗 QUICK LINKS"

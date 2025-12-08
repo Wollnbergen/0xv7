@@ -6,7 +6,7 @@
 - Unbonding period: 21 days
 
 ## Rewards
-- Base APY: 26.67%
+- Base APY: 13.33%
 - Distributed every block
 - Auto-compound available
 

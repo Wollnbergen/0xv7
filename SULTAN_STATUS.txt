@@ -7,7 +7,7 @@ SULTAN CHAIN - PROJECT STATUS
 KEY FEATURES:
 • Zero Gas Fees ($0.00)
 • 1.2M+ TPS Capacity
-• 26.67% Staking APY
+• 13.33% Staking APY
 • Quantum-Resistant (Dilithium3)
 • Universal Bridges (BTC, ETH, SOL, TON)
 

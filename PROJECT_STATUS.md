@@ -3,9 +3,9 @@
 ## Current State: TESTNET LIVE ✅
 
 ### Confirmed Economics (from codebase):
-- **Inflation Rate**: 8% annually
-- **Validator APY**: 26.67% (8% ÷ 0.3 staking ratio)
-- **Mobile Validator APY**: 37.33% (with 40% bonus)
+- **Inflation Rate**: 4% annually
+- **Validator APY**: 13.33% (8% ÷ 0.3 staking ratio)
+- **Mobile Validator APY**: 18.66% (with 40% bonus)
 - **Gas Fees**: $0.00 (subsidized by inflation)
 
 ### Live Endpoints:
@@ -22,9 +22,9 @@
 
 ### Source Code References:
 - `sdk_original.rs`: APY calculation formula (inflation_rate / 0.3)
-- `blockchain.rs`: 8% inflation rate setting
+- `blockchain.rs`: 4% inflation rate setting
 - `transaction_validator.rs`: Gas fee subsidy implementation
-- `config.rs`: Validator configuration (26.67% APY comment)
+- `config.rs`: Validator configuration (13.33% APY comment)
 
 ### Next Steps:
 1. Community testing and feedback

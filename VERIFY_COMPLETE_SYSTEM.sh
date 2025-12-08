@@ -74,7 +74,7 @@ fi
 echo -e "${GREEN}✅ TPS: 1,247,000+ (Verified)${NC}"
 echo -e "${GREEN}✅ Finality: 85ms (Sub-second)${NC}"
 echo -e "${GREEN}✅ Gas Fees: \$0.00 (Forever)${NC}"
-echo -e "${GREEN}✅ Validator APY: 26.67%${NC}"
+echo -e "${GREEN}✅ Validator APY: 13.33%${NC}"
 
 echo ""
 echo -e "${BLUE}🌉 Interoperability Matrix:${NC}"

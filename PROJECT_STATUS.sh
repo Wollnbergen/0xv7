@@ -89,7 +89,7 @@ echo "════════════════════════�
 echo ""
 echo "⚡ Performance:      1,216,500 TPS (Tested)"
 echo "💰 Gas Fees:         \$0.00 (Working)"
-echo "💎 Staking APY:      26.67% (Configured)"
+echo "💎 Staking APY:      13.33% (Configured)"
 echo "🔒 Security:         Quantum-Resistant (Implemented)"
 echo "🌉 Bridges:          BTC, ETH, SOL, TON (Ready)"
 echo ""

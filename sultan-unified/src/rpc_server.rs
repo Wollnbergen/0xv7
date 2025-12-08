@@ -153,7 +153,7 @@ impl RpcServer {
             Ok(json!({
                 "total_staked": "0",
                 "validators": [],
-                "apy": "26.67"
+                "apy": "13.33"
             }))
         });
         

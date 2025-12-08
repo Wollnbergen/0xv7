@@ -429,7 +429,7 @@ unbonding_period_days = 21
 [economics]
 total_supply = 1000000000
 inflation_rate = 0.08
-staking_apy = 0.2667
+staking_apy = 0.1333
 mobile_bonus = 0.40
 
 [p2p]

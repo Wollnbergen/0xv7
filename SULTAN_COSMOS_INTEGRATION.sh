@@ -6,8 +6,8 @@ echo "║      SULTAN + COSMOS SDK TRUE INTEGRATION                     ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
 echo -e "\n📋 INTEGRATION PLAN:"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "1. Sultan remains the PRIMARY chain (26.67% APY)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "1. Sultan remains the PRIMARY chain (13.33% APY)"
 echo "2. Cosmos SDK provides IBC, WASM, and infrastructure"
 echo "3. Bridge module syncs state between both"
 echo "4. Single unified API exposing both capabilities"
@@ -29,21 +29,21 @@ import (
 type SultanCosmosBridge struct {
     sultanRPC   string  // Port 3030
     cosmosRPC   string  // Port 26657
-    sultanAPY   float64 // 26.67%
+    sultanAPY   float64 // 13.33%
 }
 
 func NewBridge() *SultanCosmosBridge {
     return &SultanCosmosBridge{
         sultanRPC: "http://localhost:3030",
         cosmosRPC: "http://localhost:26657",
-        sultanAPY: 0.2667,
+        sultanAPY: 0.1333,
     }
 }
 
-// SyncEconomics applies Sultan's 26.67% APY to Cosmos validators
+// SyncEconomics applies Sultan's 13.33% APY to Cosmos validators
 func (b *SultanCosmosBridge) SyncEconomics() error {
     // Override Cosmos inflation with Sultan's model
-    // Actual APY = 26.67% (Sultan's rate)
+    // Actual APY = 13.33% (Sultan's rate)
     return nil
 }
 
@@ -65,8 +65,8 @@ import json
 with open('/workspaces/0xv7/sultan-cosmos/genesis.json', 'r') as f:
     genesis = json.load(f)
 
-# Apply Sultan economics (26.67% APY requires ~8% inflation with 30% bonding)
-# But we'll set higher inflation to achieve 26.67% APY
+# Apply Sultan economics (13.33% APY requires ~4% inflation with 30% bonding)
+# But we'll set higher inflation to achieve 13.33% APY
 genesis['app_state']['mint']['params']['inflation_max'] = "0.800000000000000000"  # 80% max
 genesis['app_state']['mint']['params']['inflation_min'] = "0.070000000000000000"  # 7% min
 genesis['app_state']['mint']['params']['inflation_rate_change'] = "0.130000000000000000"
@@ -111,7 +111,7 @@ app.get('/status', async (req, res) => {
             chain: 'Sultan Chain (Cosmos-Integrated)',
             sultan: {
                 api: 'http://localhost:3030',
-                apy: '26.67%',
+                apy: '13.33%',
                 status: sultanStatus.data
             },
             cosmos: {
@@ -122,7 +122,7 @@ app.get('/status', async (req, res) => {
             },
             unified_features: {
                 zero_gas: true,
-                staking_apy: '26.67%',
+                staking_apy: '13.33%',
                 ibc_support: true,
                 smart_contracts: true,
                 quantum_safe: true,
@@ -150,8 +150,8 @@ echo "╔═══════════════════════�
 echo "║         STARTING INTEGRATED SULTAN + COSMOS                   ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
-# Start Sultan (Rust) - Primary chain with 26.67% APY
-echo -e "\n1️⃣ Starting Sultan Core (26.67% APY)..."
+# Start Sultan (Rust) - Primary chain with 13.33% APY
+echo -e "\n1️⃣ Starting Sultan Core (13.33% APY)..."
 if [ -f "/workspaces/0xv7/sultan" ]; then
     /workspaces/0xv7/sultan --port 3030 &
     SULTAN_PID=$!
@@ -189,14 +189,14 @@ echo "   ✅ Unified API running on port 8080"
 
 echo -e "\n✨ INTEGRATION COMPLETE!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "• Sultan Core: http://localhost:3030 (26.67% APY)"
+echo "• Sultan Core: http://localhost:3030 (13.33% APY)"
 echo "• Cosmos SDK: http://localhost:26657 (IBC/WASM)"
 echo "• Unified API: http://localhost:8080"
 echo "• Dashboard: http://localhost:3000"
 echo ""
 echo "Features:"
 echo "✅ Zero Gas Fees (Sultan)"
-echo "✅ 26.67% APY (Sultan Economics)"
+echo "✅ 13.33% APY (Sultan Economics)"
 echo "✅ IBC Support (Cosmos SDK)"
 echo "✅ Smart Contracts (CosmWasm)"
 echo "✅ Quantum Safe (Sultan)"

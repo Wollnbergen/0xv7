@@ -17,7 +17,7 @@ cat > /workspaces/0xv7/validator_staking.json << 'STAKING'
   },
   "rewards": {
     "validator_commission": "10%",
-    "delegator_apy": "26.67%",
+    "delegator_apy": "13.33%",
     "distribution_frequency": "every block"
   },
   "slashing": {

@@ -73,7 +73,7 @@ fn main() -> Result<()> {
     println!("✅ Zero Gas Fees: CONFIRMED ($0.00)");
     println!("✅ Target TPS: 1,200,000+");
     println!("✅ Quantum Resistant: Dilithium3 Active");
-    println!("✅ Staking APY: 26.67%");
+    println!("✅ Staking APY: 13.33%");
     println!("✅ Block Time: 5 seconds");
     println!();
     

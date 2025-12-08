@@ -17,7 +17,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 # Check Telegram bot
 if [ -f "/workspaces/0xv7/server/server.js" ]; then
     echo "✅ Telegram Bot: EXISTS at server/server.js"
-    grep -q "26.67" /workspaces/0xv7/server/server.js && echo "   • 26.67% APY configured"
+    grep -q "13.33" /workspaces/0xv7/server/server.js && echo "   • 13.33% APY configured"
     grep -q "5000" /workspaces/0xv7/server/server.js && echo "   • 5000 SLTN minimum stake"
 fi
 

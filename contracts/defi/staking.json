@@ -1,6 +1,6 @@
 {
   "name": "Sultan Staking",
-  "apy": 26.67,
+  "apy": 13.33,
   "min_stake": "5000000000",
   "unbonding_period": "21 days",
   "rewards_token": "native:usltn"

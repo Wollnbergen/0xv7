@@ -8,7 +8,7 @@
 - ✅ **Zero Gas Fees**: $0.00 forever - ACTIVE
 - ✅ **1.2M+ TPS**: World record capacity - OPERATIONAL
 - ✅ **85ms Finality**: Fastest in industry - CONFIRMED
-- ✅ **26.67% Validator APY**: Highest sustainable rewards - LIVE
+- ✅ **13.33% Validator APY**: Highest sustainable rewards - LIVE
 - ✅ **1,000 SLTN Minimum Stake**: Low barrier entry - SET
 
 ### Infrastructure
@@ -36,7 +36,7 @@
 - ✅ **100 Validators**: All online
 - ✅ **Genesis Complete**: Block #1 produced
 - ✅ **Consensus**: BFT operational
-- ✅ **Staking**: Live with 26.67% APY
+- ✅ **Staking**: Live with 13.33% APY
 
 ## 📈 LAUNCH METRICS
 
@@ -81,7 +81,7 @@ Developer Signups: Open access (no signup needed)
 
 3. **For Validators**
    - Stake minimum 1,000 SLTN
-   - Earn 26.67% APY
+   - Earn 13.33% APY
    - Join growing network
 
 ## 📞 COMMUNITY

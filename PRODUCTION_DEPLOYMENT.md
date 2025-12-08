@@ -181,7 +181,7 @@ curl http://localhost:26657/status | jq '.height'
 ```json
 {
   "inflation_rate": 0.08,
-  "validator_apy": 0.2667,
+  "validator_apy": 0.1333,
   "min_validator_stake": "5000000000000",
   "total_supply": "500000000000000000"
 }
@@ -509,7 +509,7 @@ Before going live:
 - ✅ <500ms block confirmation
 - ✅ 500K+ TPS capacity
 - ✅ $0.00 transaction fees
-- ✅ 26.67% validator APY
+- ✅ 13.33% validator APY
 
 **Decentralization:**
 - ✅ 50+ independent validators

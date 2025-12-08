@@ -26,7 +26,7 @@ pub struct ChainConfig {
     pub min_stake: u64,
     pub inflation_rate: f64,
     pub gas_price: u64,      // Added: Always 0 for zero gas fees
-    pub staking_apy: f64,    // Added: 26.67% APY
+    pub staking_apy: f64,    // Added: 13.33% APY
     pub max_block_size: usize,
     pub enable_smart_contracts: bool,
     pub consensus_type: String,
@@ -41,7 +41,7 @@ impl Default for ChainConfig {
             min_stake: 5000,
             inflation_rate: 0.08,
             gas_price: 0,  // Zero gas fees forever!
-            staking_apy: 0.2667,  // 26.67% APY
+            staking_apy: 0.1333,  // 13.33% APY
             max_block_size: 1_000_000,
             enable_smart_contracts: true,
             consensus_type: "PoS".to_string(),
@@ -111,7 +111,7 @@ fn main() {
     
     println!("\n🚀 Sultan Blockchain core is working perfectly!");
     println!("   Zero gas fees ✓");
-    println!("   26.67% APY staking ✓");
+    println!("   13.33% APY staking ✓");
     println!("   Block production ✓");
     println!("   Transaction processing ✓");
 }
@@ -145,7 +145,7 @@ if [ -f "target/debug/test_node" ]; then
     echo "📊 PRODUCTION STATUS:"
     echo "   ✅ Blockchain Core: RUNNING"
     echo "   ✅ Zero Gas Fees: ACTIVE ($0.00)"
-    echo "   ✅ 26.67% APY Staking: CONFIGURED"
+    echo "   ✅ 13.33% APY Staking: CONFIGURED"
     echo "   ✅ Block Production: WORKING"
     echo "   ✅ Transaction Processing: FUNCTIONAL"
     echo ""

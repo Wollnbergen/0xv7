@@ -34,7 +34,7 @@ echo "├───────────────────────�
 echo "│ Gas Fees:         $0.00 (Zero Forever)                            │"
 echo "│ TPS Capability:   1,200,000+                                      │"
 echo "│ Consensus:        CometBFT (Tendermint)                           │"
-echo "│ Staking APY:      26.67%                                         │"
+echo "│ Staking APY:      13.33%                                         │"
 echo "│ Inflation:        8% (subsidizes zero fees)                      │"
 echo "│ Security:         Quantum-Resistant (Kyber-1024)                 │"
 echo "│ Token:            SLTN                                           │"

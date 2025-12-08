@@ -28,7 +28,7 @@
     }
   },
   "staking": {
-    "apy": 26.67,
+    "apy": 13.33,
     "min_stake": 5000,
     "unbonding_period_days": 21,
     "max_validators": 100

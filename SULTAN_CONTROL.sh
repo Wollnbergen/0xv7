@@ -67,7 +67,7 @@ case $option in
             echo "Block Height: #$BH"
             echo "TPS: 1,247,000+"
             echo "Gas Fees: $0.00"
-            echo "APY: 26.67%"
+            echo "APY: 13.33%"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             sleep 2
         done
@@ -105,7 +105,7 @@ case $option in
         echo "• TPS: 1,247,000+ transactions per second"
         echo "• Block Time: ~85ms"
         echo "• Gas Fees: $0.00 (ALWAYS FREE)"
-        echo "• Staking APY: 26.67% (37.33% mobile)"
+        echo "• Staking APY: 13.33% (18.66% mobile)"
         echo "• Min Stake: 5,000 SLTN"
         echo "• Total Supply: 173,000,000 SLTN"
         echo "• Validators: 3 active nodes"

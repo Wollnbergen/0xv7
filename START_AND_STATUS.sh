@@ -29,7 +29,7 @@ BLOCK=$(curl -s http://localhost:4001/consensus_state 2>/dev/null | jq -r '.bloc
 echo "  Block Height: #$BLOCK"
 echo "  Gas Fees: $0.00"
 echo "  TPS: 1,247,000+"
-echo "  APY: 26.67%"
+echo "  APY: 13.33%"
 echo ""
 
 # Test each endpoint

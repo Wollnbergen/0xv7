@@ -24,7 +24,7 @@
 ### Key Features Implemented
 
 - **Zero Gas Fees**: Users can perform transactions without any fees.
-- **Validator APY**: Maximum validator rewards set at 26.67%.
+- **Validator APY**: Maximum validator rewards set at 13.33%.
 - **Dynamic Inflation**: Inflation rates decrease over time.
 - **Burn Mechanism**: A 1% fee on high-volume transactions.
 - **Public and Local Access**: The testnet is accessible both locally and via a public URL.

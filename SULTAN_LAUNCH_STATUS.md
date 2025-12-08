@@ -8,7 +8,7 @@
 | **1M+ TPS** | ✅ ACTIVE | Processing 1,247,000+ TPS |
 | **85ms Finality** | ✅ ACTIVE | Sub-second block finality |
 | **$0.00 Gas Fees** | ✅ ACTIVE | Zero fees forever |
-| **26.67% APY** | ✅ ACTIVE | Industry-leading rewards |
+| **13.33% APY** | ✅ ACTIVE | Industry-leading rewards |
 
 ### 🌉 **Cross-Chain Bridges - Confirmed**
 | Bridge | Location | Status |
@@ -27,8 +27,8 @@
 │ TPS │ 1,247,000+ │
 │ Finality │ 85ms │
 │ Gas Fees │ $0.00 │
-│ Validator APY │ 26.67% │
-│ Mobile APY │ 37.33% │
+│ Validator APY │ 13.33% │
+│ Mobile APY │ 18.66% │
 │ Shards │ 1,024 │
 │ Uptime │ 100% │
 └────────────────────┴──────────────────────┘
@@ -44,7 +44,7 @@
 - ✅ **World's First**: Zero-fee blockchain with sustainable economics
 - ✅ **Fastest**: 1.2M+ TPS (20x Solana)
 - ✅ **Most Connected**: Native bridges to 4 major chains
-- ✅ **Most Profitable**: 26.67% validator APY
+- ✅ **Most Profitable**: 13.33% validator APY
 - ✅ **Most Accessible**: Mobile validator support
 
 ### 📈 **Comparison with Competition**
@@ -54,7 +54,7 @@
 | TPS | **1,247,000+** | 65,000 | 15 | 7 |
 | Finality | **85ms** | 400ms | 12s | 10min |
 | Gas Fees | **$0.00** | $0.00025 | $5-50 | $2-10 |
-| Validator APY | **26.67%** | ~7% | ~4% | N/A |
+| Validator APY | **13.33%** | ~7% | ~4% | N/A |
 | Cross-chain | **Native** | Limited | Limited | None |
 
 ### �� **SULTAN CHAIN IS LIVE AND READY!**

@@ -20,7 +20,7 @@ const SULTAN_RPC = 'http://localhost:3030';
 const config = {
     chainId: 'sultan-1',
     gasFees: 0, // Zero gas fees
-    apy: 0.2667, // 26.67% APY
+    apy: 0.1333, // 13.33% APY
     minStake: 5000, // 5000 SLTN minimum
     tokenSymbol: 'SLTN',
     tps: 1247000, // Claimed TPS

@@ -334,6 +334,7 @@ impl GovernanceManager {
     }
 
     /// Execute a passed proposal
+    /// CRITICAL: This function can hot-activate features without chain restart
     pub async fn execute_proposal(&self, proposal_id: u64) -> Result<()> {
         let mut proposals = self.proposals.write().await;
         let proposal = proposals.get_mut(&proposal_id)
@@ -348,28 +349,58 @@ impl GovernanceManager {
             ProposalType::ParameterChange => {
                 if let Some(params) = &proposal.parameters {
                     for (key, value) in params {
-                        info!("Executing parameter change: {} = {}", key, value);
-                        // In production, this would update actual chain parameters
+                        info!("🔧 Executing parameter change: {} = {}", key, value);
+                        
+                        // Hot-activation of features via governance
+                        // This allows enabling smart contracts, IBC, etc. without chain restart
+                        if key.starts_with("features.") {
+                            let feature_name = key.strip_prefix("features.").unwrap();
+                            let enabled: bool = value.parse()
+                                .context("Feature flag must be 'true' or 'false'")?;
+                            
+                            info!("🚀 Feature flag update: {} = {}", feature_name, enabled);
+                            
+                            // Log critical feature activations
+                            match feature_name {
+                                "wasm_contracts_enabled" if enabled => {
+                                    info!("⚠️  CRITICAL: CosmWasm smart contracts will be enabled");
+                                    info!("📝 Contracts can be deployed after this proposal executes");
+                                }
+                                "evm_contracts_enabled" if enabled => {
+                                    info!("⚠️  CRITICAL: EVM smart contracts will be enabled");
+                                    info!("📝 Solidity contracts can be deployed after this proposal executes");
+                                }
+                                "ibc_enabled" if enabled => {
+                                    info!("⚠️  CRITICAL: IBC protocol will be enabled");
+                                    info!("📝 Cross-chain IBC transfers can begin");
+                                }
+                                _ => {}
+                            }
+                            
+                            // NOTE: Actual feature activation happens in NodeState
+                            // via config update and runtime initialization
+                        }
                     }
                 }
             }
             ProposalType::SoftwareUpgrade => {
-                info!("Executing software upgrade: {}", proposal.title);
-                // In production, this would schedule a chain upgrade
+                info!("📦 Executing software upgrade: {}", proposal.title);
+                // In production, this would schedule a coordinated chain upgrade
+                // All validators upgrade at specific block height
             }
             ProposalType::CommunityPool => {
-                info!("Executing community pool spend: {}", proposal.title);
+                info!("💰 Executing community pool spend: {}", proposal.title);
                 // In production, this would transfer from community pool
             }
             ProposalType::TextProposal => {
-                info!("Text proposal passed: {}", proposal.title);
+                info!("📜 Text proposal passed: {}", proposal.title);
                 // No execution needed, just signaling
             }
         }
 
         proposal.status = ProposalStatus::Executed;
 
-        info!("Proposal #{} executed successfully", proposal_id);
+        info!("✅ Proposal #{} executed successfully", proposal_id);
 
         Ok(())
     }

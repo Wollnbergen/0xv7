@@ -63,7 +63,7 @@ Integration: Live Sultan node connection
 - ✅ Keplr wallet integration
 - ✅ Balance queries with retry logic
 - ✅ Validator onboarding system
-- ✅ APY earnings calculator (26.67%)
+- ✅ APY earnings calculator (13.33%)
 - ✅ Error handling & offline detection
 - ✅ Mobile responsive design
 - ✅ Loading states & user feedback
@@ -152,7 +152,7 @@ Integration: Live Sultan node connection
 - ✅ Keplr wallet connection flow
 - ✅ Balance queries with retry logic (3 attempts)
 - ✅ Validator onboarding system
-- ✅ APY earnings calculator (26.67%)
+- ✅ APY earnings calculator (13.33%)
 - ✅ Error states and offline detection
 - ✅ Loading indicators for all async operations
 - ✅ Mobile responsive design

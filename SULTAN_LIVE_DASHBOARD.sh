@@ -30,7 +30,7 @@ while true; do
     echo "│ Gas Fees:        $0.00 (Zero Forever)                              │"
     echo "│ TPS Capability:  1,200,000+                                        │"
     echo "│ Quantum Safe:    ✅ Enabled                                        │"
-    echo "│ Staking APY:     26.67%                                            │"
+    echo "│ Staking APY:     13.33%                                            │"
     echo "│ Cosmos IBC:      ✅ Ready                                          │"
     echo "└─────────────────────────────────────────────────────────────────────┘"
     

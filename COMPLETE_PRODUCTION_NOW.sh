@@ -207,7 +207,7 @@ impl Default for ChainConfig {
             chain_id: "sultan-1".to_string(),
             gas_price: 0,  // Zero gas fees forever
             block_time: 1,
-            staking_apy: 26.67,
+            staking_apy: 13.33,
         }
     }
 }

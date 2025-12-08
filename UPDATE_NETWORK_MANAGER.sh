@@ -19,7 +19,7 @@ if curl -s http://localhost:26657/status > /dev/null 2>&1; then
     echo "  ✅ Current Height: Block #$HEIGHT"
     echo "  ✅ Chain ID: sultan-1"
     echo "  ✅ Zero Gas Fees: ENABLED"
-    echo "  ✅ Staking APY: 26.67%"
+    echo "  ✅ Staking APY: 13.33%"
     echo ""
 else
     echo "⚠️ Cosmos chain not detected. Starting it now..."

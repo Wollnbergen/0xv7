@@ -199,7 +199,7 @@ grep "enabled-unsafe-cors" ~/.sultan/config/app.toml
 - **Chain ID:** sultan-1
 - **Total Supply:** 500,000,000 SLTN
 - **Min Validator Stake:** 10,000 SLTN
-- **Validator APY:** 26.67%
+- **Validator APY:** 13.33%
 - **Delegator APY:** 10%
 - **Gas Fees:** $0.00 (zero forever)
 - **Block Time:** ~6 seconds

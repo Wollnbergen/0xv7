@@ -48,7 +48,7 @@ fn main() {
     println!("\n✅ Configuration:");
     println!("   Chain ID: {}", config.chain_id);
     println!("   Gas Price: $0.00 (Zero forever!)");
-    println!("   Staking APY: 26.67%");
+    println!("   Staking APY: 13.33%");
     
     let mut blockchain = Blockchain::new(config);
     println!("\n✅ Blockchain initialized");
@@ -67,7 +67,7 @@ fn main() {
     
     println!("\n🚀 Sultan Blockchain is operational!");
     println!("   ✓ Zero gas fees");
-    println!("   ✓ 26.67% APY staking");
+    println!("   ✓ 13.33% APY staking");
     println!("   ✓ Block production working");
 }
 RUST

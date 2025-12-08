@@ -75,7 +75,7 @@ async fn message_handler(
                 The fastest blockchain with *zero gas fees*.\n\n\
                 • 2-second finality\n\
                 • Native ETH/SOL/TON/BTC swaps\n\
-                • 26.67% staking APY\n\n\
+                • 13.33% staking APY\n\n\
                 Choose an option below:"
             );
 
@@ -213,7 +213,7 @@ async fn check_balance(
             Staked: *{:.2} SLTN*\n\
             Rewards: *{:.2} SLTN*\n\n\
             Validator: {}\n\
-            APY: *26.67%*",
+            APY: *13.33%*",
             wallet.address,
             wallet.balance as f64 / 1_000_000_000_000.0,
             wallet.staked as f64 / 1_000_000_000_000.0,
@@ -251,7 +251,7 @@ async fn stake_menu(
             "⚡ *One-Tap Staking*\n\n\
             Available: *{:.2} SLTN*\n\
             Minimum: *5,000 SLTN*\n\
-            APY: *26.67%*\n\n\
+            APY: *13.33%*\n\n\
             Choose amount to stake:",
             wallet.balance as f64 / 1_000_000_000_000.0
         );
@@ -313,7 +313,7 @@ async fn stake_tokens(
                 Total Staked: *{:.2} SLTN*\n\
                 Validator: {}\n\n\
                 *Zero gas fees* ⚡\n\
-                Earning *26.67% APY* 🚀",
+                Earning *13.33% APY* 🚀",
                 amount as f64 / 1_000_000_000_000.0,
                 wallet.staked as f64 / 1_000_000_000_000.0,
                 if wallet.is_validator { "✅ Active" } else { "❌ Inactive" }
@@ -451,7 +451,7 @@ async fn check_rewards(
     let wallets = state.wallets.read().await;
     
     if let Some(wallet) = wallets.get(&user_id) {
-        let daily_rewards = (wallet.staked as f64 * 0.2667) / 365.0 / 1_000_000_000_000.0;
+        let daily_rewards = (wallet.staked as f64 * 0.1333) / 365.0 / 1_000_000_000_000.0;
         
         let message = format!(
             "📊 *Staking Rewards*\n\n\
@@ -460,7 +460,7 @@ async fn check_rewards(
             Daily: ~{:.2} SLTN\n\
             Monthly: ~{:.2} SLTN\n\
             Yearly: ~{:.2} SLTN\n\n\
-            APY: *26.67%*",
+            APY: *13.33%*",
             wallet.staked as f64 / 1_000_000_000_000.0,
             wallet.rewards as f64 / 1_000_000_000_000.0,
             daily_rewards,

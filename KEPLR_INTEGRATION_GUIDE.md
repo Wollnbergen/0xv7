@@ -16,7 +16,7 @@ Sultan L1 is **fully compatible with Keplr wallet**, the most popular wallet for
    - Send/receive transactions
    - Transaction history
 
-2. **Staking** (26.67% APY)
+2. **Staking** (13.33% APY)
    - View all validators
    - Delegate SLTN to validators
    - Redelegate between validators
@@ -157,14 +157,14 @@ addSultanToKeplr();
 ### Staking Rewards Calculation
 
 ```
-Your Annual Rewards = Your Stake × 26.67% APY
+Your Annual Rewards = Your Stake × 13.33% APY
 Daily Rewards = Annual Rewards / 365
 Per Block Rewards = Daily Rewards / 17,280 blocks
 ```
 
 **Example:**
 - Stake: 10,000 SLTN
-- APY: 26.67%
+- APY: 13.33%
 - Annual Rewards: 2,667 SLTN
 - Daily Rewards: 7.31 SLTN
 - Per Block Rewards: 0.000423 SLTN
@@ -496,7 +496,7 @@ async function voteOnProposal(proposalId, vote) {
 1. **Install Keplr**: https://www.keplr.app/
 2. **Add Sultan**: Visit add-to-keplr.html
 3. **Get SLTN**: Bridge from other chains or buy on DEX
-4. **Stake**: Delegate to validators for 26.67% APY
+4. **Stake**: Delegate to validators for 13.33% APY
 5. **Vote**: Participate in governance
 6. **Earn**: Claim rewards regularly
 

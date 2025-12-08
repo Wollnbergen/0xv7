@@ -27,14 +27,17 @@ pub mod native_dex;
 // Re-export main types for convenience
 pub use blockchain::{Blockchain, Block, Transaction, Account};
 pub use consensus::{ConsensusEngine, Validator};
-pub use p2p::P2PNetwork;
+pub use p2p::{P2PNetwork, NetworkMessage};
 pub use quantum::QuantumCrypto;
 pub use storage::PersistentStorage;
 pub use types::Address;
 pub use config::Config;
 pub use transaction_validator::TransactionValidator;
+// Legacy sharding (deprecated - tests only)
+#[deprecated(note = "Use ShardedBlockchainProduction from sharding_production module")]
 pub use sharding::{ShardingCoordinator, ShardConfig, ShardStats};
-pub use sharding_production::{ShardingCoordinator as ProductionShardingCoordinator};
+pub use sharding_production::{ShardingCoordinator as ProductionShardingCoordinator, ShardConfig as ProductionShardConfig};
+#[deprecated(note = "Use ShardedBlockchainProduction instead")]
 pub use sharded_blockchain::ShardedBlockchain;
 pub use sharded_blockchain_production::ShardedBlockchainProduction;
 

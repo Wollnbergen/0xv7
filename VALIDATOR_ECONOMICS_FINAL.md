@@ -2,16 +2,16 @@
 
 ## Validator Rewards
 
-- **Annual Percentage Yield (APY)**: 26.67%
+- **Annual Percentage Yield (APY)**: 13.33%
 - **Unbonding Period**: 21 days
 - **Minimum Stake**: 1,000 SLTN
 - **Slashing**: 1% for extended downtime
 
 ## Economics Model
 
-- 8% annual inflation funds all rewards
+- 4% annual inflation funds all rewards
 - Single-tier validator system (no mobile bonus)
-- All validators earn the same 26.67% APY
+- All validators earn the same 13.33% APY
 - Sustainable long-term economics
 
 ## Validator Requirements

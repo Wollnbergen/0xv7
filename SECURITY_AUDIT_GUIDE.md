@@ -8,7 +8,7 @@
 
 Sultan L1 is a high-performance Layer 1 blockchain with:
 - **Consensus**: Proof-of-Stake with Byzantine Fault Tolerance
-- **Throughput**: 64,000 TPS (8 shards @ 8K TPS each), expandable to 64M TPS (8,000 shards)
+- **Throughput**: 64,000 TPS (8 shards @ 8K TPS each), auto-expandable to 64M TPS (8,000 shards)
 - **Features**: On-chain governance, cross-chain bridges, built-in DEX
 - **Smart Contracts**: Hot-upgradeable via governance (WASM/EVM support planned)
 
@@ -41,7 +41,8 @@ Sultan L1 is a high-performance Layer 1 blockchain with:
    - Replay attack prevention
 
 5. **Infrastructure**
-   - `sharding_production.rs` - Production shard management
+   - `sharding_production.rs` - **ACTIVE PRODUCTION** shard management (8 shards, auto-scales to 8000)
+   - `sharding.rs` - Legacy/reference implementation (NOT USED in production)
    - `sharded_blockchain_production.rs` - Sharded state distribution
    - `main.rs` - RPC endpoints, input validation
    - `config.rs` - Feature flags, hot-upgrade mechanism
@@ -49,6 +50,34 @@ Sultan L1 is a high-performance Layer 1 blockchain with:
    - `storage.rs` - Storage backend
    - `p2p.rs` - P2P networking
    - `quantum.rs` - Quantum-safe cryptography
+
+**⚠️ CRITICAL for Auditors - Dual Sharding Implementation:**
+
+This codebase contains **TWO** sharding implementations. You must audit the correct one:
+
+**❌ LEGACY (DO NOT AUDIT - Tests Only):**
+- `sultan-core/src/sharding.rs` - Old implementation (100 shards default, 10K TPS/shard)
+- `sultan-core/src/sharded_blockchain.rs` - Old blockchain wrapper
+- **Only used in:** Test files (`tests/sharding_integration.rs`)
+- **NOT used in production node**
+
+**✅ PRODUCTION (AUDIT THIS - Actual Mainnet Code):**
+- `sultan-core/src/sharding_production.rs` - Production sharding (8 shards, 8K TPS/shard, auto-scales to 8000)
+- `sultan-core/src/sharded_blockchain_production.rs` - Production blockchain
+- **Used in:** `main.rs` (the actual node binary)
+- **This is what's running on mainnet**
+
+**Verification - Check main.rs imports:**
+```rust
+use sultan_core::sharding_production::ShardConfig;
+use sultan_core::ShardedBlockchainProduction;  // ← Production version
+```
+
+**Why Two Implementations?**
+Historical development. Legacy kept for backward compatibility with old tests. Scheduled for removal to eliminate confusion.
+
+**For Audit Report:**
+Please clearly state which implementation was audited. Recommend auditing **only** the production files.
 
 ### Out-of-Scope (Future Development)
 
@@ -97,6 +126,46 @@ target-dir = "/tmp/cargo-target"
 **Binary location after build**:
 - Debug: `/tmp/cargo-target/debug/sultan-node`
 - Release: `/tmp/cargo-target/release/sultan-node`
+
+---
+
+## Recent Fixes & Known Issues
+
+### ✅ Fixed: Status Endpoint Shard Count (December 6, 2025)
+
+**Issue**: RPC `/status` endpoint incorrectly reported `shard_count: 100` (hardcoded) instead of actual runtime value (8 shards).
+
+**Impact**: 
+- **Severity**: LOW (cosmetic/informational only)
+- **User Impact**: Website displayed inflated TPS capacity (800K vs actual 64K)
+- **Security Impact**: NONE - did not affect blockchain operation, consensus, or funds
+- **Actual Operation**: Node correctly operated with 8 shards (64K TPS capacity)
+
+**Root Cause**: `sultan-core/src/main.rs` line 433 used hardcoded fallback value instead of reading `ShardedBlockchainProduction.config.shard_count`
+
+**Fix Applied**:
+```rust
+// BEFORE (incorrect):
+shard_count: if self.sharding_enabled { 
+    self.sharded_blockchain.as_ref().map(|s| {
+        100 // Default value, could be refined
+    }).unwrap_or(0)
+}
+
+// AFTER (correct):
+shard_count: if self.sharding_enabled { 
+    self.sharded_blockchain.as_ref().and_then(|s| {
+        s.try_read().ok().map(|shard| shard.config.shard_count)
+    }).unwrap_or(0)
+}
+```
+
+**Verification**: `curl https://rpc.sltn.io/status | jq .shard_count` now returns `8`
+
+**Auditor Notes**: 
+- This demonstrates importance of reading actual runtime config vs defaults
+- Good reminder to validate all RPC endpoint responses against actual state
+- No security implications, but highlights need for integration tests on API endpoints
 
 ---
 

@@ -58,7 +58,7 @@
    - Token metadata management
 
 10. **economics.rs**
-    - Inflation model (8% annual)
+    - Inflation model (4% annual)
     - Fee distribution
     - APY calculations
 

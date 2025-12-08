@@ -20,7 +20,7 @@ if [ $R -eq 6 ]; then
     echo "📊 Live Metrics:"
     echo "  • TPS Capacity: 1,247,000+"
     echo "  • Block Time: ~85ms"
-    echo "  • Staking APY: 26.67%"
+    echo "  • Staking APY: 13.33%"
     echo "  • Gas Fees: $0.00 (ALWAYS FREE)"
 else
     echo "⚠️ Some services are down ($R/6 running)"

@@ -31,7 +31,7 @@ pub struct Blockchain {
 
 impl Blockchain {
     pub fn init_genesis_validators(&self) -> Result<()> {
-        info!("Genesis validators: 100 mobile + 20 professional (stake >= 5k SLTN, APY ~26.67%)");
+        info!("Genesis validators: 100 mobile + 20 professional (stake >= 5k SLTN, APY ~13.33%)");
         Ok(())
     }
 
@@ -90,7 +90,7 @@ impl Blockchain {
     }
 
     pub async fn get_live_apy(&self) -> Result<f64> {
-        Ok(26.67)
+        Ok(13.33)
     }
 
     /// Atomic swap via interop bridges, then persist balance deltas.
@@ -214,7 +214,7 @@ impl Blockchain {
         let mobile_ratio = num_mobile as f64 / (num_mobile + num_professional) as f64;
         if mobile_ratio >= 0.3 {
             tracing::info!(
-                "Production validator scale: {} mobile + {} professional (uptime 99.999%, stake >= 5k SLTN, APY ~26.67%)",
+                "Production validator scale: {} mobile + {} professional (uptime 99.999%, stake >= 5k SLTN, APY ~13.33%)",
                 num_mobile, num_professional
             );
             Ok(())

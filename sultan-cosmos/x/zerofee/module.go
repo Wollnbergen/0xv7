@@ -9,7 +9,7 @@ type ZeroFeeModule struct{}
 
 // ProcessTransaction with ZERO fees
 func (m *ZeroFeeModule) ProcessTransaction(ctx sdk.Context, tx sdk.Tx) error {
-    // No fees charged - subsidized by 8% inflation
+    // No fees charged - subsidized by 4% inflation
     return nil
 }
 
@@ -18,7 +18,7 @@ func (m *ZeroFeeModule) GetTransactionFee() sdk.Coins {
     return sdk.NewCoins() // Empty = $0.00
 }
 
-// ValidatorAPY returns 26.67%
+// ValidatorAPY returns 13.33%
 func (m *ZeroFeeModule) GetValidatorAPY() float64 {
-    return 0.2667 // 26.67% APY
+    return 0.1333 // 13.33% APY
 }

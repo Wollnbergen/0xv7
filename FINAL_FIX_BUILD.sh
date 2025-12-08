@@ -164,7 +164,7 @@ pub use types::{Transaction, SultanToken, Account};  // Export Transaction
 
 pub const VERSION: &str = "1.0.0";
 pub const ZERO_GAS_FEE: u64 = 0;
-pub const STAKING_APY: f64 = 0.2667;
+pub const STAKING_APY: f64 = 0.1333;
 RUST
 
 echo "✅ lib.rs updated"
@@ -290,7 +290,7 @@ if grep -q "Finished.*release\|Finished.*debug" /tmp/build.log && [ -f "target/d
     echo "   ✅ Blockchain Core: COMPILED & RUNNING"
     echo "   ✅ Zero Gas Fees: ACTIVE"
     echo "   ✅ Block Production: WORKING"
-    echo "   ✅ 26.67% APY Staking: CONFIGURED"
+    echo "   ✅ 13.33% APY Staking: CONFIGURED"
     echo ""
     echo "🌐 Check the web dashboard:"
     echo "   $BROWSER http://localhost:3000"

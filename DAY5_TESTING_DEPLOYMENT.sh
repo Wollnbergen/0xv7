@@ -97,7 +97,7 @@ cat > /workspaces/0xv7/README.md << 'DOC'
 
 ## 🚀 Overview
 
-Sultan Chain is a revolutionary blockchain platform offering **$0.00 gas fees forever**, achieving **1.2M+ TPS**, with **quantum-resistant security** and **26.67% staking APY**.
+Sultan Chain is a revolutionary blockchain platform offering **$0.00 gas fees forever**, achieving **1.2M+ TPS**, with **quantum-resistant security** and **13.33% staking APY**.
 
 ### 🌟 Key Features
 
@@ -106,7 +106,7 @@ Sultan Chain is a revolutionary blockchain platform offering **$0.00 gas fees fo
 | Gas Fees | **$0.00** | $5-50 | $0.01 | $0.10 |
 | TPS | **1,200,000+** | 15 | 65,000 | 10,000 |
 | Quantum Safe | ✅ | ❌ | ❌ | ❌ |
-| Staking APY | **26.67%** | 4% | 6% | 18% |
+| Staking APY | **13.33%** | 4% | 6% | 18% |
 | IBC Support | ✅ | ❌ | ❌ | ✅ |
 
 ## 🏗️ Architecture
@@ -200,7 +200,7 @@ cat > /workspaces/0xv7/README.md << 'DOC'
 Sultan Chain is a revolutionary blockchain platform that achieves what was previously thought impossible:
 - **Zero gas fees** ($0.00 forever)
 - **1.2M+ TPS** (verified through load testing)
-- **26.67% APY** staking rewards
+- **13.33% APY** staking rewards
 - **Quantum-resistant** security
 - **Multi-chain bridges** (BTC, ETH, SOL, TON)
 
@@ -246,7 +246,7 @@ Sultan Chain is a revolutionary blockchain platform that achieves what was previ
 - **Token:** SLTN
 - **Total Supply:** 1,000,000,000
 - **Inflation:** 8% (funds zero fees)
-- **Staking APY:** 26.67%
+- **Staking APY:** 13.33%
 
 ## 🚀 Quick Start
 
@@ -351,7 +351,7 @@ cat > /workspaces/0xv7/README.md << 'DOC'
 Sultan Chain is a revolutionary blockchain platform that achieves what was previously thought impossible:
 - **Zero gas fees** ($0.00 forever)
 - **1.2M+ TPS** (verified through load testing)
-- **26.67% APY** staking rewards
+- **13.33% APY** staking rewards
 - **Quantum-resistant** security
 - **Multi-chain bridges** (BTC, ETH, SOL, TON)
 
@@ -397,7 +397,7 @@ Sultan Chain is a revolutionary blockchain platform that achieves what was previ
 - **Token:** SLTN
 - **Total Supply:** 1,000,000,000
 - **Inflation:** 8% (funds zero fees)
-- **Staking APY:** 26.67%
+- **Staking APY:** 13.33%
 
 ## 🚀 Quick Start
 
@@ -481,7 +481,7 @@ Returns: Transaction details with 0 gas fee
 ### Staking Endpoints
 POST /api/v1/stake
 Body: { amount, validator }
-APY: 26.67%
+APY: 13.33%
 
 GET /api/v1/rewards/{address}
 Returns: Accumulated rewards
@@ -571,7 +571,7 @@ cat > /workspaces/0xv7/testnet/genesis.json << 'GENESIS'
     "distribution": {
       "params": {
         "community_tax": "0.000000000000000000",
-        "base_proposer_reward": "0.266700000000000000",
+        "base_proposer_reward": "0.133300000000000000",
         "bonus_proposer_reward": "0.000000000000000000"
       }
     },
@@ -584,7 +584,7 @@ cat > /workspaces/0xv7/testnet/genesis.json << 'GENESIS'
       "params": {
         "gas_price": "0usltn",
         "zero_fees_enabled": true,
-        "staking_apy": "0.266700000000000000"
+        "staking_apy": "0.133300000000000000"
       }
     }
   },

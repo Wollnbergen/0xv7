@@ -11,7 +11,7 @@ bot.start((ctx) => {
     ctx.reply(`
 🚀 Welcome to Sultan Chain Validator Program!
 
-💰 Earn 26.67% APY (37.33% on mobile!)
+💰 Earn 13.33% APY (18.66% on mobile!)
 ⚡ Zero gas fees forever
 🔒 Minimum stake: 5,000 SLTN
 
@@ -71,7 +71,7 @@ bot.command('stake', (ctx) => {
         applied: new Date()
     });
     
-    const apy = mobile ? 37.33 : 26.67;
+    const apy = mobile ? 18.66 : 13.33;
     const dailyRewards = (amount * (apy / 100) / 365).toFixed(2);
     
     ctx.reply(`
@@ -100,7 +100,7 @@ bot.command('status', (ctx) => {
 ✅ Status: APPROVED & ACTIVE
 
 Your validator is earning rewards!
-• Daily: ${(validator.stake * 0.2667 / 365).toFixed(2)} SLTN
+• Daily: ${(validator.stake * 0.1333 / 365).toFixed(2)} SLTN
 • Address: sultan1${userId}
         `);
     } else if (applications.has(userId)) {
@@ -121,8 +121,8 @@ bot.command('validators', (ctx) => {
 
 👥 Active Validators: ${validatorCount}
 💎 Total Staked: ${totalStaked.toLocaleString()} SLTN
-📈 Network APY: 26.67%
-📱 Mobile APY: 37.33%
+📈 Network APY: 13.33%
+📱 Mobile APY: 18.66%
 ⚡ Gas Fees: $0.00
 
 Apply now with /apply!

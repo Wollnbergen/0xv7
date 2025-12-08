@@ -67,6 +67,6 @@ echo "📊 Quick Metrics..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "• Gas Fees: $0.00 (hardcoded)"
 echo "• Target TPS: 1,230,992"
-echo "• Staking APY: 26.67%"
+echo "• Staking APY: 13.33%"
 echo "• Completion: ~70%"
 

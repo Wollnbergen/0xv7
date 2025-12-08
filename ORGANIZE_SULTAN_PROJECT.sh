@@ -31,9 +31,9 @@ async fn main() {
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
     println!("🚀 Starting Sultan Chain...");
-    println!("📊 Economics: Zero Gas Fees + 26.67% APY");
+    println!("📊 Economics: Zero Gas Fees + 13.33% APY");
     println!("🔥 Burn Rate: 1% on high volume");
-    println!("📈 Inflation: 8% → 2% over 5 years");
+    println!("📈 Inflation: 4% → 2% over 5 years");
     println!();
     
     let mut block = 1;
@@ -62,10 +62,10 @@ let validators = 4;
 let tps = 156;
 
 const ECONOMICS = {
-    inflation_schedule: "8% → 6% → 4% → 3% → 2%",
+    inflation_schedule: "4% → 6% → 4% → 3% → 2%",
     current_inflation: "8% (Year 1)",
     burn_mechanism: "1% on high-volume transactions",
-    validator_apy: "26.67% maximum",
+    validator_apy: "13.33% maximum",
     gas_fees: 0.00
 };
 
@@ -113,7 +113,7 @@ const server = http.createServer((req, res) => {
                         break;
                     case 'get_apy':
                         response.result = {
-                            validator_apy: "26.67%",
+                            validator_apy: "13.33%",
                             staking_ratio: "30%",
                             total_staked: "300,000,000 SLTN"
                         };
@@ -131,7 +131,7 @@ const server = http.createServer((req, res) => {
     } else if (req.method === 'GET') {
         res.setHeader('Content-Type', 'text/html');
         res.writeHead(200);
-        res.end(`<!DOCTYPE html><html><head><title>Sultan Chain</title></head><body><h1>Sultan Chain Testnet</h1><p>Zero Gas Fees • 26.67% APY</p></body></html>`);
+        res.end(`<!DOCTYPE html><html><head><title>Sultan Chain</title></head><body><h1>Sultan Chain Testnet</h1><p>Zero Gas Fees • 13.33% APY</p></body></html>`);
     }
 });
 

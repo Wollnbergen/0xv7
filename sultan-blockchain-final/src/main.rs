@@ -113,7 +113,7 @@ async fn status(blockchain: Arc<Mutex<Blockchain>>) -> impl IntoResponse {
         "pending_tx": chain.pending_transactions.len(),
         "latest_block": chain.chain.last().map(|b| b.index).unwrap_or(0),
         "gas_fee": 0,
-        "staking_apy": "26.67%"
+        "staking_apy": "13.33%"
     }))
 }
 
@@ -190,7 +190,7 @@ async fn main() {
             println!("   Genesis Block: #{}", chain.chain.first().map(|b| b.index).unwrap_or(0));
             println!("   Genesis Hash: {}", prefix);
             println!("   Gas Fees: $0.00 (Zero forever!)");
-            println!("   Staking APY: 26.67%");
+            println!("   Staking APY: 13.33%");
         } else {
             eprintln!("⚠️  Failed to acquire blockchain lock at startup");
         }

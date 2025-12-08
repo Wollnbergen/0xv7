@@ -8,7 +8,7 @@
 
 ### ✅ What's Working:
 - **ZERO gas fees** - Every transaction is FREE
-- **26.67% APY** - Highest staking rewards
+- **13.33% APY** - Highest staking rewards
 - **Mobile validators** - 40% bonus rewards
 - **10,000+ TPS** - Lightning fast
 - **IBC enabled** - Cross-chain ready
@@ -30,15 +30,15 @@ cat > SULTAN_ECONOMICS_CORRECTED.md << 'EOF'
   - Network operations
 
 ### Validator Rewards
-- **Base APY**: 26.67% for validators
-- **Mobile Validator Bonus**: +40% (total ~37.33% APY)
+- **Base APY**: 13.33% for validators
+- **Mobile Validator Bonus**: +40% (total ~18.66% APY)
 - **Source**: Funded by the 8-9% inflation
 
 ### Zero Gas Fee Model
 
 ### Why It Works
 1. **8-9% inflation** creates a sustainable reward pool
-2. **Validators earn 26.67% APY** from staking
+2. **Validators earn 13.33% APY** from staking
 3. **Users pay 0 fees** because inflation covers costs
 4. **Mobile validators** get extra incentive (+40%)
 
@@ -47,7 +47,7 @@ cat > SULTAN_ECONOMICS_CORRECTED.md << 'EOF'
 |---------|----------|--------|--------------|
 | Gas Fees | $5-50 | $0.001 | **$0.00** |
 | Inflation | ~0.5% | ~5% | **8-9%** |
-| Validator APY | ~4% | ~7% | **26.67%** |
+| Validator APY | ~4% | ~7% | **13.33%** |
 | Mobile Support | No | No | **Yes (+40%)** |
 
 ## 🎯 Key Innovation

@@ -4,7 +4,7 @@ SULTAN_TECH_AUDIT.md
 
 - Mobile-proof: Verify quantum signing in quantum.rs works on low-end devices.
 
-- Gas-free: Audit subsidy_flag in transaction_validator.rs for correct APY ~26.67% calculation.
+- Gas-free: Audit subsidy_flag in transaction_validator.rs for correct APY ~13.33% calculation.
 
 - Interop: Validate <3s swaps in ethereum-service/main.rs, solana-service/main.rs, ton-service/main.rs.
 

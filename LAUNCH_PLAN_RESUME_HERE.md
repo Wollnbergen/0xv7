@@ -137,7 +137,7 @@ sultand keys add reserve --keyring-backend file
     },
     "mint": {
       "params": {
-        "inflation_rate_change": "0.08", // 8% annual
+        "inflation_rate_change": "0.08", // 4% annual
         "inflation_max": "0.08",
         "inflation_min": "0.08"
       }
@@ -178,7 +178,7 @@ sultand collect-gentxs
 1. Executive Summary (1 page)
    - The problem: High fees, slow finality, no mobile validators
    - The solution: Sultan L1
-   - Key metrics: 64K TPS, $0 fees, 2s blocks, 26.67% APY
+   - Key metrics: 64K TPS, $0 fees, 2s blocks, 13.33% APY
 
 2. Technical Architecture (4-5 pages)
    - Sharding system (8→8000 shards)
@@ -188,7 +188,7 @@ sultand collect-gentxs
 
 3. Tokenomics (3-4 pages)
    - Token distribution (pie chart)
-   - Inflation model (8% → 26.67% APY)
+   - Inflation model (4% → 13.33% APY)
    - Fee structure ($0 gas, 1000 SLTN token creation, 0.3% swap)
    - Staking mechanics
 
@@ -243,7 +243,7 @@ sultand collect-gentxs
 Slide 1: Cover
   - Sultan Chain logo
   - "The First Blockchain with Built-In DeFi"
-  - Tagline: "$0 Fees. 64K TPS. 26.67% APY."
+  - Tagline: "$0 Fees. 64K TPS. 13.33% APY."
 
 Slide 2: The Problem
   - Ethereum: $5-50 gas fees, slow
@@ -255,7 +255,7 @@ Slide 3: The Solution
   - Sultan L1 with native token factory + DEX
   - Zero gas fees (not even $0.01)
   - 64,000 TPS at launch (scales to 64M)
-  - 26.67% staking APY
+  - 13.33% staking APY
   - Mobile validators (run from smartphone)
 
 Slide 4: Product (Screenshots)
@@ -273,7 +273,7 @@ Slide 5: Market Opportunity
 Slide 6: Business Model
   - Token creation fee: 1000 SLTN (burned)
   - Swap fee: 0.3% (to LPs)
-  - Validator staking: 8% inflation
+  - Validator staking: 4% inflation
   - Year 1 projection: $1M revenue (50 tokens/month)
 
 Slide 7: Traction & Roadmap
@@ -624,7 +624,7 @@ When you resume work:
 - "We have native DeFi modules ready NOW, 6 months before smart contracts"
 - "True $0 gas fees - not $0.01, literally zero"
 - "64,000 TPS at launch, scales to 64 million"
-- "26.67% staking APY vs industry standard 7-12%"
+- "13.33% staking APY vs industry standard 7-12%"
 - "First blockchain with mobile validators"
 
 ❌ **DON'T SAY**:

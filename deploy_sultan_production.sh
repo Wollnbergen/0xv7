@@ -42,6 +42,6 @@ esac
 echo ""
 echo "📊 Sultan Chain Status:"
 echo "  • Zero Gas Fees: ✅ ENABLED"
-echo "  • APY: 26.67% (37.33% mobile)"
+echo "  • APY: 13.33% (18.66% mobile)"
 echo "  • IBC: ✅ READY"
 echo "  • Dashboard: http://127.0.0.1:8080/sultan_dashboard.html"

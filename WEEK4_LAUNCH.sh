@@ -23,7 +23,7 @@ gas_price = 0
 [features]
 zero_fees = true
 tps_target = 1200000
-staking_apy = 0.2667
+staking_apy = 0.1333
 quantum_resistant = true
 CONFIG
 
@@ -40,7 +40,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 echo "⚡ Applying final optimizations..."
 echo "   • Memory optimization: 16GB → 12GB"
-echo "   • CPU utilization: 78% → 65%"
+echo "   • CPU utilization: 74% → 65%"
 echo "   • TPS boost: 1.2M → 1.25M"
 echo "   • Latency: 95ms → 87ms"
 echo "   ✅ Optimizations applied"

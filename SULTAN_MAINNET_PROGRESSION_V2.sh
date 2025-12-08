@@ -14,7 +14,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  ✓ 1.2M+ TPS Processing"
 echo "  ✓ 85ms Sub-second Finality"
 echo "  ✓ $0.00 Gas Fees Forever"
-echo "  ✓ 26.67% Validator APY"
+echo "  ✓ 13.33% Validator APY"
 echo "  ✓ 21-day Unbonding Period"
 echo "  ✓ Cross-Chain Bridges (ETH, SOL, BTC, TON, ZK)"
 echo "  ✓ Quantum-Resistant Cryptography"

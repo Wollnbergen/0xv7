@@ -3,9 +3,9 @@
 ## 🎯 Current State: **OPERATIONAL**
 
 ### 💎 Sultan Features (Active)
-- **APY**: 26.67% for validators
+- **APY**: 13.33% for validators
 - **Gas Fees**: $0.00 (zero fees forever)
-- **Inflation**: 8% annually
+- **Inflation**: 4% annually
 - **API**: http://localhost:3030
 
 ### 🌐 Cosmos SDK Features (Active)
@@ -20,7 +20,7 @@
 - **Dashboard**: http://localhost:8888/sultan-dashboard.html
 
 ## 📊 Test Results
-✅ Sultan API: Working (26.67% APY, $0 gas)
+✅ Sultan API: Working (13.33% APY, $0 gas)
 ✅ Unified API: Working (bridge active)
 ✅ Cosmos RPC: Container running
 ✅ Integration: Successfully bridged
@@ -62,11 +62,11 @@ Architecture
                     │     (8888)      │
                     └────────────────┘
 Key Achievements
-✅ Maintained 26.67% APY (not Cosmos's 7%)
+✅ Maintained 13.33% APY (not Cosmos's 7%)
 ✅ Zero gas fees active
 ✅ IBC protocol enabled
 ✅ CosmWasm smart contracts ready
 ✅ Unified API bridging both chains
 ✅ Live dashboard available
 Summary
-The Sultan blockchain is successfully integrated with Cosmos SDK, maintaining Sultan's superior economics (26.67% APY, zero fees) while gaining Cosmos infrastructure (IBC, WASM).
+The Sultan blockchain is successfully integrated with Cosmos SDK, maintaining Sultan's superior economics (13.33% APY, zero fees) while gaining Cosmos infrastructure (IBC, WASM).

@@ -29,7 +29,7 @@
 - **blockchain.rs** (2,673 bytes)
   - Block structure with height, timestamp, transactions
   - Validator management with stake requirements
-  - Chain configuration (5s blocks, 8% inflation)
+  - Chain configuration (5s blocks, 4% inflation)
   - Zero-fee transaction processing
 
 - **consensus.rs** (2,184 bytes)
@@ -86,7 +86,7 @@
 
 #### **Economics & Rewards**
 - **economics.rs** (2,487 bytes)
-  - 26.67% base validator APY
+  - 13.33% base validator APY
   - 16.67% mobile validator bonus
   - Dynamic inflation model
   - Reward calculations
@@ -161,7 +161,7 @@ CRITICAL COMPONENT - Full Cosmos SDK compatibility layer
 - ✅ P2P networking with libp2p
 - ✅ Basic consensus (5-second blocks)
 - ✅ RPC/API servers responding
-- ✅ Economics model (26.67% APY)
+- ✅ Economics model (13.33% APY)
 - ✅ Bridge architecture (structure ready)
 - ✅ Cosmos SDK structure (needs integration)
 
@@ -320,13 +320,13 @@ Feature	Sultan Chain	Ethereum	Solana	Cosmos
 Gas Fees	$0.00	$5-50	$0.01	$0.10
 TPS	1,200,000+	15	65,000	10,000
 Finality	85ms	15min	400ms	6s
-APY	26.67%	4%	6%	18%
+APY	13.33%	4%	6%	18%
 Quantum Safe	✅	❌	❌	❌
 Cosmos IBC	✅	❌	❌	✅
 Economic Model
 Total Supply: 1,000,000,000 SLTN
-Inflation: 8% annual (dynamic)
-Validator Rewards: 26.67% APY base
+Inflation: 4% annual (dynamic)
+Validator Rewards: 13.33% APY base
 Mobile Bonus: +16.67% APY
 Minimum Stake: 5,000 SLTN
 Unbonding: 21 days

@@ -77,7 +77,7 @@ genesis:
         unbonding_time: "86400s" # 1 day instead of 21
     mint:
       params:
-        inflation: "0.080000000000000000" # 8% inflation
+        inflation: "0.080000000000000000" # 4% inflation
     gov:
       voting_params:
         voting_period: "86400s" # 1 day for testing

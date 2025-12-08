@@ -36,7 +36,7 @@ Production Features
 ✅ Zero gas fees ($0.00 forever)
 ✅ 1.25M TPS capacity
 ✅ Quantum-resistant security
-✅ 26.67% staking APY
+✅ 13.33% staking APY
 ✅ 4 blockchain bridges
 ✅ Auto-scaling support
 ✅ Health monitoring

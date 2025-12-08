@@ -84,7 +84,7 @@ const sltn = balance / 1000000; // Convert usltn to SLTN
 ### 3. **Validator Onboarding**
 - ✅ "Become a Validator" form
 - ✅ Stake amount calculator
-- ✅ APY earnings calculator (26.67%)
+- ✅ APY earnings calculator (13.33%)
 - ✅ Real-time earnings preview (yearly/monthly/daily)
 - ✅ Commission rate selection
 - ✅ Validator name input
@@ -93,7 +93,7 @@ const sltn = balance / 1000000; // Convert usltn to SLTN
 **Earnings Calculator:**
 ```javascript
 Stake: 10,000 SLTN
-APY: 26.67%
+APY: 13.33%
 
 Yearly:  2,667 SLTN
 Monthly:   222 SLTN
@@ -255,7 +255,7 @@ fetch('http://localhost:26657/balance/genesis')
 - Total Accounts: **1**
 - Pending Txs: **0**
 - Transaction Fees: **$0.00**
-- Validator APY: **26.67%**
+- Validator APY: **13.33%**
 - Block Time: **5s**
 - Total Supply: **500M SLTN**
 
@@ -425,7 +425,7 @@ docker run -d --name grafana \
 - ✅ Real-time network stats updating every 5 seconds
 - ✅ Keplr wallet connects successfully
 - ✅ Balance queries work with retry logic
-- ✅ Earnings calculator accurate (26.67% APY)
+- ✅ Earnings calculator accurate (13.33% APY)
 - ✅ Error states display correctly
 - ✅ Offline detection works
 - ✅ Mobile responsive design
@@ -542,7 +542,7 @@ All features implemented:
 - 1 genesis validator
 - 500M SLTN total supply
 - $0.00 transaction fees
-- 26.67% validator APY
+- 13.33% validator APY
 
 **Next steps:**
 1. Make RPC public (Codespaces or production server)

@@ -28,14 +28,14 @@ describe('Sultan Chain - Core Features', () => {
   });
   
   describe('Staking Rewards', () => {
-    test('should provide 26.67% APY', () => {
-      const apy = 26.67;
-      expect(apy).toBe(26.67);
+    test('should provide 13.33% APY', () => {
+      const apy = 13.33;
+      expect(apy).toBe(13.33);
     });
     
-    test('should provide 37.33% mobile APY', () => {
-      const mobileAPY = 37.33;
-      expect(mobileAPY).toBe(37.33);
+    test('should provide 18.66% mobile APY', () => {
+      const mobileAPY = 18.66;
+      expect(mobileAPY).toBe(18.66);
     });
   });
   

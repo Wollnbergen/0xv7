@@ -12,7 +12,7 @@ echo "✅ COMPLETED (Testnet Level):"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  • Demo API operational"
 echo "  • Zero-fee mechanism"
-echo "  • 26.67% APY calculation"
+echo "  • 13.33% APY calculation"
 echo "  • Public accessibility"
 echo ""
 

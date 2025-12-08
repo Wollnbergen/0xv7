@@ -10,21 +10,21 @@ import (
 type SultanCosmosBridge struct {
     sultanRPC   string  // Port 3030
     cosmosRPC   string  // Port 26657
-    sultanAPY   float64 // 26.67%
+    sultanAPY   float64 // 13.33%
 }
 
 func NewBridge() *SultanCosmosBridge {
     return &SultanCosmosBridge{
         sultanRPC: "http://localhost:3030",
         cosmosRPC: "http://localhost:26657",
-        sultanAPY: 0.2667,
+        sultanAPY: 0.1333,
     }
 }
 
-// SyncEconomics applies Sultan's 26.67% APY to Cosmos validators
+// SyncEconomics applies Sultan's 13.33% APY to Cosmos validators
 func (b *SultanCosmosBridge) SyncEconomics() error {
     // Override Cosmos inflation with Sultan's model
-    // Actual APY = 26.67% (Sultan's rate)
+    // Actual APY = 13.33% (Sultan's rate)
     return nil
 }
 

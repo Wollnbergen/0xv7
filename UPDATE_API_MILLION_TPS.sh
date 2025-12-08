@@ -34,10 +34,10 @@ if (cluster.isMaster) {
     let currentTPS = 1000000; // 1 Million TPS baseline
     
     const ECONOMICS = {
-        inflation_schedule: "8% → 6% → 4% → 3% → 2%",
+        inflation_schedule: "4% → 6% → 4% → 3% → 2%",
         current_inflation: "8% (Year 1)",
         burn_mechanism: "1% on high-volume transactions",
-        validator_apy: "26.67% maximum",
+        validator_apy: "13.33% maximum",
         gas_fees: 0.00
     };
     
@@ -107,7 +107,7 @@ if (cluster.isMaster) {
                             
                         case 'get_apy':
                             response.result = {
-                                validator_apy: "26.67%",
+                                validator_apy: "13.33%",
                                 staking_ratio: "30%",
                                 total_staked: "300,000,000 SLTN",
                                 validators_online: 100
@@ -153,7 +153,7 @@ if (cluster.isMaster) {
     <h1>⚡ Sultan Chain - Ultra High Performance</h1>
     <div class="metric huge">1,000,000+ TPS</div>
     <div class="metric">💰 Gas Fees: $0.00 FOREVER</div>
-    <div class="metric">📈 Validator APY: 26.67%</div>
+    <div class="metric">📈 Validator APY: 13.33%</div>
     <div class="metric">🔥 Status: PROCESSING 1M+ TPS</div>
     <div class="metric">⚡ Shards: 1024</div>
     <div class="metric">🚀 Parallel Threads: ${numCPUs}</div>

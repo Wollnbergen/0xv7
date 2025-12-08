@@ -54,9 +54,9 @@ async fn main() {
     println!();
     println!("📊 Chain Economics:");
     println!("   • Gas Fees: $0.00 (ZERO forever)");
-    println!("   • Validator APY: 26.67%");
-    println!("   • Mobile Validator APY: 37.33%");
-    println!("   • Inflation: 8% annually");
+    println!("   • Validator APY: 13.33%");
+    println!("   • Mobile Validator APY: 18.66%");
+    println!("   • Inflation: 4% annually");
     println!();
     println!("�� Starting block production...");
     println!();

@@ -304,7 +304,7 @@ This would need `deps.storage` integration which doesn't exist in sultan-core.
 ✅ **YES - Production Ready**:
 1. Native token launchpad (1000 SLTN fee)
 2. Native AMM DEX (0.3% swap fee)
-3. Staking (26.67% APY)
+3. Staking (13.33% APY)
 4. Governance (on-chain voting)
 5. Cross-chain bridges (ETH/SOL/TON/BTC)
 6. Mobile validators

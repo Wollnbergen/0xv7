@@ -26,10 +26,10 @@ app.get('/tokenomics', (req, res) => {
             use_cases: ["DEX", "Liquidity Pools", "DeFi"]
         },
         economics: {
-            staking_apy: "26.67%",
+            staking_apy: "13.33%",
             inflation: "8%",
             gas_fees: "$0.00",
-            validator_rewards: "26.67% APY"
+            validator_rewards: "13.33% APY"
         }
     });
 });

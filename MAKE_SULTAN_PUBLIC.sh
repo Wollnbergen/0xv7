@@ -50,7 +50,7 @@ class SultanHandler(BaseHTTPRequestHandler):
 <body>
     <div class="container">
         <h1>🚀 Sultan Chain API</h1>
-        <p>Zero Gas Fees • 26.67% APY • Mobile Validators</p>
+        <p>Zero Gas Fees • 13.33% APY • Mobile Validators</p>
         
         <div class="endpoint">
             <h3>Chain Status</h3>
@@ -122,9 +122,9 @@ class SultanHandler(BaseHTTPRequestHandler):
                 }
             elif method == 'get_apy':
                 result = {
-                    'base_apy': '26.67%',
+                    'base_apy': '13.33%',
                     'mobile_validator_bonus': '40%',
-                    'total_possible': '37.33%'
+                    'total_possible': '18.66%'
                 }
             else:
                 result = {'error': 'Method not found'}
@@ -149,7 +149,7 @@ print('📍 Running on http://0.0.0.0:3030')
 print('')
 print('Features:')
 print('  ✅ Zero Gas Fees')
-print('  ✅ 26.67% APY Staking')
+print('  ✅ 13.33% APY Staking')
 print('  ✅ Mobile Validators (40% bonus)')
 print('  ✅ 10,000+ TPS')
 print('')

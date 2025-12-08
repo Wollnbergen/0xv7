@@ -106,7 +106,7 @@ Sultan SDK and RPC are **production-ready for third-party developers** to build 
 ### Staking (100% Complete)
 - ✅ `stake()` - Stake tokens with validators
 - ✅ `validator_register()` - Register as validator
-- ✅ `query_apy()` - Calculate APY (26.67% for validators)
+- ✅ `query_apy()` - Calculate APY (13.33% for validators)
 
 ---
 

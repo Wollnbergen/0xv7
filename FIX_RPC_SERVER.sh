@@ -74,8 +74,8 @@ impl RpcServer {
                     "validators": 100,
                     "tps": 10000,
                     "gas_fees": 0,
-                    "validator_apy": "26.67%",
-                    "mobile_validator_apy": "37.33%"
+                    "validator_apy": "13.33%",
+                    "mobile_validator_apy": "18.66%"
                 });
                 
                 RpcResponse {

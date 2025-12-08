@@ -19,7 +19,7 @@ echo "   ✅ All tests passing"
 echo "2. Checking configuration..."
 echo "   ✅ Zero gas fees: Enabled"
 echo "   ✅ TPS target: 1.23M (10M with Hyper)"
-echo "   ✅ Staking APY: 26.67%"
+echo "   ✅ Staking APY: 13.33%"
 echo "   ✅ Quantum-safe: Dilithium3"
 
 # Deploy to testnet

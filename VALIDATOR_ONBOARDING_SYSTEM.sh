@@ -27,11 +27,11 @@ cat > /workspaces/0xv7/sultan-chain-mainnet/validator_portal.html << 'HTML'
         
         <div class="stats">
             <div class="stat-box">
-                <h2>26.67%</h2>
+                <h2>13.33%</h2>
                 <p>Base APY</p>
             </div>
             <div class="stat-box">
-                <h2>37.33%</h2>
+                <h2>18.66%</h2>
                 <p>Mobile APY</p>
             </div>
             <div class="stat-box">
@@ -56,8 +56,8 @@ cat > /workspaces/0xv7/sultan-chain-mainnet/validator_portal.html << 'HTML'
             <p>Stake Amount: <input type="number" id="stake" value="100000" style="padding: 5px;"></p>
             <p>Validator Type: 
                 <select id="type" style="padding: 5px;">
-                    <option value="standard">Standard (26.67% APY)</option>
-                    <option value="mobile">Mobile (37.33% APY)</option>
+                    <option value="standard">Standard (13.33% APY)</option>
+                    <option value="mobile">Mobile (18.66% APY)</option>
                 </select>
             </p>
             <div style="background: rgba(0,255,0,0.2); padding: 15px; border-radius: 10px; margin-top: 20px;">
@@ -77,7 +77,7 @@ cat > /workspaces/0xv7/sultan-chain-mainnet/validator_portal.html << 'HTML'
         function calculate() {
             const stake = document.getElementById('stake').value;
             const type = document.getElementById('type').value;
-            const apy = type === 'mobile' ? 0.3733 : 0.2667;
+            const apy = type === 'mobile' ? 0.3733 : 0.1333;
             const annual = stake * apy;
             const daily = annual / 365;
             document.getElementById('earnings').innerText = annual.toLocaleString() + ' SLTN';
@@ -96,8 +96,8 @@ echo ""
 echo "📊 VALIDATOR ECONOMICS:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  • Minimum Stake: 100,000 SLTN"
-echo "  • Standard APY: 26.67%"
-echo "  • Mobile APY: 37.33% (40% bonus)"
+echo "  • Standard APY: 13.33%"
+echo "  • Mobile APY: 18.66% (40% bonus)"
 echo "  • Unbonding: 21 days"
 echo "  • Slashing: 1% for downtime"
 echo ""

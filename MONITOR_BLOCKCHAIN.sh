@@ -47,7 +47,7 @@ while true; do
     echo ""
     echo "💰 NETWORK FEATURES:"
     echo "  • Gas Fees: $0.00 (ZERO FEES)"
-    echo "  • APY: 26.67% (37.33% mobile)"
+    echo "  • APY: 13.33% (18.66% mobile)"
     echo "  • TPS: 1,247,000+"
     echo "  • Block Time: ~85ms"
     

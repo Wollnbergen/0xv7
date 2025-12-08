@@ -156,7 +156,7 @@ if [ ! -f "public/index.html" ]; then
                 <div class="stat-label">TPS Capacity</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">26.67%</div>
+                <div class="stat-value">13.33%</div>
                 <div class="stat-label">Staking APY</div>
             </div>
             <div class="stat-card">

@@ -49,7 +49,7 @@ app.get('/status', async (req, res) => {
             chain: 'Sultan Chain (Cosmos-Integrated)',
             sultan: {
                 api: 'http://localhost:3030',
-                apy: '26.67%',
+                apy: '13.33%',
                 status: sultanStatus.data
             },
             cosmos: {
@@ -60,7 +60,7 @@ app.get('/status', async (req, res) => {
             },
             unified_features: {
                 zero_gas: true,
-                staking_apy: '26.67%',
+                staking_apy: '13.33%',
                 ibc_support: true,
                 smart_contracts: true,
                 quantum_safe: true,
@@ -104,7 +104,7 @@ for port in 3030 26657 1317 8080; do
 done
 
 # Start Cosmos with Sultan economics
-echo -e "\n1️⃣ Starting Cosmos SDK (26.67% APY)..."
+echo -e "\n1️⃣ Starting Cosmos SDK (13.33% APY)..."
 docker rm -f cosmos-sultan 2>/dev/null || true
 docker run -d \
     --name cosmos-sultan \
@@ -124,7 +124,7 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({
         chain: 'Sultan',
         version: '1.0.0',
-        apy: '26.67%',
+        apy: '13.33%',
         gas_fees: '$0.00',
         height: Math.floor(Math.random() * 100000)
     }));
@@ -149,7 +149,7 @@ echo "   • Cosmos RPC: http://localhost:26657"
 echo "   • Unified API: http://localhost:8080"
 echo ""
 echo "💎 Economics:"
-echo "   • APY: 26.67% (Sultan rate)"
+echo "   • APY: 13.33% (Sultan rate)"
 echo "   • Gas: $0.00 (Zero fees)"
 echo ""
 echo "Test with: curl http://localhost:8080/status | jq"

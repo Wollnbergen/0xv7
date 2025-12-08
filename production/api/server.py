@@ -18,7 +18,7 @@ class SultanAPI(BaseHTTPRequestHandler):
                 "gas_price": 0.00,
                 "tps": random.randint(1200000, 1250000),
                 "validators": 21,
-                "apy": 26.67,
+                "apy": 13.33,
                 "status": "operational"
             }
         elif self.path.startswith('/account/'):

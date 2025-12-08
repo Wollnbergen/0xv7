@@ -1,4 +1,7 @@
-//! Sharded Blockchain Implementation
+//! ⚠️ LEGACY Sharded Blockchain Implementation (DEPRECATED)
+//!
+//! ⚠️ DO NOT USE IN PRODUCTION - Use sharded_blockchain_production.rs instead
+//! This file is kept only for backward compatibility with old tests.
 //!
 //! Combines traditional blockchain with sharding for 1M+ TPS capability.
 

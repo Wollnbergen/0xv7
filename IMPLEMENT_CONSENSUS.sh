@@ -29,7 +29,7 @@ pub struct Validator {
     pub address: String,
     pub stake: u64,
     pub voting_power: f64,
-    pub apy: f64, // 26.67% max
+    pub apy: f64, // 13.33% max
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,25 +48,25 @@ impl ConsensusState {
                     address: "sultan1validator001".to_string(),
                     stake: 1000000,
                     voting_power: 25.0,
-                    apy: 26.67,
+                    apy: 13.33,
                 },
                 Validator {
                     address: "sultan1validator002".to_string(),
                     stake: 1000000,
                     voting_power: 25.0,
-                    apy: 26.67,
+                    apy: 13.33,
                 },
                 Validator {
                     address: "sultan1validator003".to_string(),
                     stake: 1000000,
                     voting_power: 25.0,
-                    apy: 26.67,
+                    apy: 13.33,
                 },
                 Validator {
                     address: "sultan1validator004".to_string(),
                     stake: 1000000,
                     voting_power: 25.0,
-                    apy: 26.67,
+                    apy: 13.33,
                 },
             ],
             votes: HashMap::new(),
@@ -117,5 +117,5 @@ echo ""
 echo "📊 Consensus Configuration:"
 echo "  • Validators: 4"
 echo "  • Consensus Threshold: 67%"
-echo "  • Max APY: 26.67%"
+echo "  • Max APY: 13.33%"
 echo "  • Block Time: 5 seconds"

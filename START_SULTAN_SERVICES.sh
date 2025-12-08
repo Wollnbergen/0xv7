@@ -143,7 +143,7 @@ cat > /workspaces/0xv7/public/index.html << 'HTML'
             <div class="stat-label">Transactions Per Second</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">26.67%</div>
+            <div class="stat-value">13.33%</div>
             <div class="stat-label">Staking APY</div>
         </div>
         <div class="stat-card">
@@ -241,7 +241,7 @@ const server = http.createServer((req, res) => {
             gas_price: 0.00,
             tps: 1230992,
             validators: 21,
-            apy: 26.67,
+            apy: 13.33,
             status: 'operational',
             completion: '70%'
         }));

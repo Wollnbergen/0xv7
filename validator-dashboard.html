@@ -353,7 +353,7 @@
             </div>
             <div class="stat-card">
                 <div class="label">Validator APY</div>
-                <div class="value">26.67%</div>
+                <div class="value">13.33%</div>
             </div>
             <div class="stat-card">
                 <div class="label">Gas Fees</div>
@@ -392,7 +392,7 @@
                         <span id="monthlyEarnings">22.22 SLTN</span>
                     </div>
                     <div class="earnings-row">
-                        <span>Yearly (26.67% APY):</span>
+                        <span>Yearly (13.33% APY):</span>
                         <span id="yearlyEarnings">266.7 SLTN</span>
                     </div>
                 </div>
@@ -502,7 +502,7 @@
 
                 <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-top: 20px;">
                     <h3 style="color: #2e7d32;">Why Zero Gas Fees?</h3>
-                    <p>Inflation subsidizes all transaction costs, making Sultan L1 completely free to use while maintaining validator profitability at 26.67% APY.</p>
+                    <p>Inflation subsidizes all transaction costs, making Sultan L1 completely free to use while maintaining validator profitability at 13.33% APY.</p>
                 </div>
             </div>
         </div>
@@ -512,7 +512,7 @@
         // Update earnings calculator
         document.getElementById('stakeAmount').addEventListener('input', function() {
             const stake = parseFloat(this.value) || 1000;
-            const apy = 0.2667;
+            const apy = 0.1333;
             const yearly = stake * apy;
             const monthly = yearly / 12;
             const daily = yearly / 365;
@@ -587,7 +587,7 @@ docker logs sultan-validator</pre>
 <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-top: 20px;">
     <h3 style="color: #2e7d32;">✅ You're Now a Validator!</h3>
     <p>Your node will start producing blocks and earning rewards automatically.</p>
-    <p><strong>Expected earnings: ${(parseFloat(stakeAmount) * 0.2667).toFixed(2)} SLTN/year</strong></p>
+    <p><strong>Expected earnings: ${(parseFloat(stakeAmount) * 0.1333).toFixed(2)} SLTN/year</strong></p>
 </div>
                 `;
             } else {

@@ -9,7 +9,7 @@ const status = {
   gas_price: 0,
   tps: 1230000,
   validators: 21,
-  apy: 26.67,
+  apy: 13.33,
   status: "operational",
   completion: "100%"
 };

@@ -53,8 +53,8 @@ app.post('/register_validator', (req, res) => {
     state.validators.set(address || `sultan1${crypto.randomBytes(20).toString('hex')}`, { 
         stake, 
         joined: Date.now(),
-        apy: 0.2667,
-        dailyRewards: stake * 0.2667 / 365
+        apy: 0.1333,
+        dailyRewards: stake * 0.1333 / 365
     });
     
     state.totalStaked += stake;
@@ -63,8 +63,8 @@ app.post('/register_validator', (req, res) => {
         success: true,
         validators: state.validators.size,
         networkStake: state.totalStaked,
-        apy: '26.67%',
-        dailyRewards: (stake * 0.2667 / 365).toFixed(2) + ' SLTN'
+        apy: '13.33%',
+        dailyRewards: (stake * 0.1333 / 365).toFixed(2) + ' SLTN'
     });
 });
 
@@ -100,7 +100,7 @@ app.get('/health', (req, res) => {
 app.listen(port, () => {
     console.log(`✅ Consensus node ${nodeId} running on port ${port}`);
     console.log(`   Zero gas fees: ACTIVE`);
-    console.log(`   APY: 26.67%`);
+    console.log(`   APY: 13.33%`);
 });
 
 // Increment block height every 3 seconds

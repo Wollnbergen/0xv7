@@ -99,11 +99,11 @@ class SultanHandler(BaseHTTPRequestHandler):
             <p>📈 <span class="highlight">12% APY for Validators</span> (rewards.rs: 0.12)</p>
             <p>💵 <span class="highlight">8% APY for Delegators</span> (rewards.rs: 0.08)</p>
             <p>📱 <span class="highlight">30% Mobile Validator Target</span> (architecture docs)</p>
-            <p>⛽ <span class="highlight">ZERO Gas Fees Forever</span> (subsidized by 8% inflation)</p>
+            <p>⛽ <span class="highlight">ZERO Gas Fees Forever</span> (subsidized by 4% inflation)</p>
         </div>
 
         <div class="warning">
-            ⚠️ <strong>Note:</strong> These are the ACTUAL values from the Sultan Chain source code (not the 26.67% example)
+            ⚠️ <strong>Note:</strong> These are the ACTUAL values from the Sultan Chain source code (not the 13.33% example)
         </div>
         
         <div class="method">
@@ -167,7 +167,7 @@ class SultanHandler(BaseHTTPRequestHandler):
                     'delegator_apy': '8%',
                     'mobile_validator_target': '30%',
                     'user_gas_fees': 0,
-                    'fee_subsidy_source': '8% inflation pool',
+                    'fee_subsidy_source': '4% inflation pool',
                     'source': 'Actual values from Sultan Chain codebase'
                 }
             elif method == 'wallet_create':
@@ -191,7 +191,7 @@ class SultanHandler(BaseHTTPRequestHandler):
                     'amount': amount,
                     'tx_hash': f'0x{uuid.uuid4().hex}',
                     'fee': 0,
-                    'fee_note': 'Gas subsidized by 8% inflation',
+                    'fee_note': 'Gas subsidized by 4% inflation',
                     'message': 'Transfer complete - ZERO FEES!'
                 }
             elif method == 'get_apy':
@@ -233,7 +233,7 @@ print('🚀 Sultan Chain API - Running with CORRECT Economics')
 print('📍 Server: http://0.0.0.0:3030')
 print('')
 print('✅ ACTUAL VALUES from codebase:')
-print('  • 8% inflation (blockchain.rs)')
+print('  • 4% inflation (blockchain.rs)')
 print('  • 12% validator APY (rewards.rs)')
 print('  • 8% delegator APY (rewards.rs)')
 print('  • Zero gas fees (subsidized)')

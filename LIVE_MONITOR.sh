@@ -34,7 +34,7 @@ while true; do
     echo ""
     echo "💰 Network Features:"
     echo "• Gas Fees: $0.00"
-    echo "• APY: 26.67%"
+    echo "• APY: 13.33%"
     echo "• TPS: 1,247,000+"
     
     sleep 5

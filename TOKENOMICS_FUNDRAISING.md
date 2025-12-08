@@ -48,7 +48,7 @@ Total Supply: 500,000,000 SLTN (500M)
 │ TOTAL                    │ 100.0%     │ 500,000,000   │                      │
 └──────────────────────────┴────────────┴───────────────┴──────────────────────┘
 
-💰 VALIDATORS: Rewards from 8% inflation only (26.67% APY) - NO POOL NEEDED!
+💰 VALIDATORS: Rewards from 4% inflation only (13.33% APY) - NO POOL NEEDED!
 ```
 
 ### Why No Validator Rewards Pool?
@@ -61,8 +61,8 @@ Total Supply: 500,000,000 SLTN (500M)
 - **Near Protocol**: 0% pool, **$800M ecosystem fund**
 - **Polygon**: 0% pool, **$1B ecosystem fund**
 
-**Sultan L1 validators get 26.67% APY from inflation (hardcoded in staking.rs):**
-- 8% annual inflation = 40M SLTN/year
+**Sultan L1 validators get 13.33% APY from inflation (hardcoded in staking.rs):**
+- 4% annual inflation = 40M SLTN/year
 - ~2.54 SLTN per block reward
 - Competitive with Cosmos (19%) and better than Polkadot (14%)
 - **Automatic, sustainable, no pool needed**
@@ -138,7 +138,7 @@ Month 0 (TGE):
 
 Month 1-6:
 ├─ Public Sale:        Linear → 13.3M SLTN/month
-├─ Validator Rewards:  Ongoing → ~2M SLTN/month (8% annual inflation)
+├─ Validator Rewards:  Ongoing → ~2M SLTN/month (4% annual inflation)
 └─ Liquidity Mining:   Starts → ~2M SLTN/month
 
 Month 6-12:
@@ -160,7 +160,7 @@ Month 6-12:
 ### Year 3-5
 ```
 ├─ Gradual Unlock:     All vesting completes by end of Year 4
-├─ Inflation:          8% annually on circulating supply
+├─ Inflation:          4% annually on circulating supply
 ├─ Validator Rewards:  Continuous distribution
 └─ Total Year 5 Supply: ~1,000,000,000 SLTN (100% circulating)
 ```
@@ -234,7 +234,7 @@ Advisors:        18 months
 ## 💎 Token Utility
 
 ### Primary Uses
-1. **Staking** - 26.67% APY for validators
+1. **Staking** - 13.33% APY for validators
 2. **Governance** - Vote on proposals (1 SLTN = 1 vote weight)
 3. **Transaction Fees** - Free on Sultan L1, but required for bridges
 4. **Validator Requirements** - 5,000 SLTN minimum stake
@@ -379,7 +379,7 @@ SLTN/ATOM  - Cosmos ecosystem
 ### Competitive Positioning
 | Chain | Total Supply | Validator APY | Team Allocation | Fundraising | Ecosystem Fund |
 |-------|--------------|---------------|-----------------|-------------|----------------|
-| **Sultan L1** | **500M** | **26.67%** | **8% (2yr vest)** | **12% ($4M)** | **40% ($40M@$0.20)** |
+| **Sultan L1** | **500M** | **13.33%** | **8% (2yr vest)** | **12% ($4M)** | **40% ($40M@$0.20)** |
 | Cosmos | 286M+ | ~19% | 7% | 17% ($17M) | ~10% |
 | Polkadot | 1.1B | ~14% | 30% | 50% | ~5% |
 | Avalanche | 720M | ~9% | 9.5% | 42% ($230M) | **$290M fund** |
@@ -388,7 +388,7 @@ SLTN/ATOM  - Cosmos ecosystem
 | Polygon | 10B | ~5% | 16% | 38% ($450M) | **$1B fund** |
 
 **Sultan L1 competitive advantages:**
-- ✅ **Highest validator APY** (26.67%) - most attractive for stakers
+- ✅ **Highest validator APY** (13.33%) - most attractive for stakers
 - ✅ **Lowest team allocation** (8%, 2-year vesting) - shows maximum commitment
 - ✅ **Lean fundraising** ($4M) - efficient, prove value first
 - ✅ **Massive ecosystem focus** (40%) - matches Avalanche/Near/Polygon winners
@@ -438,8 +438,8 @@ SLTN/ATOM  - Cosmos ecosystem
 - Can raise **Series A at 10x+ valuation** after proving model works
 - Better for community (88% non-VC ownership)
 
-### 5. Validators Win Without Pool (26.67% APY)
-- **No pool needed** - 8% inflation is plenty (hardcoded, automatic)
+### 5. Validators Win Without Pool (13.33% APY)
+- **No pool needed** - 4% inflation is plenty (hardcoded, automatic)
 - Competitive with Cosmos (19%), better than Polkadot (14%), much better than Avalanche (9%)
 - **Simpler narrative** - no questions about where pool funds go
 - **Proven model** - all successful chains skip the pool
@@ -552,7 +552,7 @@ The token distribution is controlled in your genesis file. Here's where to confi
 ```
 
 ### Important Notes:
-1. **NO validator rewards pool** - Validators earn 26.67% APY from 8% inflation (automatic)
+1. **NO validator rewards pool** - Validators earn 13.33% APY from 4% inflation (automatic)
 2. **Addresses are placeholders** - Generate real addresses before mainnet
 3. **Balance in usltn** - Multiply by 1,000,000,000 (9 decimals)
 4. **Vesting contracts** - Team/fundraising wallets should use time-locked contracts
@@ -575,12 +575,12 @@ nano /workspaces/0xv7/genesis-validators/genesis.json
 ```rust
 // Location: sultan-core/src/staking.rs
 const BLOCKS_PER_YEAR: u64 = 15_768_000;  // 2-second blocks
-const INFLATION_RATE: f64 = 0.08;         // 8% annual
+const INFLATION_RATE: f64 = 0.08;         // 4% annual
 
 // Automatic calculation:
 // 500M supply × 8% = 40M SLTN/year
 // 40M / 15,768,000 blocks = ~2.54 SLTN per block
-// Validator APY = 26.67% (with delegation)
+// Validator APY = 13.33% (with delegation)
 ```
 
 **No changes needed** - Inflation is hardcoded and works perfectly!

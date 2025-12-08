@@ -14,7 +14,7 @@ impl RewardsCalculator {
     }
     
     pub fn calculate_validator_apy(&self) -> f64 {
-        // The famous 26.67% APY formula
+        // The famous 13.33% APY formula
         self.inflation_rate / 0.3
     }
     

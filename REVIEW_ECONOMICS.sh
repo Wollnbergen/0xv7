@@ -18,5 +18,5 @@ grep -r "burn" /workspaces/0xv7 --include="*.rs" --include="*.js" 2>/dev/null | 
 
 echo ""
 echo "📈 Checking APY calculations..."
-grep -r "apy\|APY\|26.67" /workspaces/0xv7 --include="*.rs" --include="*.js" 2>/dev/null | head -5
+grep -r "apy\|APY\|13.33" /workspaces/0xv7 --include="*.rs" --include="*.js" 2>/dev/null | head -5
 

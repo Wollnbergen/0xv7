@@ -108,7 +108,7 @@ print(f"Validators: {status['validator_count']}")
 ### Analytics Tools
 ```rust
 let status = sdk.status().await?;
-let validator_apy = sdk.query_validator_apy().await?; // 26.67%
+let validator_apy = sdk.query_validator_apy().await?; // 13.33%
 
 // Build dashboards, charts, insights
 ```
@@ -134,7 +134,7 @@ let validator_apy = sdk.query_validator_apy().await?; // 26.67%
 - **No hidden costs**
 
 ### Staking Rewards
-- **Validator APY:** 26.67% (fixed)
+- **Validator APY:** 13.33% (fixed)
 - **Delegator APY:** 10%
 - **Minimum Validator Stake:** 10,000 SLTN
 
@@ -359,7 +359,7 @@ let sdk = SultanSDK::new_local().await?;
    - Great user experience
 
 5. **High Rewards** ✓
-   - 26.67% validator APY
+   - 13.33% validator APY
    - Attracts users and validators
    - Sustainable economics
 
@@ -417,7 +417,7 @@ Everything you need is now available:
 3. ✅ **Documentation:** Complete API reference
 4. ✅ **Examples:** Multiple languages
 5. ✅ **Network:** Mainnet running with validators
-6. ✅ **Economics:** 26.67% APY, zero fees
+6. ✅ **Economics:** 13.33% APY, zero fees
 
 **No barriers. No limitations. Just build.**
 

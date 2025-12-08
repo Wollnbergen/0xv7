@@ -48,7 +48,7 @@ app.post('/', (req, res) => {
             const validator = {
                 address: `sultan1${Date.now()}`,
                 stake: params[0],
-                apy: 0.2667,
+                apy: 0.1333,
                 mobile: params[1] || false
             };
             validators.set(validator.address, validator);
@@ -59,7 +59,7 @@ app.post('/', (req, res) => {
                 result: {
                     address: validator.address,
                     status: "active",
-                    apy: validator.mobile ? "37.33%" : "26.67%"
+                    apy: validator.mobile ? "18.66%" : "13.33%"
                 }
             });
             break;

@@ -34,7 +34,7 @@ app.get('/status', async (req, res) => {
             chain: 'Sultan Chain (Cosmos-Integrated)',
             sultan: {
                 api: 'http://localhost:3030',
-                apy: '26.67%',
+                apy: '13.33%',
                 status: sultanStatus.data
             },
             cosmos: {
@@ -45,7 +45,7 @@ app.get('/status', async (req, res) => {
             },
             unified_features: {
                 zero_gas: true,
-                staking_apy: '26.67%',
+                staking_apy: '13.33%',
                 ibc_support: true,
                 smart_contracts: true,
                 quantum_safe: true,

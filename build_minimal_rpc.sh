@@ -61,7 +61,7 @@ async fn handle_rpc(Json(req): Json<RpcRequest>) -> impl IntoResponse {
             "fee": 0  // Zero fees!
         }),
         "get_apy" => json!({
-            "apy": "26.67%",
+            "apy": "13.33%",
             "mobile_validator_bonus": "40%"
         }),
         "chain_status" => json!({

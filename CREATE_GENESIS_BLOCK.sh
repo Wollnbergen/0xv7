@@ -30,7 +30,7 @@ cat > /workspaces/0xv7/sultan-mainnet/config/genesis.json << 'JSON'
     "total_supply": "1000000000",
     "initial_inflation": "0.08",
     "burn_rate": "0.01",
-    "validator_apy_cap": "0.2667"
+    "validator_apy_cap": "0.1333"
   },
   "app_state": {
     "accounts": [

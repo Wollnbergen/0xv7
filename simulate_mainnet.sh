@@ -41,7 +41,7 @@ echo "   Block Time: 1.2 seconds"
 echo "   Network Latency: 45ms"
 echo "   Active Validators: 5"
 echo "   Total Staked: 375,000 SLTN"
-echo "   APY: 26.67%"
+echo "   APY: 13.33%"
 
 echo ""
 echo "🌉 Cross-Chain Bridges:"

@@ -39,7 +39,7 @@ class SultanHandler(BaseHTTPRequestHandler):
         <div class="info">
             <h3>Economics</h3>
             <p>✅ Zero Gas Fees (subsidized by 8-9% inflation)</p>
-            <p>📈 26.67% APY for Validators</p>
+            <p>📈 13.33% APY for Validators</p>
             <p>📱 +40% Mobile Validator Bonus</p>
         </div>
         
@@ -98,18 +98,18 @@ class SultanHandler(BaseHTTPRequestHandler):
                 result = {
                     'inflation_rate': '8-9%',
                     'inflation_purpose': 'Subsidizes all gas fees and validator rewards',
-                    'validator_apy': '26.67%',
+                    'validator_apy': '13.33%',
                     'mobile_bonus': '40%',
-                    'mobile_validator_apy': '37.33%',
+                    'mobile_validator_apy': '18.66%',
                     'user_gas_fees': 0,
                     'fee_subsidy_source': 'Inflation pool',
                     'economic_model': 'Zero-fee blockchain via inflation subsidy'
                 }
             elif method == 'get_apy':
                 result = {
-                    'validator_apy': '26.67%',
+                    'validator_apy': '13.33%',
                     'mobile_validator_bonus': '40%',
-                    'total_mobile_apy': '37.33%',
+                    'total_mobile_apy': '18.66%',
                     'inflation_rate': '8-9%',
                     'staking_funded_by': 'Network inflation'
                 }
@@ -152,7 +152,7 @@ print('')
 print('✅ Correct Economic Model:')
 print('  • 8-9% annual inflation')
 print('  • Inflation subsidizes ALL gas fees')
-print('  • Validators earn 26.67% APY')
+print('  • Validators earn 13.33% APY')
 print('  • Mobile validators get +40% bonus')
 print('  • Users pay ZERO gas fees forever')
 print('')

@@ -159,7 +159,7 @@ impl SultanSDK {
     }
 
     pub async fn query_apy(&self, is_validator: bool) -> Result<f64> {
-        let base_apy = self.config.inflation_rate / 0.3;  // 8% / 0.3 = 26.67%
+        let base_apy = self.config.inflation_rate / 0.3;  // 8% / 0.3 = 13.33%
         Ok(if is_validator { 
             base_apy 
         } else { 

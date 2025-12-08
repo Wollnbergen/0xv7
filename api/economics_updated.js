@@ -1,18 +1,18 @@
 // Sultan Chain Economics API
 const ECONOMICS = {
     inflation_schedule: {
-        year_1: 8.0,
-        year_2: 6.0,
-        year_3: 4.0,
-        year_4: 3.0,
+        year_1: 4.0,
+        year_2: 3.0,
+        year_3: 2.5,
+        year_4: 2.0,
         year_5_onwards: 2.0
     },
     burn_rate: 1.0,  // 1% burn on high-volume transactions
     validator_apy: {
-        base: 26.67,      // Maximum 26.67%
+        base: 13.33,      // Maximum 13.33%
         mobile_bonus: 0,  // No mobile bonus
         min: 5.0,
-        max: 26.67
+        max: 13.33
     },
     gas_fees: 0.00,  // Users still pay nothing
     

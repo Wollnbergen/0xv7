@@ -17,7 +17,7 @@
 ## Performance Metrics
 - Target TPS: 1,230,000
 - Gas Fees: $0.00
-- Staking APY: 26.67%
+- Staking APY: 13.33%
 - Validator Nodes: 100 max
 
 ## Next: Week 5 - Advanced Features

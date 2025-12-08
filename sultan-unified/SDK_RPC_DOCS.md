@@ -205,7 +205,7 @@ Returns:
 {
   "total_staked": "1000000",
   "validators": [...],
-  "apy": "26.67"
+  "apy": "13.33"
 }
 ```
 

@@ -130,7 +130,7 @@ echo "📈 Completion:       70%"
 echo "⛽ Gas Fees:         $0.00 (Zero Fees)"
 echo "⚡ TPS Capability:   1.2M+"
 echo "🔒 Quantum Safe:     ✅ ENABLED"
-echo "💰 Staking APY:      26.67%"
+echo "💰 Staking APY:      13.33%"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

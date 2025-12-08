@@ -42,7 +42,7 @@ impl Default for ChainConfig {
             block_time_ms: 5000,
             max_block_size: 1_000_000,
             genesis_validators: vec![],
-            inflation_rate: 0.2667,  // 26.67% APY
+            inflation_rate: 0.1333,  // 13.33% APY
             total_supply: 1_000_000_000,
             shards: 4,
             rpc_port: 3030,

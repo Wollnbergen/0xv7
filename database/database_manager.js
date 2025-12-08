@@ -131,7 +131,7 @@ class SultanDatabase {
             await this.client.execute(query, [
                 validator.address,
                 validator.stake,
-                0.2667, // 26.67% APY
+                0.1333, // 13.33% APY
                 new Date(),
                 0,
                 'active'

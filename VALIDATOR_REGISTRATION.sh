@@ -23,7 +23,7 @@ fi
 
 # Calculate APY based on stake
 if [ "$STAKE_AMOUNT" -ge 1000000 ]; then
-    APY="26.67%"
+    APY="13.33%"
 elif [ "$STAKE_AMOUNT" -ge 500000 ]; then
     APY="24.00%"
 else
@@ -63,6 +63,6 @@ echo "✅ Validator registration system created"
 echo ""
 echo "📊 Validator Economics:"
 echo "  • Minimum Stake: 100,000 SLTN"
-echo "  • Maximum APY: 26.67%"
+echo "  • Maximum APY: 13.33%"
 echo "  • Registration Fee: $0.00"
 echo "  • Unbonding Period: 21 days"

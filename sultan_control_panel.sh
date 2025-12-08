@@ -26,7 +26,7 @@ echo "  Chain ID: sultan-testnet-1"
 echo "  Consensus: Tendermint/CometBFT"
 echo "  Gas Fees: $0.00 (Zero forever)"
 echo "  TPS: 1,230,000 (10M with Hyper)"
-echo "  Staking APY: 26.67% (37.33% mobile)"
+echo "  Staking APY: 13.33% (18.66% mobile)"
 echo "  Security: Quantum-resistant (Dilithium3)"
 
 # Quick actions menu

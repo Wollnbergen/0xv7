@@ -9,7 +9,7 @@ After intensive development, we're proud to announce that Sultan Blockchain is *
 ### What We've Achieved:
 - **Zero Gas Fees**: $0.00 transaction costs forever
 - **Lightning Fast**: 1.23 million TPS
-- **High Rewards**: 26.67% APY (37.33% mobile)
+- **High Rewards**: 13.33% APY (18.66% mobile)
 - **Quantum-Safe**: Protected against future threats
 - **Universal Bridges**: Connect to BTC, ETH, SOL, TON
 - **Full IBC**: Seamless Cosmos ecosystem integration

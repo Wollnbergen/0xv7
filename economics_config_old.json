@@ -21,11 +21,11 @@
     }
   },
   "validator_rewards": {
-    "base_apy": 26.67,
+    "base_apy": 13.33,
     "mobile_validator_bonus": 0,
     "calculation": "dynamic_based_on_staking_ratio",
     "min_apy": 5.0,
-    "max_apy": 26.67,
+    "max_apy": 13.33,
     "staking_ratio_target": 0.30
   },
   "gas_fees": {

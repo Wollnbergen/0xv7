@@ -56,8 +56,8 @@
 |---------|--------|----------|
 | Gas Fees | $0.00 | ✅ $0.00 |
 | TPS | 1.23M | ✅ 1.23M |
-| Staking APY | 26.67% | ✅ 26.67% |
-| Mobile APY | 37.33% | ✅ 37.33% |
+| Staking APY | 13.33% | ✅ 13.33% |
+| Mobile APY | 18.66% | ✅ 18.66% |
 | Quantum-Safe | Yes | ✅ Dilithium3 |
 | IBC | Yes | ✅ Enabled |
 | Bridges | 4 chains | ✅ BTC/ETH/SOL/TON |

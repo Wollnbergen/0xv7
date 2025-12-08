@@ -24,7 +24,7 @@ while true; do
     echo "  Target TPS: 1,230,000"
     echo "  Current TPS: Testing..."
     echo "  Gas Price: $0.00"
-    echo "  APY: 26.67%"
+    echo "  APY: 13.33%"
     
     # Bridge status
     echo ""

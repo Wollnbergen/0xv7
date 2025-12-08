@@ -20,7 +20,7 @@ Several features commonly found in blockchain platforms were **intentionally exc
 
 **Alternative Approach**:
 - Using native Rust modules instead of smart contracts
-- Provides staking (26.67% APY), governance, and interoperability without VM
+- Provides staking (13.33% APY), governance, and interoperability without VM
 - Eliminates entire attack surface class (reentrancy, overflow, etc.)
 
 **Timeline**:
@@ -48,7 +48,7 @@ Several features commonly found in blockchain platforms were **intentionally exc
 - **Complexity**: Multi-pool AMMs, lending protocols are 3-6 month projects each
 
 **Alternative Approach**:
-- Simple staking provides 26.67% APY (better than most DeFi yields)
+- Simple staking provides 13.33% APY (competitive with most DeFi yields)
 - Users can bridge to Ethereum/Solana for DeFi access
 - Interoperability provides DeFi access without local implementation
 
@@ -58,7 +58,7 @@ Several features commonly found in blockchain platforms were **intentionally exc
 - Q1 2027: Derivatives and advanced DeFi
 
 **Current DeFi Capabilities**:
-- ✅ Staking rewards (26.67% APY from 8% inflation)
+- ✅ Staking rewards (13.33% APY from 4% inflation)
 - ✅ Bridge to Ethereum DeFi in <3 seconds
 - ✅ Bridge to Solana DeFi in <3 seconds
 - ✅ Access to all major DeFi ecosystems via interoperability
@@ -167,7 +167,7 @@ ETH → Direct verification via light client → Native SLTN on Sultan
 
 ### What We DID Include (MVP):
 1. ✅ **Sharding**: 8 shards → 8,000 auto-expansion
-2. ✅ **Staking**: 26.67% APY, democratic validator set
+2. ✅ **Staking**: 13.33% APY, democratic validator set
 3. ✅ **Governance**: On-chain voting, proposal creation
 4. ✅ **Interoperability**: ETH/SOL/TON/BTC native bridges
 5. ✅ **Mobile Validators**: 15MB binary, 200-500MB RAM
@@ -249,7 +249,7 @@ ETH → Direct verification via light client → Native SLTN on Sultan
 
 ### 4. **Strategic Positioning**
 - Native interop is **better** than bridges (not a compromise)
-- Staking APY (26.67%) is competitive with DeFi yields
+- Staking APY (13.33%) is competitive with DeFi yields
 - Mobile validators are unique differentiator
 
 ### 5. **Community-Driven Development**
@@ -265,7 +265,7 @@ ETH → Direct verification via light client → Native SLTN on Sultan
 
 The MVP includes everything needed for a successful launch:
 - ✅ High performance (64K TPS, sub-3s finality)
-- ✅ Decentralized staking (26.67% APY)
+- ✅ Decentralized staking (13.33% APY)
 - ✅ Democratic governance
 - ✅ Best-in-class cross-chain (native interop)
 - ✅ Unique features (mobile validators, Telegram bot)

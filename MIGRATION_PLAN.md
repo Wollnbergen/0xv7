@@ -135,7 +135,7 @@ curl http://localhost:26657/status
 
 ### Validator Economics
 **Old:** Cosmos SDK inflation module  
-**New:** **Your economics.rs module** with 26.67% APY hardcoded
+**New:** **Your economics.rs module** with 13.33% APY hardcoded
 
 ---
 
@@ -177,8 +177,8 @@ curl http://localhost:26657/status
    - Dilithium3 signatures
    - Post-quantum security
 
-8. **Economics** (`economics.rs`)
-   - 26.67% validator APY
+7. **Economics** (`economics.rs`)
+   - 13.33% validator APY
    - 10% delegator APY
    - Automatic reward distribution
 
@@ -194,7 +194,7 @@ For your website and users:
 ✅ **Total Supply:** 500,000,000 SLTN  
 ✅ **Min Validator Stake:** 10,000 SLTN  
 ✅ **Gas Fees:** $0.00  
-✅ **Validator APY:** 26.67%
+✅ **Validator APY:** 13.33%
 
 ---
 

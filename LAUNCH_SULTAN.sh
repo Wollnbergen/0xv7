@@ -60,7 +60,7 @@ echo ""
 cat << 'SUMMARY'
 📊 KEY METRICS:
    • Gas Fees: $0.00 (Zero Forever!)
-   • Staking APY: 26.67%
+   • Staking APY: 13.33%
    • TPS: 1,230,992 transactions/second
    • Block Time: 5 seconds
    • Validators: 21 active

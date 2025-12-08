@@ -11,7 +11,7 @@
 - ✅ **2-second blocks** - Lightning-fast finality
 - ✅ **500K TPS capacity** - 100 shards × 10K tx/shard
 - ✅ **Zero transaction fees** - 100% free for users
-- ✅ **26.67% validator APY** - Sustainable rewards
+- ✅ **13.33% validator APY** - Sustainable rewards
 - ✅ **RocksDB persistence** - Production-grade storage
 - ✅ **Real P2P networking** - Libp2p implementation
 
@@ -66,13 +66,13 @@
 | TPS Capacity | 500,000 | With 100 shards |
 | Finality | ~4 seconds | 2 block confirmations |
 | Transaction Fees | $0.00 | Zero fees forever |
-| Validator APY | 26.67% | Sustainable rewards |
+| Validator APY | 13.33% | Sustainable rewards |
 
 ### Economics
 | Parameter | Value |
 |-----------|-------|
 | Total Supply | 500,000,000 SLTN |
-| Inflation Rate | 8% annually |
+| Inflation Rate | 4% annually |
 | Blocks Per Year | 15,768,000 |
 | Min Validator Stake | 5,000 SLTN |
 | Proposal Deposit | 1,000 SLTN |
@@ -287,7 +287,7 @@ We have successfully built a **production-ready, zero-fee blockchain** with:
 ### Features
 - ✅ 500K TPS sharding
 - ✅ 2-second blocks
-- ✅ Real staking (26.67% APY)
+- ✅ Real staking (13.33% APY)
 - ✅ Real governance (weighted voting)
 - ✅ 5 bridges (BTC, ETH, SOL, TON, IBC)
 - ✅ Keplr wallet support
@@ -314,7 +314,7 @@ We have successfully built a **production-ready, zero-fee blockchain** with:
 
 1. **Zero Fees Forever** - No transaction costs, ever
 2. **Lightning Fast** - 2-second blocks, 500K TPS
-3. **Sustainable Rewards** - 26.67% APY for validators
+3. **Sustainable Rewards** - 13.33% APY for validators
 4. **True Decentralization** - Code will be deleted after launch
 5. **Universal Bridges** - Connect to BTC, ETH, SOL, TON, Cosmos
 6. **Production Ready** - NO STUBS, NO TODOs, just real code

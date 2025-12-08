@@ -8,7 +8,7 @@
 - ✓ P2P Networking (port 26656)
 - ✓ Account System
 - ✓ Transaction Processing
-- ✓ 26.67% APY Economics
+- ✓ 13.33% APY Economics
 - ✓ Zero Gas Fees ($0.00)
 - ✓ Unified API (port 8080)
 - ✓ Dashboard (port 8888)

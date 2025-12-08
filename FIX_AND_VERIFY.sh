@@ -28,7 +28,7 @@ const server = http.createServer((req, res) => {
             gas_price: 0.00,
             tps: 1230992,
             validators: 21,
-            apy: 26.67,
+            apy: 13.33,
             status: 'operational',
             completion: '70%',
             timestamp: new Date().toISOString()

@@ -81,7 +81,7 @@ case "$1" in
       echo "Account: $3"
       echo "  Balance: 1,000,000 SLTN"
       echo "  Staked: 100,000 SLTN"
-      echo "  Rewards: 26,670 SLTN (26.67% APY)"
+      echo "  Rewards: 26,670 SLTN (13.33% APY)"
       echo "  Gas Spent: \$0.00"
     fi
     ;;
@@ -132,7 +132,7 @@ class SultanAPI(BaseHTTPRequestHandler):
                 "gas_price": 0.00,
                 "tps": random.randint(1200000, 1250000),
                 "validators": 21,
-                "apy": 26.67,
+                "apy": 13.33,
                 "status": "operational"
             }
         elif self.path.startswith('/account/'):

@@ -21,4 +21,4 @@ pub use types::{Transaction, SultanToken, Account};  // Export Transaction
 
 pub const VERSION: &str = "1.0.0";
 pub const ZERO_GAS_FEE: u64 = 0;
-pub const STAKING_APY: f64 = 0.2667;
+pub const STAKING_APY: f64 = 0.1333;

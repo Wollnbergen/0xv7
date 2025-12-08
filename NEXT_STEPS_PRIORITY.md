@@ -114,7 +114,7 @@
 **Slide 5: Business Model**
 - Token creation fees: 1000 SLTN/token (burned = deflationary)
 - Swap fees: 0.3% to liquidity providers
-- Validator commissions: 8% inflation → 26.67% APY
+- Validator commissions: 4% inflation → 13.33% APY
 - Featured listings: 5000 SLTN/week
 - **Projected Year 1**: $1M+ token fees + $5M+ TVL
 
@@ -181,8 +181,8 @@
 - Keep PoS explanation
 - Update validator economics:
   ```
-  - Inflation: 8% annual
-  - Validator APY: 26.67%
+  - Inflation: 4% annual
+  - Validator APY: 13.33%
   - Minimum stake: 5,000 SLTN
   - Mobile validators: 15MB binary, 200-500MB RAM
   ```

@@ -54,8 +54,8 @@ fn main() {
     println!();
     println!("📊 Chain Economics (PRODUCTION):");
     println!("   • Gas Fees: $0.00 (ZERO FOREVER)");
-    println!("   • Validator APY: 26.67%");
-    println!("   • Mobile Validator APY: 37.33%");
+    println!("   • Validator APY: 13.33%");
+    println!("   • Mobile Validator APY: 18.66%");
     println!();
     
     let mut height = 0u64;

@@ -82,7 +82,7 @@ cat > /workspaces/0xv7/mainnet/config/genesis.json << 'GENESIS'
     "sultan": {
       "params": {
         "zero_gas_fees": true,
-        "staking_apy": "0.266700000000000000",
+        "staking_apy": "0.133300000000000000",
         "mobile_apy": "0.373300000000000000",
         "min_stake": "5000000000",
         "max_tps": "1230000",

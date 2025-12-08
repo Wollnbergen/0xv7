@@ -13,7 +13,7 @@
   "features": {
     "zero_gas": true,
     "tps": 1230000,
-    "apy": 26.67,
+    "apy": 13.33,
     "quantum_safe": true,
     "bridges": ["BTC", "ETH", "SOL", "TON"],
     "ibc_enabled": true

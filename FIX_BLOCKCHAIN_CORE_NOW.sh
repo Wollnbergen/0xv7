@@ -184,7 +184,7 @@ pub struct ChainConfig {
     pub chain_id: String,
     pub block_time: u64,
     pub gas_price: u64,  // Always 0
-    pub staking_apy: f64, // 26.67%
+    pub staking_apy: f64, // 13.33%
 }
 
 impl Default for ChainConfig {
@@ -193,7 +193,7 @@ impl Default for ChainConfig {
             chain_id: "sultan-1".to_string(),
             block_time: 5,
             gas_price: 0,
-            staking_apy: 0.2667,
+            staking_apy: 0.1333,
         }
     }
 }

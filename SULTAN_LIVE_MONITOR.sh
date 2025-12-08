@@ -22,7 +22,7 @@ while true; do
     echo "  • Active Services: $SERVICES/6"
     echo "  • Network: MAINNET-READY"
     echo "  • Gas Fees: $0.00"
-    echo "  • Validator APY: 26.67%"
+    echo "  • Validator APY: 13.33%"
     echo ""
     
     # Test API

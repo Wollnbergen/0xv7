@@ -5,8 +5,8 @@ Sultan Chain is **85% complete** and on track for **Week 8 mainnet launch**.
 
 ## ✅ Completed Features (85%)
 - ✅ **Zero gas fees** - Working ($0.00 forever)
-- ✅ **26.67% validator APY** - Implemented
-- ✅ **37.33% mobile APY** - Ready
+- ✅ **13.33% validator APY** - Implemented
+- ✅ **18.66% mobile APY** - Ready
 - ✅ **1.2M+ TPS** - Exceeded 10K goal by 120x
 - ✅ **85ms finality** - Fastest in industry
 - ✅ **5 cross-chain bridges** - ETH, SOL, BTC, TON, ZK

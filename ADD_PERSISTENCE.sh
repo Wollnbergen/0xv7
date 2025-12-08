@@ -226,8 +226,8 @@ async fn main() -> Result<()> {
     println!();
     println!("💰 Economics:");
     println!("   • Gas Fees: $0.00 (subsidized)");
-    println!("   • Validator APY: 26.67%");
-    println!("   • Mobile Validator APY: 37.33% (40% bonus)");
+    println!("   • Validator APY: 13.33%");
+    println!("   • Mobile Validator APY: 18.66% (40% bonus)");
     println!();
     println!("🚀 Sultan Chain is running!");
     println!("   • Producing blocks every 5 seconds");

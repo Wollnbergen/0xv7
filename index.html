@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sultan L1 - Zero-Fee Blockchain | Powered by Rust & Cosmos</title>
-    <meta name="description" content="Sultan L1: The first zero-fee blockchain with 26.67% validator APY. Built with Rust, powered by Cosmos SDK, secured by CometBFT.">
+    <meta name="description" content="Sultan L1: The first zero-fee blockchain with 13.33% validator APY. Built with Rust, powered by Cosmos SDK, secured by CometBFT.">
     <style>
         * {
             margin: 0;
@@ -893,7 +893,7 @@
                     <div class="label">Transaction Fees</div>
                 </div>
                 <div class="stat-box">
-                    <div class="number">26.67%</div>
+                    <div class="number">13.33%</div>
                     <div class="label">Validator APY</div>
                 </div>
                 <div class="stat-box">
@@ -1028,7 +1028,7 @@
                     <div class="label">Min. Validator Stake</div>
                 </div>
                 <div class="token-card">
-                    <div class="value">26.67%</div>
+                    <div class="value">13.33%</div>
                     <div class="label">Fixed APY</div>
                 </div>
                 <div class="token-card">
@@ -1113,7 +1113,7 @@
                     </div>
 
                     <div class="earnings-calc">
-                        <h3 style="margin-bottom: 1rem;">📊 Your Estimated Earnings (26.67% APY)</h3>
+                        <h3 style="margin-bottom: 1rem;">📊 Your Estimated Earnings (13.33% APY)</h3>
                         <div class="earnings-row">
                             <span>Daily:</span>
                             <strong id="dailyEarnings">7.30 SLTN</strong>
@@ -1263,7 +1263,7 @@ const balance = await fetch(
                             <div class="stat-label">Finality</div>
                         </div>
                         <div class="dev-stat">
-                            <div class="stat-number">26.67%</div>
+                            <div class="stat-number">13.33%</div>
                             <div class="stat-label">APY</div>
                         </div>
                     </div>
@@ -1281,7 +1281,7 @@ const balance = await fetch(
                     <div style="padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
                         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">💰</div>
                         <strong>Staking & Delegation</strong>
-                        <p style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">Earn 26.67% APY validating or delegating SLTN</p>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">Earn 13.33% APY validating or delegating SLTN</p>
                     </div>
                     <div style="padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
                         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🌉</div>
@@ -1567,10 +1567,10 @@ const balance = await fetch(
         // Production RPC endpoints (falls back to localhost for development)
         let rpcEndpoint = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
             ? 'http://localhost:8080' 
-            : 'http://rpc.sltn.io';  // TODO: Change to https:// after SSL setup
+            : 'https://rpc.sltn.io';
         let restEndpoint = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:8080'
-            : 'http://rpc.sltn.io';  // TODO: Change to https:// after SSL setup
+            : 'https://rpc.sltn.io';
         let connectedAddress = null;
         let networkStatsInterval = null;
 
@@ -2004,9 +2004,9 @@ const balance = await fetch(
 
 <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-top: 20px;">
     <h3 style="color: #2e7d32;">📊 Your Expected Earnings</h3>
-    <p><strong>Yearly:</strong> ${(parseFloat(stakeAmount) * 0.2667).toFixed(0)} SLTN (26.67% APY)</p>
-    <p><strong>Monthly:</strong> ${(parseFloat(stakeAmount) * 0.2667 / 12).toFixed(2)} SLTN</p>
-    <p><strong>Daily:</strong> ${(parseFloat(stakeAmount) * 0.2667 / 365).toFixed(2)} SLTN</p>
+    <p><strong>Yearly:</strong> ${(parseFloat(stakeAmount) * 0.1333).toFixed(0)} SLTN (13.33% APY)</p>
+    <p><strong>Monthly:</strong> ${(parseFloat(stakeAmount) * 0.1333 / 12).toFixed(2)} SLTN</p>
+    <p><strong>Daily:</strong> ${(parseFloat(stakeAmount) * 0.1333 / 365).toFixed(2)} SLTN</p>
 </div>
             `;
 
@@ -2031,7 +2031,7 @@ const balance = await fetch(
         // Earnings Calculator
         document.getElementById('stakeAmount').addEventListener('input', function() {
             const stake = parseFloat(this.value) || 10000;
-            const apy = 0.2667;
+            const apy = 0.1333;
             const yearly = stake * apy;
             const monthly = yearly / 12;
             const daily = yearly / 365;
@@ -2048,61 +2048,56 @@ const balance = await fetch(
             const commission = document.getElementById('commission').value;
 
             const instructions = `
-<h2 style="color: var(--primary); margin-bottom: 1.5rem;">🚀 Your Validator Setup</h2>
+<h2 style="color: var(--primary); margin-bottom: 1.5rem;">🚀 Run a Sultan Validator</h2>
 
-<h3>Step 1: Install Docker</h3>
-<pre>curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh</pre>
+<p style="margin-bottom: 20px; color: #666;">Join the Sultan network as a validator in 3 simple steps. Requires a Linux server (Ubuntu 22.04+ recommended).</p>
 
-<h3>Step 2: Pull Sultan L1 Image</h3>
-<pre>docker pull ghcr.io/wollnbergen/sultan-l1:latest</pre>
+<h3>Step 1: Download Sultan Node</h3>
+<pre>wget https://github.com/Wollnbergen/0xv7/releases/latest/download/sultan-node
+chmod +x sultan-node</pre>
 
-<h3>Step 3: Run Validator Node</h3>
-<pre>docker run -d --name sultan-validator \\
-  -p 26656:26656 -p 26657:26657 -p 1317:1317 \\
-  -v sultan-data:/root/.sultand \\
-  ghcr.io/wollnbergen/sultan-l1:latest</pre>
+<h3>Step 2: Start Your Validator</h3>
+<pre>./sultan-node \\
+  --validator \\
+  --validator-address ${validatorName.toLowerCase().replace(/[^a-z0-9]/g, '_')} \\
+  --validator-stake ${stakeAmount} \\
+  --enable-p2p \\
+  --bootstrap-peers /ip4/5.161.225.96/tcp/26656 \\
+  --enable-sharding</pre>
 
-<h3>Step 4: Initialize Node</h3>
-<pre>docker exec sultan-validator sultand init ${validatorName} --chain-id sultan-1</pre>
+<h3>Step 3: Verify Connection</h3>
+<pre>curl http://localhost:26657/status</pre>
+<p style="color: #666; font-size: 14px;">You should see your validator syncing with the network.</p>
 
-<h3>Step 5: Get Genesis File</h3>
-<pre>docker exec sultan-validator wget \\
-  https://raw.githubusercontent.com/Wollnbergen/0xv7/main/genesis.json \\
-  -O /root/.sultand/config/genesis.json</pre>
+<div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
+    <h4 style="color: #1565c0; margin-bottom: 10px;">💡 Run as a Service (Recommended)</h4>
+    <p style="font-size: 14px; margin-bottom: 10px;">To keep your validator running 24/7:</p>
+<pre style="font-size: 12px;">sudo tee /etc/systemd/system/sultan.service << EOF
+[Unit]
+Description=Sultan Validator
+After=network.target
 
-<h3>Step 6: Create Validator Key</h3>
-<pre>docker exec -it sultan-validator sultand keys add validator</pre>
-<p style="color: #f57c00; margin: 10px 0; padding: 10px; background: #fff3e0; border-radius: 5px;">
-<strong>⚠️ SAVE YOUR MNEMONIC PHRASE SECURELY!</strong><br>
-Write it down on paper and store it safely. Never share it with anyone.
-</p>
+[Service]
+ExecStart=$(pwd)/sultan-node --validator --validator-address ${validatorName.toLowerCase().replace(/[^a-z0-9]/g, '_')} --validator-stake ${stakeAmount} --enable-p2p --bootstrap-peers /ip4/5.161.225.96/tcp/26656 --enable-sharding
+Restart=always
 
-<h3>Step 7: Get SLTN Tokens</h3>
-<p>Send <strong>${stakeAmount} SLTN</strong> to your validator address (shown in step 6)</p>
+[Install]
+WantedBy=multi-user.target
+EOF
 
-<h3>Step 8: Create Validator</h3>
-<pre>docker exec sultan-validator sultand tx staking create-validator \\
-  --amount ${stakeAmount}000000usltn \\
-  --commission-rate ${commission} \\
-  --commission-max-rate 0.20 \\
-  --commission-max-change-rate 0.01 \\
-  --min-self-delegation ${stakeAmount}000000 \\
-  --moniker "${validatorName}" \\
-  --from validator \\
-  --chain-id sultan-1 \\
-  --gas auto \\
-  --gas-adjustment 1.5 \\
-  --yes</pre>
-
-<h3>Step 9: Check Status</h3>
-<pre>docker exec sultan-validator sultand status
-docker logs sultan-validator</pre>
+sudo systemctl enable sultan && sudo systemctl start sultan</pre>
+</div>
 
 <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-top: 20px;">
-    <h3 style="color: #2e7d32;">✅ You're Now a Validator!</h3>
-    <p>Your node will start producing blocks and earning rewards automatically.</p>
-    <p><strong>Expected yearly earnings: ${(parseFloat(stakeAmount) * 0.2667).toFixed(0)} SLTN</strong></p>
+    <h3 style="color: #2e7d32;">✅ That's It!</h3>
+    <p>Your validator will automatically connect to the P2P network and start participating in consensus.</p>
+    <p><strong>Expected APY: 13.33%</strong> (~${(parseFloat(stakeAmount) * 0.1333).toFixed(0)} SLTN yearly on ${stakeAmount} SLTN stake)</p>
+</div>
+
+<div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-top: 15px;">
+    <p style="color: #e65100; font-size: 14px; margin: 0;">
+    <strong>📋 Requirements:</strong> Linux server, 1 CPU, 1GB RAM, stable internet connection
+    </p>
 </div>
             `;
 

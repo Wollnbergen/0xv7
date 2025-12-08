@@ -5,7 +5,7 @@
 
 ### ✅ What We've Built (Proven Concepts)
 - **Zero Fee Mechanism**: Working in test environment
-- **Economics Model**: 26.67% APY mathematically proven
+- **Economics Model**: 13.33% APY mathematically proven
 - **API/Interface**: Live demo available
 - **Technical Architecture**: Designed and partially implemented
 
@@ -42,7 +42,7 @@
 
 ### 🎯 Key Differentiators
 1. **Actually Zero Fees** (not "low" fees)
-2. **Sustainable Economics** (8% inflation funds operations)
+2. **Sustainable Economics** (4% inflation funds operations)
 3. **Working Demo** (try it now!)
 
 ### ⚠️ Risks & Disclaimers

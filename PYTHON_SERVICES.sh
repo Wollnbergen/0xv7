@@ -44,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
                 "version": "1.0.0",
                 "status": "operational",
                 "gasFees": 0,
-                "apy": "26.67%",
+                "apy": "13.33%",
                 "tps": "1,247,000+",
                 "blockTime": "85ms"
             }

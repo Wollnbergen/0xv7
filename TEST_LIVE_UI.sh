@@ -15,8 +15,8 @@ curl -s -X POST http://localhost:3030 \
     -d '{"jsonrpc":"2.0","method":"chain_status","id":1}' | jq '.'
 echo ""
 
-# Test 2: Get Economics (with the exact 26.67% APY)
-echo "�� TEST 2: Economics (8% Inflation → 26.67% APY)"
+# Test 2: Get Economics (with the exact 13.33% APY)
+echo "�� TEST 2: Economics (8% Inflation → 13.33% APY)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 curl -s -X POST http://localhost:3030 \
     -H 'Content-Type: application/json' \
@@ -42,8 +42,8 @@ echo ""
 echo "✅ All UI endpoints tested successfully!"
 echo ""
 echo "📱 The UI confirms:"
-echo "   • 8% Annual Inflation ✅"
-echo "   • 26.67% Validator APY ✅"
-echo "   • 37.33% Mobile Validator APY (40% bonus) ✅"
+echo "   • 4% Annual Inflation ✅"
+echo "   • 13.33% Validator APY ✅"
+echo "   • 18.66% Mobile Validator APY (40% bonus) ✅"
 echo "   • ZERO Gas Fees Forever ✅"
 

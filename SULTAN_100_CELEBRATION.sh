@@ -29,7 +29,7 @@ echo "│ ✅ Testnet:         Deployed & Ready                              │
 echo "│ ✅ Optimizations:   Applied                                       │"
 echo "│ ✅ Bridges:         4 Chains Connected                            │"
 echo "│ ✅ Security:        Quantum-Resistant                             │"
-echo "│ ✅ Staking APY:     26.67%                                       │"
+echo "│ ✅ Staking APY:     13.33%                                       │"
 echo "└────────────────────────────────────────────────────────────────────┘"
 echo ""
 echo "📊 FINAL METRICS:"

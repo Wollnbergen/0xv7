@@ -104,7 +104,7 @@ async fn main() {
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
     println!("💰 Zero Gas Fees");
-    println!("📈 26.67% Validator APY");
+    println!("📈 13.33% Validator APY");
     println!("⏱️  5 second blocks");
     println!();
     

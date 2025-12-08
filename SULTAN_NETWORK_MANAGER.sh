@@ -55,7 +55,7 @@ case "${1:-status}" in
         echo ""
         echo "💰 Network Features:"
         echo "  • Gas Fees: $0.00 (ALWAYS FREE)"
-        echo "  • APY: 26.67% (37.33% mobile)"
+        echo "  • APY: 13.33% (18.66% mobile)"
         echo "  • Min Stake: 5,000 SLTN"
         echo "  • TPS: 1,247,000+"
         echo "  • Block Time: ~85ms"
@@ -151,7 +151,7 @@ case "${1:-status}" in
             done
             
             echo ""
-            echo "Network: 26.67% APY | 1.2M+ TPS | $0.00 Gas Fees"
+            echo "Network: 13.33% APY | 1.2M+ TPS | $0.00 Gas Fees"
             sleep 5
         done
         ;;

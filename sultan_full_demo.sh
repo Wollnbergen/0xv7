@@ -44,7 +44,7 @@ echo "╔═══════════════════════�
 echo "║                    SULTAN CHAIN FEATURES                      ║"
 echo "╠════════════════════════════════════════════════════════════════╣"
 echo "║ ✅ Zero Gas Fees       - All transactions FREE                ║"
-echo "║ ✅ 26.67% APY          - High staking rewards                 ║"
+echo "║ ✅ 13.33% APY          - High staking rewards                 ║"
 echo "║ ✅ Mobile Validators   - 40% bonus for mobile nodes           ║"
 echo "║ ✅ 10,000+ TPS         - High throughput                      ║"
 echo "║ ✅ IBC Enabled         - Cross-chain interoperability         ║"

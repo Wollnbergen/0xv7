@@ -58,7 +58,7 @@ Sultan Chain v0.1.0
 ### ⚠️ Staking (Partially working)
 - `validator_register` - Register validator (needs RPC fix)
 - `stake` - Stake tokens (validation works)
-- `query_apy` - Get current APY (returns 26.67%)
+- `query_apy` - Get current APY (returns 13.33%)
 
 ## 📊 Current Status
 

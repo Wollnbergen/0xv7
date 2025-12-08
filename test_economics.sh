@@ -36,7 +36,7 @@ BURNED=$(echo "$STATUS" | jq -r '.total_burned')
 DEFLATION=$(echo "$STATUS" | jq -r '.is_deflationary')
 
 echo "  Inflation Rate: $INFLATION (8% expected)"
-echo "  Validator APY: $APY (26.67% expected)"
+echo "  Validator APY: $APY (13.33% expected)"
 echo "  Total Burned: $BURNED"
 echo "  Is Deflationary: $DEFLATION (false expected in year 0)"
 
@@ -47,10 +47,10 @@ else
     exit 1
 fi
 
-if [[ "$APY" == "0.2667" ]]; then
+if [[ "$APY" == "0.1333" ]]; then
     echo -e "${GREEN}✅ APY correct${NC}"
 else
-    echo -e "${RED}❌ APY incorrect: expected 0.2667, got $APY${NC}"
+    echo -e "${RED}❌ APY incorrect: expected 0.1333, got $APY${NC}"
     exit 1
 fi
 echo ""
@@ -115,16 +115,16 @@ EXPECTED_APY=$(echo "$INFLATION_RATE / $STAKING_RATIO" | bc -l)
 echo "  Total Supply: $(printf "%'.0f" $TOTAL_SUPPLY) SLTN"
 echo "  Annual Inflation: $(printf "%'.0f" $YEARLY_INFLATION) SLTN (8%)"
 echo "  If 30% staked, APY: $(printf "%.2f%%" $(echo "$EXPECTED_APY * 100" | bc -l))"
-echo "  Max APY (capped): 26.67%"
+echo "  Max APY (capped): 13.33%"
 
 # Example validator earnings
 STAKE_AMOUNT=100000
-YEARLY_EARNINGS=$(echo "$STAKE_AMOUNT * 0.2667" | bc)
+YEARLY_EARNINGS=$(echo "$STAKE_AMOUNT * 0.1333" | bc)
 MONTHLY_EARNINGS=$(echo "$YEARLY_EARNINGS / 12" | bc)
 DAILY_EARNINGS=$(echo "$YEARLY_EARNINGS / 365" | bc)
 
 echo ""
-echo "  Example: 100,000 SLTN staked @ 26.67% APY:"
+echo "  Example: 100,000 SLTN staked @ 13.33% APY:"
 echo "    - Yearly: $(printf "%'.0f" $YEARLY_EARNINGS) SLTN"
 echo "    - Monthly: $(printf "%'.2f" $MONTHLY_EARNINGS) SLTN"
 echo "    - Daily: $(printf "%'.2f" $DAILY_EARNINGS) SLTN"
@@ -141,7 +141,7 @@ echo "  Year 4 Rewards: 15,000,000 SLTN (3% of 500M)"
 echo "  Year 5+ Rewards: 10,000,000 SLTN (2% of 500M)"
 echo ""
 echo "  Long-term sustainability:"
-echo "    - Inflation decreases over 5 years: 8% → 2%"
+echo "    - Inflation decreases over 5 years: 4% → 2%"
 echo "    - Burn mechanism can make it deflationary (1% burn rate)"
 echo "    - When burn > inflation: deflationary"
 echo "    - Network stays secure without gas fees"
@@ -172,15 +172,15 @@ echo "======================================"
 echo ""
 echo "Economics System Status:"
 echo "  ✅ Inflation rate: Working (8.0%)"
-echo "  ✅ Validator APY: Correct (26.67%)"
+echo "  ✅ Validator APY: Correct (13.33%)"
 echo "  ✅ Burn mechanism: Active (1.0%)"
-echo "  ✅ Inflation schedule: Verified (8% → 2%)"
+echo "  ✅ Inflation schedule: Verified (4% → 2%)"
 echo "  ✅ Zero-fee model: Sustainable"
 echo "  ✅ Deflationary path: Clear"
 echo ""
 echo "Key Metrics:"
 echo "  📈 Current Inflation: 8.0%"
-echo "  💰 Validator APY: 26.67%"
+echo "  💰 Validator APY: 13.33%"
 echo "  🔥 Burn Rate: 1.0%"
 echo "  📊 Economic Status: Inflationary (year 0)"
 echo ""

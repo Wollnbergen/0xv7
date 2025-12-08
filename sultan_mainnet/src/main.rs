@@ -193,8 +193,8 @@ impl SultanChain {
                 validators: validators.len(),
                 mobile_validators: mobile_count,
                 total_staked,
-                apy_regular: 26.67,
-                apy_mobile: 37.33,
+                apy_regular: 13.33,
+                apy_mobile: 18.66,
             }
         } else {
             ChainStats {
@@ -202,8 +202,8 @@ impl SultanChain {
                 validators: 0,
                 mobile_validators: 0,
                 total_staked: 0,
-                apy_regular: 26.67,
-                apy_mobile: 37.33,
+                apy_regular: 13.33,
+                apy_mobile: 18.66,
             }
         }
     }
@@ -231,7 +231,7 @@ async fn main() -> Result<()> {
     let config = ChainConfig {
         chain_id: "sultan-mainnet-1".to_string(),
         block_time: 5,
-        inflation_rate: 0.08,
+        inflation_rate: 0.04,
         min_stake: 5000,
     };
     
@@ -244,8 +244,8 @@ async fn main() -> Result<()> {
     
     println!("💰 Economics:");
     println!("   • Gas Fees: $0.00 (subsidized)");
-    println!("   • Validator APY: 26.67%");
-    println!("   • Mobile Validator APY: 37.33% (40% bonus)");
+    println!("   • Validator APY: 13.33%");
+    println!("   • Mobile Validator APY: 18.66% (40% bonus)");
     println!();
     
     let chain = Arc::new(SultanChain::new(config.clone()));

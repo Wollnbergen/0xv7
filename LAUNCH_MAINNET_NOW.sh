@@ -17,7 +17,7 @@ echo "[✓] Security: Quantum-resistant (Dilithium3)"
 echo "[✓] Performance: 1.23M TPS verified"
 echo "[✓] Bridges: BTC/ETH/SOL/TON ready"
 echo "[✓] Zero Gas Fees: Configured"
-echo "[✓] Staking APY: 26.67% set"
+echo "[✓] Staking APY: 13.33% set"
 echo "[✓] Tests: 31/31 passing"
 
 # Mainnet parameters

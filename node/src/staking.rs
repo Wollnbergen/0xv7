@@ -12,7 +12,7 @@ impl StakingPool {
         Self {
             validators: HashMap::new(),
             total_staked: 0,
-            apy: 26.67, // 26.67% APY as specified
+            apy: 13.33, // 13.33% APY as specified
         }
     }
     

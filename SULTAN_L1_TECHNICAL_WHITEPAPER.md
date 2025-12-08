@@ -26,7 +26,7 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Network Protocol** | libp2p |
 | **Cryptography** | Ed25519 + Dilithium3 (Post-Quantum) |
 | **Gas Fees** | $0 (zero-fee transactions) |
-| **Staking APY** | 26.67% |
+| **Staking APY** | 13.33% |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
 **P2P Bootstrap:** `/dns4/rpc.sltn.io/tcp/26656`
@@ -586,15 +586,15 @@ Example: sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7l8qn5t2
 
 ### 8.3 Inflation Model
 
-Sultan uses a **decreasing inflation model** for sustainable validator rewards:
+Sultan uses a **conservative, decreasing inflation model** for sustainable validator rewards that cover operational costs while avoiding excessive token dilution:
 
 | Year | Inflation Rate | New Tokens | Total Supply |
 |------|---------------|------------|--------------|
-| 1 | 8.00% | 40,000,000 | 540,000,000 |
-| 2 | 7.00% | 37,800,000 | 577,800,000 |
-| 3 | 6.00% | 34,668,000 | 612,468,000 |
-| 4 | 5.00% | 30,623,400 | 643,091,400 |
-| 5+ | 4.00% | Floor | Perpetual |
+| 1 | 4.00% | 20,000,000 | 520,000,000 |
+| 2 | 3.50% | 18,200,000 | 538,200,000 |
+| 3 | 3.00% | 16,146,000 | 554,346,000 |
+| 4 | 2.50% | 13,858,650 | 568,204,650 |
+| 5+ | 2.00% | Floor | Perpetual |
 
 ### 8.4 Staking Economics
 
@@ -602,15 +602,21 @@ Sultan uses a **decreasing inflation model** for sustainable validator rewards:
 ```
 APY = Inflation Rate / Staking Ratio
 
-At 30% staked: APY = 8% / 0.30 = 26.67%
-At 50% staked: APY = 8% / 0.50 = 16.00%
-At 70% staked: APY = 8% / 0.70 = 11.43%
+At 30% staked: APY = 4% / 0.30 = 13.33%
+At 50% staked: APY = 4% / 0.50 = 8.00%
+At 70% staked: APY = 4% / 0.70 = 5.71%
 ```
 
 **Current Network:**
 - **Staking ratio:** ~30% (projected)
-- **Effective APY:** 26.67%
+- **Effective APY:** 13.33%
 - **Validator minimum:** 10,000 SLTN
+
+**Why 13.33% APY?**
+- Covers real validator costs (~$100-150/year infrastructure)
+- Provides reasonable profit margin for operators
+- Sustainable long-term without excessive dilution
+- Competitive with other PoS networks (vs 3-7% industry average)
 
 ### 8.5 Fee Structure
 
@@ -732,10 +738,14 @@ Validators should monitor:
 
 | Component | Value |
 |-----------|-------|
-| Base APY | 26.67% (at 30% staking) |
+| Base APY | 13.33% (at 30% staking) |
 | Block rewards | Proportional to stake |
 | Priority fees | 60% to proposer |
 | Slashing protection | Uptime monitoring |
+
+**Annual Earnings Example (10,000 SLTN stake):**
+- At $0.20/SLTN: 1,333 SLTN = $267/year (covers ~$100 server + profit)
+- At $1.00/SLTN: 1,333 SLTN = $1,333/year
 
 ---
 
@@ -870,7 +880,7 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 | Consensus | Custom PoS |
 | Minimum Validator Stake | 10,000 SLTN |
 | Genesis Supply | 500,000,000 SLTN |
-| Inflation | 8% → 4% (decreasing) |
+| Inflation | 4% → 2% (decreasing) |
 | Transaction Fee | 0 SLTN (zero-fee) |
 | Cross-Shard Fee | 0.0001 SLTN |
 | Language | Rust |

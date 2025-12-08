@@ -136,7 +136,7 @@ async fn status(blockchain: Arc<Mutex<Blockchain>>) -> impl IntoResponse {
         "pending_tx": chain.pending_transactions.len(),
         "latest_block": chain.chain.last().map(|b| b.index).unwrap_or(0),
         "gas_fee": 0,
-        "staking_apy": "26.67%"
+        "staking_apy": "13.33%"
     }))
 }
 
@@ -195,7 +195,7 @@ async fn main() {
         println!("   Genesis Block: #{}", chain.chain[0].index);
         println!("   Genesis Hash: {}", &chain.chain[0].hash[..16]);
         println!("   Gas Fees: $0.00 (Zero forever!)");
-        println!("   Staking APY: 26.67%");
+        println!("   Staking APY: 13.33%");
     }
 
     // Create API router

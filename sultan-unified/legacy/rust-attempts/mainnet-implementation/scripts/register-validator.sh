@@ -14,7 +14,7 @@ fi
 
 # Calculate APY based on stake
 if [ "$STAKE_AMOUNT" -ge 1000000 ]; then
-    APY="26.67%"
+    APY="13.33%"
 elif [ "$STAKE_AMOUNT" -ge 500000 ]; then
     APY="24.00%"
 else

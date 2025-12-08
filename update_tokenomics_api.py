@@ -50,7 +50,7 @@ def tokenomics():
             },
             "purpose": [
                 "Subsidize zero gas fees",
-                "Pay validator rewards (26.67% APY)",
+                "Pay validator rewards (13.33% APY)",
                 "Fund community treasury",
                 "Support development"
             ],
@@ -61,7 +61,7 @@ def tokenomics():
             }
         },
         "economics": {
-            "staking_apy": "26.67%",
+            "staking_apy": "13.33%",
             "gas_fees": "$0.00",
             "transaction_cost": "0 SLTN",
             "min_stake": "5,000 SLTN",

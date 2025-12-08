@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
         block_time_ms: 5000,
         max_validators: 100,
         min_stake: 5000,
-        inflation_rate: 0.08,  // 8% annual
+        inflation_rate: 0.08,  // 4% annual
         total_supply: 1_000_000_000,
         shards: 8,
     };

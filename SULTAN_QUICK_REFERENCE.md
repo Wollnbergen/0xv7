@@ -6,7 +6,7 @@
 | Gas Fees | $0.00 | ✅ LIVE |
 | TPS | 1.2M+ | ✅ LIVE |
 | Finality | 85ms | ✅ LIVE |
-| Validator APY | 26.67% | ✅ LIVE |
+| Validator APY | 13.33% | ✅ LIVE |
 | Min Stake | 1,000 SLTN | ✅ LIVE |
 
 ## 🌐 Public Endpoints

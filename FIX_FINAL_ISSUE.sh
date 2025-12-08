@@ -116,14 +116,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RewardConfig {
-    pub staking_apy: f64,  // 26.67%
+    pub staking_apy: f64,  // 13.33%
     pub inflation_rate: f64,  // 8%
 }
 
 impl Default for RewardConfig {
     fn default() -> Self {
         Self {
-            staking_apy: 0.2667,
+            staking_apy: 0.1333,
             inflation_rate: 0.08,
         }
     }
@@ -179,7 +179,7 @@ if [ -f "target/debug/test_node" ]; then
     echo "   ✅ Zero Gas Fees: IMPLEMENTED ($0.00)"
     echo "   ✅ Block Production: ACTIVE"
     echo "   ✅ Transaction Processing: WORKING"
-    echo "   ✅ Staking APY: 26.67% CONFIGURED"
+    echo "   ✅ Staking APY: 13.33% CONFIGURED"
     echo ""
     echo "🌐 Available Interfaces:"
     echo "   Web Dashboard: $BROWSER http://localhost:3000"

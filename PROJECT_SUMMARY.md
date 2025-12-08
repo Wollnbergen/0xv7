@@ -44,8 +44,8 @@ Languages: Rust (70%), Go (15%), JS (10%), Python (5%)
 Completion: 70%
 Time to 100%: ~4 weeks
 💎 UNIQUE FEATURES
-✅ Zero gas fees (subsidized by 8% inflation)
-✅ 26.67% staking APY
+✅ Zero gas fees (subsidized by 4% inflation)
+✅ 13.33% staking APY
 ✅ Quantum-resistant (NIST approved)
 ✅ 1.2M+ TPS capability
 ✅ Universal bridges (BTC/ETH/SOL/TON)

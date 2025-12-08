@@ -39,14 +39,14 @@ Sultan L1 is a **production-grade Layer 1 blockchain** with:
 - **Token**: SLTN (Sultan Token)
 - **Decimals**: 9
 - **Initial Supply**: 1,000,000,000 SLTN
-- **Inflation**: 8% → 2% (decreasing over 3 years)
+- **Inflation**: 4% → 2% (decreasing over 3 years)
 - **Block Rewards**: Automatic distribution
 - **Fee System**: Transaction and bridge fees
 
 ### 4. Staking System ✅ **PRODUCTION READY**
 - **Lines of Code**: 600+
 - **Minimum Stake**: 5,000 SLTN
-- **APY**: 26.67% for validators
+- **APY**: 13.33% for validators
 - **Inflation Rate**: 8% (governance adjustable)
 - **Features**:
   - Validator creation with commission
@@ -154,7 +154,7 @@ Total Project: 6,900+ lines
 - ✅ 600+ lines of production code
 - ✅ Validator creation with minimum 5,000 SLTN
 - ✅ Delegation with commission support
-- ✅ Automatic per-block reward distribution (26.67% APY)
+- ✅ Automatic per-block reward distribution (13.33% APY)
 - ✅ Real slashing mechanisms (5-10% + jail)
 - ✅ Jail/unjail system
 - ✅ Reward withdrawal
@@ -267,7 +267,7 @@ sudo bash deploy/install_production.sh
 
 ### Staking Economics
 - **Minimum Validator Stake**: 5,000 SLTN
-- **Base APY**: 26.67%
+- **Base APY**: 13.33%
 - **Commission Range**: 0-100%
 - **Blocks Per Year**: 6,307,200
 - **Block Time**: 5 seconds
@@ -344,7 +344,7 @@ sudo bash deploy/install_production.sh
 Sultan L1 is a **production-grade Layer 1 blockchain** featuring:
 
 - **High Performance**: 200,000 TPS with sharding
-- **Real Staking**: 26.67% APY with automatic rewards ✅ NEW
+- **Real Staking**: 13.33% APY with automatic rewards ✅ NEW
 - **Real Governance**: On-chain voting with weighted power ✅ NEW
 - **Multi-Chain Bridges**: Bitcoin, Ethereum, Solana, TON, Cosmos
 - **Complete API**: 38 production endpoints (12 new)

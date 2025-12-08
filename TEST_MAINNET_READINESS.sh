@@ -58,7 +58,7 @@ APY=$(curl -s -X POST http://localhost:3030 \
   -d '{"jsonrpc":"2.0","method":"get_apy","id":1}' \
   | jq -r '.result.base_apy')
   
-if [ "$APY" = "26.67%" ]; then
+if [ "$APY" = "13.33%" ]; then
     echo "✅ CORRECT"
 else
     echo "❌ INCORRECT"
@@ -98,7 +98,7 @@ docker ps | grep -q scylla && ((READY_COUNT++))
 docker ps | grep -q redis && ((READY_COUNT++))
 curl -s http://localhost:3030 > /dev/null 2>&1 && ((READY_COUNT++))
 [ "$RESULT" = "0" ] && ((READY_COUNT++))
-[ "$APY" = "26.67%" ] && ((READY_COUNT++))
+[ "$APY" = "13.33%" ] && ((READY_COUNT++))
 
 PERCENTAGE=$((READY_COUNT * 100 / TOTAL_COUNT))
 

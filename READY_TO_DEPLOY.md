@@ -124,7 +124,7 @@ chain_id = "sultan-1"
 block_time = 2
 ```
 
-### Genesis (500M supply, 8% inflation)
+### Genesis (500M supply, 4% inflation)
 ```toml
 [genesis]
 total_supply = 500000000

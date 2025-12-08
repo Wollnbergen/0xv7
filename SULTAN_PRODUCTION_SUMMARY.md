@@ -38,7 +38,7 @@
 - **Block Time**: 5 seconds
 - **Finality**: 85ms
 - **Gas Fees**: $0.00 FOREVER
-- **Validator APY**: 26.67% (43.34% mobile)
+- **Validator APY**: 13.33% (43.34% mobile)
 
 ### 🔧 TO COMPLETE (35% Remaining)
 1. **BFT Consensus** - Upgrade from basic to Byzantine Fault Tolerant
@@ -82,7 +82,7 @@ Testing: ▓▓▓▓▓▓░░░░░░░░░░░░░░ 30%
 ### 💰 VALUE PROPOSITION
 - **Zero Gas Fees**: First truly free blockchain
 - **1.2M+ TPS**: Fastest blockchain architecture
-- **26.67% APY**: Best staking rewards
+- **13.33% APY**: Best staking rewards
 - **Quantum Safe**: Future-proof security
 - **Universal Bridges**: Connect to all major chains
 

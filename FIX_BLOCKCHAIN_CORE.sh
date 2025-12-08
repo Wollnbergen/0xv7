@@ -98,7 +98,7 @@ pub use config::ChainConfig;
 
 pub const VERSION: &str = "1.0.0";
 pub const ZERO_GAS_FEE: u64 = 0;
-pub const STAKING_APY: f64 = 0.2667; // 26.67%
+pub const STAKING_APY: f64 = 0.1333; // 13.33%
 RUST
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -114,8 +114,8 @@ pub struct ChainConfig {
     pub chain_id: String,
     pub block_time: u64,        // seconds
     pub gas_price: u64,         // always 0
-    pub staking_apy: f64,       // 26.67%
-    pub inflation_rate: f64,    // 8% annual
+    pub staking_apy: f64,       // 13.33%
+    pub inflation_rate: f64,    // 4% annual
     pub min_stake: u64,         // minimum SLTN to stake
 }
 
@@ -125,7 +125,7 @@ impl Default for ChainConfig {
             chain_id: "sultan-1".to_string(),
             block_time: 5,
             gas_price: 0,  // ZERO GAS FEES!
-            staking_apy: 0.2667,
+            staking_apy: 0.1333,
             inflation_rate: 0.08,
             min_stake: 5000,
         }

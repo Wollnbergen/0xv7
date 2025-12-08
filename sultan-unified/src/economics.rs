@@ -16,7 +16,7 @@ impl Economics {
         Economics {
             current_inflation_rate: 0.08,  // 8% starting
             current_burn_rate: 0.01,       // 1% burn rate
-            validator_apy: 0.2667,          // 26.67% max APY
+            validator_apy: 0.1333,          // 13.33% max APY
             total_burned: 0,
             years_since_genesis: 0,
         }
@@ -35,9 +35,9 @@ impl Economics {
     pub fn calculate_validator_apy(&self, staking_ratio: f64) -> f64 {
         // Dynamic APY based on staking ratio
         // If 30% staked: APY = inflation / staking_ratio
-        // Max capped at 26.67%
+        // Max capped at 13.33%
         let calculated_apy = self.current_inflation_rate / staking_ratio;
-        calculated_apy.min(0.2667)  // Cap at 26.67%
+        calculated_apy.min(0.1333)  // Cap at 13.33%
     }
     
     pub fn apply_burn(&mut self, amount: u64) -> u64 {
@@ -73,8 +73,8 @@ mod tests {
     fn test_validator_apy_cap() {
         let econ = Economics::new();
         // With 30% staking ratio
-        assert_eq!(econ.calculate_validator_apy(0.30), 0.2667);
+        assert_eq!(econ.calculate_validator_apy(0.30), 0.1333);
         // With 20% staking ratio (would be 40% but capped)
-        assert_eq!(econ.calculate_validator_apy(0.20), 0.2667);
+        assert_eq!(econ.calculate_validator_apy(0.20), 0.1333);
     }
 }

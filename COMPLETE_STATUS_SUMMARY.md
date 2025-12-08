@@ -23,8 +23,8 @@
 - **Per-Shard Capacity**: 8,000 transactions/second
 
 ### Staking
-- **Inflation**: 8% annual
-- **Validator APY**: 26.67%
+- **Inflation**: 4% annual
+- **Validator APY**: 13.33%
 - **Minimum Stake**: 5,000 SLTN
 - **Delegation**: Enabled
 
@@ -53,7 +53,7 @@
 - ✅ Proof of Stake (525 lines)
 - ✅ Validator management
 - ✅ Delegation system
-- ✅ Reward distribution (26.67% APY)
+- ✅ Reward distribution (13.33% APY)
 - ✅ Slashing conditions
 
 ### Governance

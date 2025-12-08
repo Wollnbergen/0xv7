@@ -7,10 +7,10 @@ let tps = 156;
 
 // Economics configuration
 const ECONOMICS = {
-    inflation_schedule: "8% → 6% → 4% → 3% → 2%",
+    inflation_schedule: "4% → 6% → 4% → 3% → 2%",
     current_inflation: "8% (Year 1)",
     burn_mechanism: "1% on high-volume transactions",
-    validator_apy: "26.67% maximum",
+    validator_apy: "13.33% maximum",
     gas_fees: 0.00
 };
 
@@ -64,7 +64,7 @@ const server = http.createServer((req, res) => {
                         
                     case 'get_apy':
                         response.result = {
-                            validator_apy: "26.67%",
+                            validator_apy: "13.33%",
                             staking_ratio: "30%",
                             total_staked: "300,000,000 SLTN"
                         };
@@ -112,7 +112,7 @@ const server = http.createServer((req, res) => {
         <div class="stat">⛓️ Chain ID: sultan-mainnet-1</div>
         <div class="stat">📦 Block Height: <span id="height">${blockHeight}</span></div>
         <div class="stat">💰 Gas Fees: $0.00 (FOREVER FREE)</div>
-        <div class="stat">📈 Validator APY: 26.67%</div>
+        <div class="stat">📈 Validator APY: 13.33%</div>
         <div class="stat">🔥 Status: LIVE</div>
     </div>
     <script>

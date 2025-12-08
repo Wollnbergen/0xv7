@@ -87,7 +87,7 @@
 │  ✅ Keplr wallet integration                                        │
 │  ✅ Balance queries with retry logic (3 attempts)                   │
 │  ✅ Validator onboarding system                                     │
-│  ✅ APY earnings calculator (26.67%)                                │
+│  ✅ APY earnings calculator (13.33%)                                │
 │  ✅ Error handling & offline detection                              │
 │  ✅ Loading states & user feedback                                  │
 │  ✅ Mobile responsive design                                        │
@@ -96,7 +96,7 @@
 │                                                                      │
 │  Live Data Display:                                                  │
 │  • Transaction Fees:  $0.00 (zero forever)                          │
-│  • Validator APY:     26.67%                                        │
+│  • Validator APY:     13.33%                                        │
 │  • Block Height:      3,164 ⬆️                                      │
 │  • Validators:        1                                             │
 │  • Block Time:        5 seconds                                     │

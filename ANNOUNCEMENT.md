@@ -6,8 +6,8 @@ I'm excited to announce that **Sultan Chain** testnet is now live and publicly a
 
 ### ⚡ Key Features:
 - **$0.00 Gas Fees** - All transactions are completely FREE
-- **26.67% APY** - Industry-leading validator rewards
-- **Dynamic Inflation** - Sustainable economics (8% → 2% over 5 years)
+- **13.33% APY** - Industry-leading validator rewards
+- **Dynamic Inflation** - Sustainable economics (4% → 2% over 5 years)
 - **Burn Mechanism** - 1% burn on high-volume transactions
 
 ### 📊 Current Stats:

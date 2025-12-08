@@ -13,7 +13,7 @@ This document contains all the code needed to build the Sultan L1 one-page websi
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sultan L1 - Zero-Fee Blockchain | Powered by Rust & Cosmos</title>
-    <meta name="description" content="Sultan L1: The first zero-fee blockchain with 26.67% validator APY. Built with Rust, powered by Cosmos SDK, secured by CometBFT.">
+    <meta name="description" content="Sultan L1: The first zero-fee blockchain with 13.33% validator APY. Built with Rust, powered by Cosmos SDK, secured by CometBFT.">
 </head>
 <body>
     <!-- Navigation -->
@@ -49,7 +49,7 @@ This document contains all the code needed to build the Sultan L1 one-page websi
                     <div class="label">Transaction Fees</div>
                 </div>
                 <div class="stat-box">
-                    <div class="number">26.67%</div>
+                    <div class="number">13.33%</div>
                     <div class="label">Validator APY</div>
                 </div>
                 <div class="stat-box">
@@ -131,7 +131,7 @@ This document contains all the code needed to build the Sultan L1 one-page websi
                     <div class="label">Min. Validator Stake</div>
                 </div>
                 <div class="token-card">
-                    <div class="value">26.67%</div>
+                    <div class="value">13.33%</div>
                     <div class="label">Fixed APY</div>
                 </div>
                 <div class="token-card">
@@ -216,7 +216,7 @@ This document contains all the code needed to build the Sultan L1 one-page websi
                     </div>
 
                     <div class="earnings-calc">
-                        <h3 style="margin-bottom: 1rem;">📊 Your Estimated Earnings (26.67% APY)</h3>
+                        <h3 style="margin-bottom: 1rem;">📊 Your Estimated Earnings (13.33% APY)</h3>
                         <div class="earnings-row">
                             <span>Daily:</span>
                             <strong id="dailyEarnings">7.30 SLTN</strong>
@@ -366,7 +366,7 @@ const balance = await fetch(
                             <div class="stat-label">Finality</div>
                         </div>
                         <div class="dev-stat">
-                            <div class="stat-number">26.67%</div>
+                            <div class="stat-number">13.33%</div>
                             <div class="stat-label">APY</div>
                         </div>
                     </div>
@@ -1627,9 +1627,9 @@ function showValidatorCreationModal(validatorName, stakeAmount, commission) {
 
 <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-top: 20px;">
     <h3 style="color: #2e7d32;">📊 Your Expected Earnings</h3>
-    <p><strong>Yearly:</strong> ${(parseFloat(stakeAmount) * 0.2667).toFixed(0)} SLTN (26.67% APY)</p>
-    <p><strong>Monthly:</strong> ${(parseFloat(stakeAmount) * 0.2667 / 12).toFixed(2)} SLTN</p>
-    <p><strong>Daily:</strong> ${(parseFloat(stakeAmount) * 0.2667 / 365).toFixed(2)} SLTN</p>
+    <p><strong>Yearly:</strong> ${(parseFloat(stakeAmount) * 0.1333).toFixed(0)} SLTN (13.33% APY)</p>
+    <p><strong>Monthly:</strong> ${(parseFloat(stakeAmount) * 0.1333 / 12).toFixed(2)} SLTN</p>
+    <p><strong>Daily:</strong> ${(parseFloat(stakeAmount) * 0.1333 / 365).toFixed(2)} SLTN</p>
 </div>
     `;
 
@@ -1654,7 +1654,7 @@ function showAlert(message, type) {
 // Earnings Calculator
 document.getElementById('stakeAmount').addEventListener('input', function() {
     const stake = parseFloat(this.value) || 10000;
-    const apy = 0.2667;
+    const apy = 0.1333;
     const yearly = stake * apy;
     const monthly = yearly / 12;
     const daily = yearly / 365;
@@ -1725,7 +1725,7 @@ docker logs sultan-validator</pre>
 <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-top: 20px;">
     <h3 style="color: #2e7d32;">✅ You're Now a Validator!</h3>
     <p>Your node will start producing blocks and earning rewards automatically.</p>
-    <p><strong>Expected yearly earnings: ${(parseFloat(stakeAmount) * 0.2667).toFixed(0)} SLTN</strong></p>
+    <p><strong>Expected yearly earnings: ${(parseFloat(stakeAmount) * 0.1333).toFixed(0)} SLTN</strong></p>
 </div>
     `;
 
@@ -1824,7 +1824,7 @@ document.querySelectorAll('.feature-card, .timeline-item, .tech-item').forEach(e
 ✅ All 6 sections: Hero, Features, Tokenomics, Validators, Technology, Roadmap  
 ✅ Professional footer with links  
 ✅ 10,000 SLTN minimum stake  
-✅ 26.67% APY calculations  
+✅ 13.33% APY calculations  
 ✅ Zero-fee messaging throughout  
 ✅ **Success/Error/Warning alerts**  
 ✅ **Loading states for async operations**  
@@ -1874,7 +1874,7 @@ For full functionality, users need:
    - Command line (for technical users)
    - Docker (for containerized setups)
 6. **Execute Transaction**: User runs provided commands to create validator
-7. **Start Earning**: 26.67% APY automatically
+7. **Start Earning**: 13.33% APY automatically
 
 ---
 
@@ -1887,7 +1887,7 @@ The website now includes a dedicated "Developers" section with:
 ✅ **Live Endpoints**: Test RPC and REST API endpoints  
 ✅ **Code Examples**: Interactive code snippets showing how to use the SDK  
 ✅ **Use Cases**: Visual showcase of what third parties can build (DApps, DEXs, wallets, NFTs, gaming, DAOs)  
-✅ **Quick Stats**: Zero fees, sub-50ms finality, 26.67% APY prominently displayed  
+✅ **Quick Stats**: Zero fees, sub-50ms finality, 13.33% APY prominently displayed  
 
 **Links to BUILD Repository**:
 - Main SDK repo: https://github.com/Wollnbergen/BUILD

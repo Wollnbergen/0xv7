@@ -38,7 +38,7 @@
     }
   },
   "economics": {
-    "staking_apy": "26.67%",
+    "staking_apy": "13.33%",
     "gas_price": "0usltn",
     "zero_fee": true,
     "min_stake": "5000000000"
