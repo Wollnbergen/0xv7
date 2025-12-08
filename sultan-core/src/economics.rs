@@ -21,14 +21,11 @@ impl Economics {
         }
     }
     
-    pub fn get_inflation_rate(&self, year: u32) -> f64 {
-        match year {
-            0..=1 => 0.04,   // Year 1: 4%
-            2 => 0.035,      // Year 2: 3.5%
-            3 => 0.03,       // Year 3: 3%
-            4 => 0.025,      // Year 4: 2.5%
-            _ => 0.02,       // Year 5+: 2% (floor)
-        }
+    pub fn get_inflation_rate(&self, _year: u32) -> f64 {
+        // Fixed 4% inflation forever
+        // Guarantees zero gas fees sustainable at 76M+ TPS
+        // Provides consistent 13.33% APY for validators (at 30% staked)
+        0.04
     }
     
     pub fn calculate_validator_apy(&self, staking_ratio: f64) -> f64 {
@@ -61,11 +58,15 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_inflation_schedule() {
+    fn test_inflation_fixed() {
         let econ = Economics::new();
+        // 4% fixed forever - all years should return 0.04
         assert_eq!(econ.get_inflation_rate(0), 0.04);
-        assert_eq!(econ.get_inflation_rate(2), 0.035);
-        assert_eq!(econ.get_inflation_rate(5), 0.02);
+        assert_eq!(econ.get_inflation_rate(1), 0.04);
+        assert_eq!(econ.get_inflation_rate(2), 0.04);
+        assert_eq!(econ.get_inflation_rate(5), 0.04);
+        assert_eq!(econ.get_inflation_rate(10), 0.04);
+        assert_eq!(econ.get_inflation_rate(100), 0.04);
     }
     
     #[test]

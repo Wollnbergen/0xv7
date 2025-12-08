@@ -7,8 +7,8 @@ let tps = 156;
 
 // Economics configuration
 const ECONOMICS = {
-    inflation_schedule: "4% → 3% → 2.5% → 2% → 2%",
-    current_inflation: "4% (Year 1)",
+    inflation_rate: "4% (fixed forever)",
+    inflation_policy: "Fixed 4% guarantees zero fees at 76M+ TPS",
     burn_mechanism: "1% on high-volume transactions",
     validator_apy: "13.33% maximum",
     gas_fees: 0.00

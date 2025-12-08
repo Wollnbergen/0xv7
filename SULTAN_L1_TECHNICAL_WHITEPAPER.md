@@ -586,15 +586,20 @@ Example: sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7l8qn5t2
 
 ### 8.3 Inflation Model
 
-Sultan uses a **conservative, decreasing inflation model** for sustainable validator rewards that cover operational costs while avoiding excessive token dilution:
+Sultan uses a **fixed 4% annual inflation** to guarantee sustainable zero gas fees at maximum network capacity (76M+ TPS):
 
-| Year | Inflation Rate | New Tokens | Total Supply |
-|------|---------------|------------|--------------|
-| 1 | 4.00% | 20,000,000 | 520,000,000 |
-| 2 | 3.50% | 18,200,000 | 538,200,000 |
-| 3 | 3.00% | 16,146,000 | 554,346,000 |
-| 4 | 2.50% | 13,858,650 | 568,204,650 |
-| 5+ | 2.00% | Floor | Perpetual |
+| Parameter | Value | Rationale |
+|-----------|-------|----------|
+| **Inflation Rate** | 4% (fixed forever) | Sustains zero fees at 76M TPS |
+| **Validator Share** | 70% of inflation | 13.33% APY at 30% staked |
+| **Gas Subsidy Pool** | 30% of inflation | $24M/year for zero fees |
+| **Max Sustainable TPS** | 76 million | With $24M annual budget |
+
+**Why Fixed 4%?**
+- Declining inflation fails at high TPS (Year 3+ at 64M TPS)
+- Fixed rate guarantees zero gas fees forever
+- Predictable, simple economics for validators and users
+- 4% is conservative compared to many L1s (Cosmos 7-20%, Solana ~8%)
 
 ### 8.4 Staking Economics
 

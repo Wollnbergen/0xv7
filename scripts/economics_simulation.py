@@ -11,7 +11,7 @@ from typing import Dict
 class EconomicsConfig:
     """Sultan L1 tokenomics configuration"""
     total_supply: int = 10_000_000_000  # 10 billion SLTN
-    inflation_rate: float = 0.04  # 4% Year 1
+    inflation_rate: float = 0.04  # 4% FIXED FOREVER
     staking_ratio: float = 0.30  # 30% staked
     validator_reward_share: float = 0.70  # 70% of inflation to validators
     gas_subsidy_share: float = 0.30  # 30% of inflation for gas subsidy

@@ -1,12 +1,6 @@
 // Sultan Chain Economics API
 const ECONOMICS = {
-    inflation_schedule: {
-        year_1: 4.0,
-        year_2: 3.0,
-        year_3: 2.5,
-        year_4: 2.0,
-        year_5_onwards: 2.0
-    },
+    inflation_rate: 4.0,  // Fixed 4% forever - guarantees zero fees at 76M+ TPS
     burn_rate: 1.0,  // 1% burn on high-volume transactions
     validator_apy: {
         base: 13.33,      // Maximum 13.33%
@@ -16,12 +10,9 @@ const ECONOMICS = {
     },
     gas_fees: 0.00,  // Users still pay nothing
     
-    getCurrentInflation: function(year) {
-        if (year <= 1) return this.inflation_schedule.year_1;
-        if (year === 2) return this.inflation_schedule.year_2;
-        if (year === 3) return this.inflation_schedule.year_3;
-        if (year === 4) return this.inflation_schedule.year_4;
-        return this.inflation_schedule.year_5_onwards;
+    getCurrentInflation: function(_year) {
+        // Fixed 4% forever
+        return this.inflation_rate;
     },
     
     calculateValidatorAPY: function(stakingRatio) {

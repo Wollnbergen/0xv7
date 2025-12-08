@@ -383,15 +383,14 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 
 ### Staking Economics
 
-**Inflation Model:** Conservative, decreasing over time
+**Inflation Model:** Fixed 4% forever (guarantees zero gas fees at 76M+ TPS)
 
-| Year | Inflation | APY (at 30% staked) |
-|------|-----------|---------------------|
-| 1 | 4% | **13.33%** |
-| 2 | 3.5% | 11.67% |
-| 3 | 3% | 10.00% |
-| 4 | 2.5% | 8.33% |
-| 5+ | 2% (floor) | 6.67% |
+| Parameter | Value |
+|-----------|-------|
+| **Inflation Rate** | 4% (fixed forever) |
+| **Validator APY** | 13.33% (at 30% staked) |
+| **Gas Subsidy Pool** | $24M/year |
+| **Max Sustainable TPS** | 76 million |
 
 **Why this APY?**
 - Covers real validator costs (~$100-150/year infrastructure)

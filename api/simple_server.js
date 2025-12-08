@@ -1,12 +1,11 @@
 const http = require('http');
 
 const ECONOMICS = {
-    inflation_year_1: 4.0,
-    inflation_year_2: 3.0,
-    inflation_year_5_plus: 2.0,
+    inflation_rate: 4.0,  // Fixed 4% forever
     burn_rate: 1.0,
     validator_apy_max: 13.33,
-    gas_fees: 0.00
+    gas_fees: 0.00,
+    max_sustainable_tps: 76_000_000
 };
 
 const server = http.createServer((req, res) => {
@@ -26,14 +25,13 @@ const server = http.createServer((req, res) => {
                         response = {
                             jsonrpc: "2.0",
                             result: {
-                                inflation_schedule: "4% → 3% → 2.5% → 2% → 2%",
-                                current_inflation: "4% (Year 1)",
+                                inflation_rate: "4% (fixed forever)",
+                                inflation_policy: "Fixed 4% guarantees zero fees at 76M+ TPS",
                                 burn_mechanism: "1% on high-volume transactions",
                                 validator_apy: "13.33% maximum",
-                                mobile_validator_bonus: "Removed (was 40%)",
                                 staking_ratio_target: "30%",
                                 user_gas_fees: 0,
-                                becomes_deflationary: "Year 5",
+                                max_sustainable_tps: "76 million",
                                 formula: "APY = min(13.33%, inflation ÷ staking_ratio)"
                             },
                             id: request.id
@@ -49,7 +47,7 @@ const server = http.createServer((req, res) => {
                                 validators: 100,
                                 tps: 10000,
                                 zero_fees: true,
-                                inflation_rate: "4% (declining)",
+                                inflation_rate: "4% (fixed forever)",
                                 validator_apy: "13.33% max",
                                 burn_active: true
                             },

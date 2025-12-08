@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rocksdb::{DB, Options, WriteBatch, IteratorMode};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 use lru::LruCache;
 use std::num::NonZeroUsize;
 

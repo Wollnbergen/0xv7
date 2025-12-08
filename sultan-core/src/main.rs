@@ -932,13 +932,8 @@ mod rpc {
             "total_burned": economics.total_burned,
             "years_since_genesis": economics.years_since_genesis,
             "is_deflationary": economics.is_deflationary(),
-            "inflation_schedule": {
-                "year_1": "8.0%",
-                "year_2": "6.0%",
-                "year_3": "4.0%",
-                "year_4": "3.0%",
-                "year_5_plus": "2.0%"
-            }
+            "inflation_rate": "4.0% (fixed forever)",
+            "inflation_policy": "Fixed 4% annual inflation guarantees zero gas fees sustainable at 76M+ TPS"
         })))
     }
 
