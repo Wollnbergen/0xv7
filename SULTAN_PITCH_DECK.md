@@ -120,11 +120,11 @@ We built a blockchain from first principles—no frameworks, no compromises.
 
 ---
 
-**🔐 Post-Quantum Security**
-- Ed25519 for current operations
-- Dilithium3 (NIST PQC winner) for future-proofing
-- Prepared for quantum computing era
-- No other major L1 offers this today
+**🔐 Post-Quantum Ready Architecture**
+- Ed25519 for current operations (battle-tested, secure)
+- Dilithium3 upgrade path planned for future
+- Architecture designed for seamless quantum-safe transition
+- Proactive approach to quantum computing era
 
 ---
 
@@ -181,7 +181,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 | **Networking** | libp2p | Battle-tested (ETH 2.0, Filecoin, Polkadot) |
 | **Storage** | RocksDB | LSM-tree optimized, write-heavy workloads |
 | **API** | Warp | Async, high-performance HTTP |
-| **Cryptography** | Ed25519 + Dilithium3 | Current + quantum-ready |
+| **Cryptography** | Ed25519 (Dilithium3 planned) | Current + quantum upgrade path |
 
 ---
 
@@ -317,14 +317,18 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 ### Validator Distribution
 
 | Region | Provider | Nodes | Coverage |
-|--------|----------|-------|----------|
-| Frankfurt, Germany | Hetzner | 11 | Europe |
-| New York, USA | DigitalOcean | 1 | Americas East |
+|--------|----------|-------|---------|
+| New York, USA | DigitalOcean | 1 | Americas East (Bootstrap) |
 | San Francisco, USA | DigitalOcean | 1 | Americas West |
 | Amsterdam, NL | DigitalOcean | 1 | Europe |
+| London, UK | DigitalOcean | 1 | Europe |
+| Frankfurt, DE | DigitalOcean | 1 | Europe |
 | Singapore | DigitalOcean | 1 | Asia-Pacific |
+| Nuremberg, DE | Hetzner | 1 | Europe |
+| Helsinki, FI | Hetzner | 1 | Europe |
+| Falkenstein, DE | Hetzner | 1 | Europe |
 
-**Total: 15 globally distributed validators**
+**Total: 9 globally distributed validators across 2 cloud providers**
 
 ---
 
@@ -487,10 +491,10 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 - Enables use cases impossible elsewhere
 - Mass adoption friendly
 
-**3. Post-Quantum Security**
-- Dilithium3 signatures (NIST PQC winner)
-- No other major L1 offers this
-- Future-proofed for quantum era
+**3. Post-Quantum Ready**
+- Dilithium3 upgrade path planned
+- Architecture designed for seamless transition
+- Proactive approach to quantum era
 
 **4. Superior Economics**
 - 40% ecosystem (largest in industry)
@@ -507,7 +511,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 
 **✅ Mainnet Live**
 - Launched December 6, 2025
-- 15 globally distributed validators
+- 9 globally distributed validators
 - Zero downtime since launch
 - 8 shards operational
 
@@ -826,11 +830,11 @@ We are raising **$4,000,000** in two rounds:
 
 💸 **$0 Gas Fees** — Sustainable, mass-adoption ready
 
-🔐 **Quantum-Ready** — Dilithium3 post-quantum security
+🔐 **Quantum-Ready Architecture** — Dilithium3 upgrade path planned
 
 📈 **13.33% APY** — Sustainable validator economics
 
-🌍 **15 Validators** — Already globally distributed
+🌍 **9 Validators** — Distributed across 2 cloud providers
 
 ---
 

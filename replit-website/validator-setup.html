@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Become a Validator - Sultan L1</title>
+    <meta name="description" content="Step-by-step guide to running a Sultan L1 validator. Earn 13.33% APY with zero gas fees.">
+    <link rel="icon" type="image/png" href="sultan-logo.png">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #00ffff;
+            --accent: #00e5cc;
+            --dark: #0a0e1a;
+            --success: #00ff9f;
+        }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #000;
+            color: #fff;
+            line-height: 1.8;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        header {
+            text-align: center;
+            padding: 4rem 2rem;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+        }
+        
+        header img {
+            width: 80px;
+            margin-bottom: 1rem;
+            filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.6));
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 200;
+            letter-spacing: 0.1em;
+            background: linear-gradient(90deg, #00ffff, #00bfff, #40e0d0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: rgba(0, 229, 204, 0.9);
+            font-size: 1.2rem;
+        }
+        
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+            padding: 2rem;
+            background: rgba(0, 20, 30, 0.5);
+            border-radius: 12px;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--primary);
+            text-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+        }
+        
+        .stat-label {
+            color: rgba(0, 229, 204, 0.8);
+            font-size: 0.9rem;
+        }
+        
+        .step {
+            background: rgba(0, 10, 20, 0.6);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #000;
+            font-size: 1.2rem;
+        }
+        
+        .step h2 {
+            font-size: 1.5rem;
+            font-weight: 400;
+            color: var(--primary);
+        }
+        
+        .step p {
+            color: rgba(255, 255, 255, 0.85);
+            margin-bottom: 1rem;
+        }
+        
+        pre {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 8px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: var(--primary);
+            margin: 1rem 0;
+        }
+        
+        .provider-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+        
+        .provider-card {
+            background: rgba(0, 20, 30, 0.6);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .provider-card:hover {
+            border-color: rgba(0, 255, 255, 0.5);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 255, 255, 0.15);
+        }
+        
+        .provider-card h3 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .provider-card .price {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--success);
+        }
+        
+        .provider-card .specs {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
+            margin: 0.5rem 0;
+        }
+        
+        .provider-card a {
+            display: inline-block;
+            margin-top: 1rem;
+            padding: 0.5rem 1.5rem;
+            background: transparent;
+            border: 1px solid var(--primary);
+            border-radius: 25px;
+            color: var(--primary);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .provider-card a:hover {
+            background: rgba(0, 255, 255, 0.1);
+        }
+        
+        .tip-box {
+            background: rgba(0, 255, 159, 0.1);
+            border: 1px solid rgba(0, 255, 159, 0.3);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin: 1rem 0;
+        }
+        
+        .tip-box strong {
+            color: var(--success);
+        }
+        
+        .warning-box {
+            background: rgba(255, 200, 0, 0.1);
+            border: 1px solid rgba(255, 200, 0, 0.3);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin: 1rem 0;
+        }
+        
+        .warning-box strong {
+            color: #ffc800;
+        }
+        
+        .requirements {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .req-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: rgba(255, 255, 255, 0.85);
+        }
+        
+        .req-item::before {
+            content: '✓';
+            color: var(--success);
+            font-weight: bold;
+        }
+        
+        .btn-primary {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: #000;
+            font-weight: 600;
+            border-radius: 50px;
+            text-decoration: none;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);
+            transition: all 0.3s;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+        }
+        
+        .back-link {
+            display: inline-block;
+            padding: 1rem 0;
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            border-top: 1px solid rgba(0, 255, 255, 0.2);
+            margin-top: 4rem;
+        }
+        
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8rem; }
+            .stats-bar { gap: 1.5rem; }
+            .stat-value { font-size: 1.5rem; }
+            pre { font-size: 0.75rem; padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back-link">← Back to Home</a>
+        
+        <header>
+            <img src="sultan-logo.png" alt="Sultan Logo">
+            <h1>BECOME A VALIDATOR</h1>
+            <p class="subtitle">Earn 13.33% APY securing the zero-fee blockchain</p>
+        </header>
+        
+        <div class="stats-bar">
+            <div class="stat">
+                <div class="stat-value">13.33%</div>
+                <div class="stat-label">Fixed APY</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">$5/mo</div>
+                <div class="stat-label">Min Server Cost</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">10,000</div>
+                <div class="stat-label">Min Stake (SLTN)</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">~5 min</div>
+                <div class="stat-label">Setup Time</div>
+            </div>
+        </div>
+
+        <!-- New to This? Start Here -->
+        <div class="step" style="background: rgba(0, 255, 159, 0.05); border-color: rgba(0, 255, 159, 0.3);">
+            <div class="step-header">
+                <div class="step-number" style="background: linear-gradient(135deg, #00ff9f, #00e599);">?</div>
+                <h2 style="color: #00ff9f;">New to This? Start Here!</h2>
+            </div>
+            <p>If terms like "SSH" or "terminal" are unfamiliar, don't worry! Here's what you need to know:</p>
+            
+            <div style="margin: 1.5rem 0;">
+                <p><strong style="color: var(--primary);">What is a validator?</strong></p>
+                <p>A validator is a computer that helps keep the Sultan network running. Think of it like being a helpful neighbor who verifies that transactions are legitimate. In return for helping, you earn rewards (13.33% per year).</p>
+            </div>
+            
+            <div style="margin: 1.5rem 0;">
+                <p><strong style="color: var(--primary);">What is SSH?</strong></p>
+                <p>SSH (Secure Shell) is a way to securely control a remote computer using text commands. It's like a secure phone call where you type instructions to the server. When you "SSH into a server," you're connecting to it so you can give it commands.</p>
+            </div>
+            
+            <div style="margin: 1.5rem 0;">
+                <p><strong style="color: var(--primary);">What is a VPS/Server?</strong></p>
+                <p>A VPS (Virtual Private Server) is a computer you rent in a data center. It runs 24/7 without you needing to keep your home computer on. Companies like DigitalOcean make this easy—you click a few buttons, and you have your own server!</p>
+            </div>
+            
+            <div style="margin: 1.5rem 0;">
+                <p><strong style="color: var(--primary);">Do I need to be a programmer?</strong></p>
+                <p>No! You just need to copy-paste a few commands. If you can follow a recipe, you can do this. The whole setup takes about 5 minutes once you have your server.</p>
+            </div>
+            
+            <div class="tip-box">
+                <strong>💡 Still nervous?</strong> Join our <a href="https://discord.gg/sultanchain" style="color: var(--primary);">Discord</a> or <a href="https://t.me/sultan_chain" style="color: var(--primary);">Telegram</a>! Community members are happy to help beginners through the process step-by-step.
+            </div>
+        </div>
+
+        <!-- Step 1: Choose Provider -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <h2>Choose a Server Provider</h2>
+            </div>
+            <p>Sultan validators run on minimal hardware. Choose any VPS provider with these specs:</p>
+            
+            <div class="requirements">
+                <div class="req-item">1 vCPU (any)</div>
+                <div class="req-item">1GB RAM</div>
+                <div class="req-item">20GB SSD</div>
+                <div class="req-item">Ubuntu 24.04</div>
+            </div>
+            
+            <p style="margin-top: 1.5rem;"><strong style="color: var(--primary);">Recommended Providers:</strong></p>
+            
+            <div class="provider-grid">
+                <div class="provider-card">
+                    <h3>DigitalOcean</h3>
+                    <div class="price">$6/mo</div>
+                    <div class="specs">1 vCPU • 1GB RAM • 25GB SSD</div>
+                    <div class="specs">NYC, SFO, AMS, SGP, LON, FRA</div>
+                    <a href="https://www.digitalocean.com" target="_blank">Get Started →</a>
+                </div>
+                
+                <div class="provider-card">
+                    <h3>Hetzner</h3>
+                    <div class="price">€4.51/mo</div>
+                    <div class="specs">2 vCPU • 4GB RAM • 40GB SSD</div>
+                    <div class="specs">Germany, Finland, USA</div>
+                    <a href="https://www.hetzner.com/cloud" target="_blank">Get Started →</a>
+                </div>
+                
+                <div class="provider-card">
+                    <h3>Vultr</h3>
+                    <div class="price">$5/mo</div>
+                    <div class="specs">1 vCPU • 1GB RAM • 25GB SSD</div>
+                    <div class="specs">25+ global locations</div>
+                    <a href="https://www.vultr.com" target="_blank">Get Started →</a>
+                </div>
+                
+                <div class="provider-card">
+                    <h3>AWS Lightsail</h3>
+                    <div class="price">$5/mo</div>
+                    <div class="specs">1 vCPU • 1GB RAM • 40GB SSD</div>
+                    <div class="specs">All AWS regions</div>
+                    <a href="https://aws.amazon.com/lightsail" target="_blank">Get Started →</a>
+                </div>
+            </div>
+            
+            <div class="tip-box">
+                <strong>💡 Pro Tip:</strong> For decentralization, choose a different provider/region than existing validators. Check current validator locations at <a href="https://rpc.sltn.io/validators" style="color: var(--primary);">rpc.sltn.io/validators</a>
+            </div>
+        </div>
+
+        <!-- Step 2: Create Server -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <h2>Create Your Server</h2>
+            </div>
+            <p>Create a new server/droplet with these settings:</p>
+            <ul style="margin: 1rem 0 1rem 1.5rem; color: rgba(255,255,255,0.85);">
+                <li><strong>Image:</strong> Ubuntu 24.04 LTS</li>
+                <li><strong>Plan:</strong> Cheapest option (1GB RAM)</li>
+                <li><strong>Region:</strong> Any (closer = lower latency)</li>
+                <li><strong>Authentication:</strong> SSH Key (recommended) or Password</li>
+            </ul>
+            <p>Once created, note your server's <strong style="color: var(--primary);">IP address</strong>.</p>
+        </div>
+
+        <!-- Step 3: Connect -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <h2>Connect to Your Server</h2>
+            </div>
+            <p>Open a terminal and SSH into your server:</p>
+<pre>ssh root@YOUR_SERVER_IP</pre>
+            <p>Replace <code>YOUR_SERVER_IP</code> with your actual IP address.</p>
+        </div>
+
+        <!-- Step 4: Download & Run -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <h2>Download & Start Validator</h2>
+            </div>
+            <p>Run these commands to download and start your validator:</p>
+            
+<pre># Download the Sultan node binary
+curl -L https://github.com/Wollnbergen/DOCS/releases/download/v1.1.0/sultan-node -o sultan-node
+
+# Make it executable
+chmod +x sultan-node
+
+# Start your validator (replace YOUR_VALIDATOR_NAME with your chosen name)
+./sultan-node \
+  --validator \
+  --validator-address YOUR_VALIDATOR_NAME \
+  --validator-stake 10000 \
+  --enable-sharding \
+  --shard-count 8 \
+  --block-time 2 \
+  --rpc-addr 0.0.0.0:8080 \
+  --p2p-addr /ip4/0.0.0.0/tcp/26656 \
+  --enable-p2p \
+  --bootstrap-peers /ip4/192.241.154.140/tcp/26656</pre>
+
+            <div class="tip-box">
+                <strong>💡 Tip:</strong> Choose a unique validator name like <code>validator_tokyo</code> or <code>mycompany_val1</code>
+            </div>
+        </div>
+
+        <!-- Step 5: Keep Running -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <h2>Keep It Running (Background)</h2>
+            </div>
+            <p>To keep your validator running after you disconnect, use <code>screen</code> or create a systemd service:</p>
+            
+            <p><strong style="color: var(--primary);">Option A: Using Screen (Quick)</strong></p>
+<pre># Install screen
+apt install screen -y
+
+# Start a screen session
+screen -S sultan
+
+# Run the validator (same command as Step 4)
+./sultan-node --validator --validator-address YOUR_VALIDATOR_NAME ...
+
+# Detach from screen: Press Ctrl+A, then D
+# Reattach later: screen -r sultan</pre>
+
+            <p><strong style="color: var(--primary);">Option B: Systemd Service (Recommended)</strong></p>
+<pre># Create service file
+cat > /etc/systemd/system/sultan.service << 'EOF'
+[Unit]
+Description=Sultan Validator
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/root/sultan-node --validator --validator-address YOUR_VALIDATOR_NAME --validator-stake 10000 --enable-sharding --shard-count 8 --block-time 2 --rpc-addr 0.0.0.0:8080 --p2p-addr /ip4/0.0.0.0/tcp/26656 --enable-p2p --bootstrap-peers /ip4/192.241.154.140/tcp/26656
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start
+systemctl daemon-reload
+systemctl enable sultan
+systemctl start sultan
+
+# Check status
+systemctl status sultan</pre>
+        </div>
+
+        <!-- Step 6: Verify -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">6</div>
+                <h2>Verify Your Validator</h2>
+            </div>
+            <p>Check that your validator is running and connected:</p>
+            
+<pre># Check local status
+curl localhost:8080/status
+
+# You should see:
+# {"height":12345,"validator_count":10,...}</pre>
+
+            <p>Your validator should appear in the network within a few seconds!</p>
+            
+            <div class="tip-box">
+                <strong>✅ Success!</strong> If you see <code>validator_count</code> increasing and <code>height</code> changing, you're connected and earning rewards!
+            </div>
+        </div>
+
+        <!-- Earnings -->
+        <div class="step" style="background: linear-gradient(135deg, rgba(0, 40, 30, 0.6), rgba(0, 20, 40, 0.6));">
+            <div class="step-header">
+                <div class="step-number">💰</div>
+                <h2>Your Earnings</h2>
+            </div>
+            <p>With <strong>10,000 SLTN</strong> staked at <strong>13.33% APY</strong>:</p>
+            
+            <div class="stats-bar" style="background: rgba(0,0,0,0.3);">
+                <div class="stat">
+                    <div class="stat-value">1,333</div>
+                    <div class="stat-label">SLTN / Year</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">111</div>
+                    <div class="stat-label">SLTN / Month</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">3.65</div>
+                    <div class="stat-label">SLTN / Day</div>
+                </div>
+            </div>
+            
+            <p style="text-align: center; color: rgba(255,255,255,0.7);">
+                Rewards are distributed automatically each block. No claiming required!
+            </p>
+        </div>
+
+        <!-- Troubleshooting -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">?</div>
+                <h2>Troubleshooting</h2>
+            </div>
+            
+            <p><strong style="color: var(--primary);">Can't connect to bootstrap peer?</strong></p>
+            <p>Make sure port 26656 is open in your firewall:</p>
+<pre>ufw allow 26656/tcp
+ufw allow 8080/tcp</pre>
+
+            <p><strong style="color: var(--primary);">Validator not showing in network?</strong></p>
+            <p>Check the logs for errors:</p>
+<pre>journalctl -u sultan -f  # If using systemd
+# or check the terminal output</pre>
+
+            <p><strong style="color: var(--primary);">Need help?</strong></p>
+            <p>Join our community:</p>
+            <ul style="margin: 0.5rem 0 0 1.5rem;">
+                <li><a href="https://discord.gg/sultanchain" style="color: var(--primary);">Discord</a></li>
+                <li><a href="https://t.me/sultan_chain" style="color: var(--primary);">Telegram</a></li>
+                <li><a href="https://x.com/sultan_chain" style="color: var(--primary);">Twitter/X</a></li>
+            </ul>
+        </div>
+
+        <div style="text-align: center; margin-top: 3rem;">
+            <a href="index.html" class="btn-primary">← Back to Home</a>
+        </div>
+        
+        <footer>
+            <p style="color: rgba(255,255,255,0.5);">© 2025 Sultan L1. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
