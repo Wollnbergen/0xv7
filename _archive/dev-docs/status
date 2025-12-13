@@ -1,0 +1,3 @@
+#!/bin/bash
+# Quick one-line status check
+R=0; for p in 3000 3030 4001 5001 5002 5003; do nc -z localhost $p 2>/dev/null && ((R++)); done; B=$(curl -s http://localhost:4001/consensus_state 2>/dev/null | jq -r '.blockHeight' 2>/dev/null || echo "N/A"); echo "⚡ Sultan Chain: $R/6 services | Block #$B | Gas: $0.00"

@@ -1,14 +1,54 @@
 # Rust
 target/
 **/*.rs.bk
+Cargo.lock
+*.pdb
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+debug/
+*.dSYM/
 
 # Logs/temp
 logs/
 tmp/
 *.log
+*.out
 
 # Docker/volumes
 scylla-data/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sst
+data/
+rocksdb/
+
+# Blockchain node data
+.sultan/
+.sultand/
+node_data/
+blockchain_data/
+genesis.json.bak
+
+# Keys & credentials (CRITICAL - never commit these)
+*.key
+*.pem
+priv_validator_key.json
+node_key.json
+keyring-test/
+keyring-file/
+
+# Cosmos SDK / CometBFT
+config/
+.tendermint/
+.cometbft/
 
 # VS Code: ignore everything except these files
 .vscode/*
@@ -19,7 +59,13 @@ scylla-data/
 *.pid
 target/
 node_modules
-node_modules
+
+# IDE files
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
 # Env files (keep example tracked)
 .env
@@ -29,3 +75,25 @@ node_modules
 # TLS keys and proxy logs
 deployment/rpc-proxy/secrets/
 deployment/rpc-proxy/logs/
+
+# Testing & coverage
+coverage/
+*.profraw
+*.profdata
+
+# Temporary files
+*.tmp
+*.bak
+
+# Scripts output
+scripts/*.log
+scripts/output/
+
+# Build script logs
+BUILD_*.sh.log
+CHECK_*.sh.log
+ANALYZE_*.sh.log
+
+# Generated files
+*.generated.*
+proto/generated/

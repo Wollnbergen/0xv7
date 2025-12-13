@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  blockchain:
+    build: ./working-chain
+    ports:
+      - "8080:8080"
+    environment:
+      - CHAIN_ID=sultan-mainnet-1
+      - ZERO_GAS=true
+    restart: unless-stopped
+    networks:
+      - sultan-network
+    
+  dashboard:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./public:/usr/share/nginx/html
+    restart: unless-stopped
+    networks:
+      - sultan-network
+    depends_on:
+      - blockchain
+
+networks:
+  sultan-network:
+    driver: bridge

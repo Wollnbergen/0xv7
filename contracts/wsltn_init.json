@@ -1,0 +1,16 @@
+{
+  "name": "Wrapped Sultan Token",
+  "symbol": "wSLTN",
+  "decimals": 6,
+  "initial_balances": [],
+  "mint": {
+    "minter": "",
+    "cap": "1000000000000000"
+  },
+  "marketing": {
+    "description": "Wrapped version of native SLTN for DeFi",
+    "logo": {
+      "url": "https://sultan.chain/logo.png"
+    }
+  }
+}

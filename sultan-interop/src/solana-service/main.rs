@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = addr_str.parse()?;
 
     info!("⚡ Starting Solana gRPC server on {}", addr);
-    let service = SolanaService::default();
+    let service = SolanaService; // unit struct, no Default call needed
 
     Server::builder()
         .add_service(ChainServiceServer::new(service))

@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'sultan-blockchain'
+    static_configs:
+      - targets: ['localhost:26660']
+        labels:
+          chain: 'sultan'
+          network: 'mainnet'

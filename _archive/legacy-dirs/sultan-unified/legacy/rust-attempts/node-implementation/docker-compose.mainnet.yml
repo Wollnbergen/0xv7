@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  sultan-node:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: sultan-mainnet
+    ports:
+      - "26656:26656" # P2P
+      - "26657:26657" # RPC
+      - "9090:9090"   # Prometheus
+    volumes:
+      - sultan-data:/data
+      - ./config/mainnet.toml:/etc/sultan/config.toml
+    environment:
+      - RUST_LOG=info
+      - NODE_ENV=production
+    networks:
+      - sultan-network
+    depends_on:
+      - scylla
+      - redis
+    restart: unless-stopped
+
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: sultan-scylla
+    ports:
+      - "9042:9042"
+    volumes:
+      - scylla-data:/var/lib/scylla
+    command: --seeds=scylla --smp 2 --memory 2G --overprovisioned 1
+    networks:
+      - sultan-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: sultan-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - sultan-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sultan-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - sultan-network
+    restart: unless-stopped
+
+networks:
+  sultan-network:
+    driver: bridge
+
+volumes:
+  sultan-data:
+  scylla-data:
+  redis-data:
+  prometheus-data:

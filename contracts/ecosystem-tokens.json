@@ -1,0 +1,20 @@
+[
+  {
+    "name": "USD Sultan",
+    "symbol": "USDS",
+    "description": "Stablecoin pegged to USD on Sultan Chain",
+    "decimals": 6
+  },
+  {
+    "name": "Sultan Gold",
+    "symbol": "GOLD",
+    "description": "Gold-backed token on Sultan Chain",
+    "decimals": 8
+  },
+  {
+    "name": "Sultan LP Token",
+    "symbol": "SLP",
+    "description": "Liquidity Provider tokens for DEX",
+    "decimals": 6
+  }
+]

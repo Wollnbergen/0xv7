@@ -49,9 +49,9 @@ cat > /workspaces/0xv7/README.md << 'README'
 # Open dashboard
 "$BROWSER" http://localhost:3000
 💎 Key Features
-Zero Gas Fees: Subsidized by 8% inflation
+Zero Gas Fees: Subsidized by 4% inflation
 1.23M TPS: Fastest blockchain architecture
-26.67% APY: Industry-leading staking rewards
+13.33% APY: Industry-leading staking rewards
 Quantum Safe: Post-quantum cryptography
 Universal Bridges: BTC, ETH, SOL, TON support
 Cosmos IBC: Full interoperability

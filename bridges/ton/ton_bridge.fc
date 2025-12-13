@@ -1,0 +1,26 @@
+;; Sultan Chain - TON Bridge Smart Contract
+;; Zero fees on Sultan Chain side!
+
+int sultan_fee() method_id {
+    return 0; ;; Always returns 0 - zero fees forever!
+}
+
+() bridge_ton_to_sultan(int amount) impure {
+    ;; Bridge TON to Sultan Chain
+    var sultan_fee = 0; ;; Zero fees!
+    var wrapped_amount = amount;
+    
+    ;; Store bridge transaction
+    var bridge_data = begin_cell()
+        .store_uint(amount, 64)
+        .store_uint(sultan_fee, 64) ;; Always 0!
+        .store_uint(now(), 32)
+        .end_cell();
+        
+    ;; Save to storage
+    set_data(bridge_data);
+}
+
+int get_bridge_fee() method_id {
+    return 0; ;; Sultan Chain has zero fees!
+}

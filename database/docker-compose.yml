@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: sultan-scylla
+    ports:
+      - "9042:9042"
+    environment:
+      - SCYLLA_DEVELOPER_MODE=1
+    volumes:
+      - ./data:/var/lib/scylla
+    command: --smp 2 --memory 2G --overprovisioned 1
+    
+  scylla-init:
+    image: scylladb/scylla:5.2
+    depends_on:
+      - scylla
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "sleep 30 && cqlsh scylla -e \"
+      CREATE KEYSPACE IF NOT EXISTS sultan WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
+      USE sultan;
+      CREATE TABLE IF NOT EXISTS transactions (
+        hash text PRIMARY KEY,
+        from_address text,
+        to_address text,
+        amount bigint,
+        gas_fee bigint,  -- Always 0 for Sultan Chain!
+        timestamp timestamp,
+        block_height bigint,
+        status text
+      );
+      CREATE TABLE IF NOT EXISTS blocks (
+        height bigint PRIMARY KEY,
+        hash text,
+        parent_hash text,
+        timestamp timestamp,
+        validator text,
+        tx_count int,
+        total_gas bigint  -- Always 0!
+      );
+      \""

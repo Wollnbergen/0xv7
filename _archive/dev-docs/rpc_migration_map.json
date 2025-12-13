@@ -1,0 +1,15 @@
+{
+  "existing_rpc_methods": {
+    "wallet_create": "cosmos.bank.v1beta1.Query/Balance",
+    "token_transfer": "cosmos.bank.v1beta1.Msg/Send",
+    "stake": "cosmos.staking.v1beta1.Msg/Delegate",
+    "unstake": "cosmos.staking.v1beta1.Msg/Undelegate",
+    "proposal_create": "cosmos.gov.v1beta1.Msg/SubmitProposal",
+    "vote_on_proposal": "cosmos.gov.v1beta1.Msg/Vote"
+  },
+  "custom_methods": {
+    "mobile_validator_register": "sultan.mobilevalidator.v1.Msg/Register",
+    "claim_rewards": "sultan.rewards.v1.Msg/ClaimRewards",
+    "cross_chain_swap": "sultan.bridge.v1.Msg/InitiateSwap"
+  }
+}

@@ -1,0 +1,41 @@
+# Bitcoin Bridge Service - Production Dockerfile
+
+FROM rust:1.75-bullseye as builder
+
+WORKDIR /build
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY sultan-interop ./sultan-interop
+
+# Build bitcoin service
+WORKDIR /build/sultan-interop
+RUN cargo build --release --bin bitcoin-service
+
+# Runtime image
+FROM debian:bullseye-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl1.1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary
+COPY --from=builder /build/target/release/bitcoin-service /usr/local/bin/
+
+# Create runtime user
+RUN useradd -m -u 1000 sultan && \
+    mkdir -p /var/lib/sultan/bitcoin && \
+    chown -R sultan:sultan /var/lib/sultan
+
+USER sultan
+WORKDIR /home/sultan
+
+# Expose service port
+EXPOSE 9001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:9001/health || exit 1
+
+CMD ["bitcoin-service"]

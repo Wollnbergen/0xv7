@@ -1,0 +1,15 @@
+slashing_params:
+  signed_blocks_window: 100
+  min_signed_per_window: 0.5
+  downtime_jail_duration: 600s
+  slash_fraction_double_sign: 0.05
+  slash_fraction_downtime: 0.0001
+  
+jail_conditions:
+  - double_signing
+  - missing_blocks_threshold
+  - invalid_proposals
+  
+recovery:
+  unjail_fee: "100000000usltn"  # 100 SLTN
+  appeal_period: "72h"

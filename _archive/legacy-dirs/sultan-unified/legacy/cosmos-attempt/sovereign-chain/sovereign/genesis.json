@@ -1,0 +1,54 @@
+{
+  "genesis_time": "2024-11-04T00:00:00Z",
+  "chain_id": "sovereign-1",
+  "initial_height": "1",
+  "consensus_params": {
+    "block": {
+      "max_bytes": "22020096",
+      "max_gas": "-1",
+      "time_iota_ms": "100"
+    },
+    "evidence": {
+      "max_age_num_blocks": "100000",
+      "max_age_duration": "172800000000000"
+    },
+    "validator": {
+      "pub_key_types": ["ed25519"]
+    }
+  },
+  "app_state": {
+    "auth": {
+      "params": {
+        "max_memo_characters": "256",
+        "tx_sig_limit": "7",
+        "tx_size_cost_per_byte": "0",
+        "sig_verify_cost_ed25519": "0",
+        "sig_verify_cost_secp256k1": "0"
+      }
+    },
+    "bank": {
+      "params": {
+        "send_enabled": [],
+        "default_send_enabled": true
+      },
+      "balances": [
+        {
+          "address": "sovereign1genesis000000000000000000000000000",
+          "coins": [
+            {
+              "denom": "sovereign",
+              "amount": "1000000000000000"
+            }
+          ]
+        }
+      ]
+    },
+    "hyper": {
+      "params": {
+        "tps_target": 10000000,
+        "parallel_shards": 1024,
+        "zero_gas": true
+      }
+    }
+  }
+}

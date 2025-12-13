@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rocksdb::{DB, Options, WriteBatch, IteratorMode};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 use lru::LruCache;
 use std::num::NonZeroUsize;
 
@@ -215,6 +215,7 @@ mod tests {
     use super::*;
     use crate::blockchain::Transaction;
     use tempfile::tempdir;
+    use tracing::warn;
     
     #[test]
     fn test_storage_persistence() {
@@ -223,11 +224,14 @@ mod tests {
         
         // Create and save block
         let mut block = Block {
-            height: 1,
+            index: 1,
             hash: "test_hash".to_string(),
             prev_hash: "genesis".to_string(),
             timestamp: 1234567890,
             transactions: vec![],
+            nonce: 0,
+            validator: "test".to_string(),
+            state_root: "root".to_string(),
         };
         
         storage.save_block(&block).unwrap();
@@ -235,7 +239,7 @@ mod tests {
         // Retrieve block
         let retrieved = storage.get_block("test_hash").unwrap().unwrap();
         assert_eq!(retrieved.hash, "test_hash");
-        assert_eq!(retrieved.height, 1);
+        assert_eq!(retrieved.index, 1);
     }
     
     #[test]
@@ -281,11 +285,14 @@ mod tests {
         
         for i in 1..=10 {
             let block = Block {
-                height: i,
+                index: i,
                 hash: format!("hash_{}", i),
                 prev_hash: if i == 1 { "genesis".to_string() } else { format!("hash_{}", i - 1) },
                 timestamp: 1234567890 + i,
                 transactions: vec![],
+                nonce: 0,
+                validator: "test".to_string(),
+                state_root: "root".to_string(),
             };
             
             storage.save_block(&block).unwrap();
@@ -293,11 +300,11 @@ mod tests {
         
         // Query by height
         let block_5 = storage.get_block_by_height(5).unwrap().unwrap();
-        assert_eq!(block_5.height, 5);
+        assert_eq!(block_5.index, 5);
         assert_eq!(block_5.hash, "hash_5");
         
         // Get latest
         let latest = storage.get_latest_block().unwrap().unwrap();
-        assert_eq!(latest.height, 10);
+        assert_eq!(latest.index, 10);
     }
 }

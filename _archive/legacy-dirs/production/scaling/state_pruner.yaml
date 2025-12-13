@@ -1,0 +1,26 @@
+# Production State Pruning Configuration
+pruning:
+  enabled: true
+  strategy: "custom"
+  
+  # Keep recent state for fast queries
+  keep_recent:
+    blocks: 100000  # ~1 day at 1s blocks
+    
+  # Archive pruning for historical data
+  archive:
+    enabled: true
+    keep_every: 10000  # Keep every 10,000th block
+    max_age_days: 365
+    
+  # State snapshot intervals
+  snapshots:
+    interval: 50000  # Every ~14 hours
+    max_snapshots: 10
+    compression: "zstd"  # Best compression ratio
+    
+  # Automatic cleanup
+  cleanup:
+    run_every: 3600  # Every hour
+    min_free_space_gb: 100
+    target_db_size_gb: 500

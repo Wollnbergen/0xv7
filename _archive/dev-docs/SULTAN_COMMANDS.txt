@@ -1,0 +1,34 @@
+SULTAN CHAIN - QUICK COMMAND REFERENCE
+═══════════════════════════════════════════════════════════════
+
+🎮 CONTROL & MANAGEMENT
+  ./SULTAN_MASTER_CONTROL.sh     - Main control panel
+  ./SULTAN_DASHBOARD.sh          - Live status dashboard
+  ./TEST_SULTAN_CHAIN.sh         - Run all tests
+  ./SULTAN_SHOWCASE.sh           - Live demonstration
+
+🚀 START SERVICES
+  ./SULTAN_MASTER_CONTROL.sh     - Then select option 1
+  cd sultan_mainnet && ./target/release/sultan-mainnet
+
+🧪 TEST ENDPOINTS
+  # Chain Status
+  curl -X POST http://localhost:3030 -d '{"jsonrpc":"2.0","method":"chain_status","id":1}' | jq
+
+  # Get Economics (13.33% APY)
+  curl -X POST http://localhost:3030 -d '{"jsonrpc":"2.0","method":"get_economics","id":1}' | jq
+
+  # Zero-Fee Transfer
+  curl -X POST http://localhost:3030 -d '{"jsonrpc":"2.0","method":"token_transfer","params":["alice","bob",100],"id":1}' | jq
+
+🌐 ACCESS POINTS
+  Local API:  http://localhost:3030
+  Public UI:  https://orange-telegram-pj6qgwgv59jjfrj9j-3030.app.github.dev/
+
+📊 KEY METRICS
+  • Gas Fees: $0.00 (forever)
+  • Validator APY: 13.33%
+  • Mobile Validator APY: 18.66%
+  • Block Time: 5 seconds
+  • Inflation: 8% annually
+

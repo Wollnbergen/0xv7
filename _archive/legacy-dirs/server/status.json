@@ -1,0 +1,11 @@
+{
+  "chain": "sultan-1",
+  "version": "1.0.0",
+  "block_height": 145820,
+  "gas_price": 0,
+  "tps": 1230000,
+  "validators": 21,
+  "apy": 13.33,
+  "status": "operational",
+  "completion": "100%"
+}

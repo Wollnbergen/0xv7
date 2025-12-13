@@ -1,0 +1,17 @@
+[package]
+name = "sultan-blockchain"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "sultan-node"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+chrono = "0.4"
+tokio = { version = "1.35", features = ["full"] }
+axum = "0.7"
+tower = "0.4"

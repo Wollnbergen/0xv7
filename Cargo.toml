@@ -4,16 +4,10 @@ members = [
     "sultan-cosmos-bridge",
     "sultan-interop",
     "sultan_mainnet",
-    "sultan-unified",
-    "sultan-blockchain-final",
 ]
 exclude = [
     "contracts",
-    "third_party",
-    "sultan-unified/legacy",
-    "smart-contracts",
-    "week2-smart-contracts",
-    "sultan_simple",
+    "_archive",
 ]
 resolver = "2"
 
