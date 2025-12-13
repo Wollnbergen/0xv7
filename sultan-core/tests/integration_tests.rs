@@ -160,6 +160,9 @@ fn test_block_validation() {
         1,
     )).unwrap();
     
+    // Small delay to ensure timestamp advances past genesis block
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    
     let block = blockchain.create_block("validator1".to_string()).unwrap();
     
     // Validate the block we just created
@@ -188,12 +191,12 @@ fn test_consensus_validator_management() {
 fn test_consensus_min_stake() {
     let mut consensus = ConsensusEngine::new();
     
-    // Below minimum stake
-    let result = consensus.add_validator("low_stake".to_string(), 500);
+    // Below minimum stake (10K required)
+    let result = consensus.add_validator("low_stake".to_string(), 5000);
     assert!(result.is_err());
     
-    // Above minimum stake
-    let result = consensus.add_validator("good_stake".to_string(), 5000);
+    // At minimum stake (10K)
+    let result = consensus.add_validator("good_stake".to_string(), 10000);
     assert!(result.is_ok());
 }
 
@@ -255,6 +258,9 @@ fn test_end_to_end_scenario() {
         1,
     )).unwrap();
     
+    // Small delay to ensure timestamp advances
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    
     let proposer = consensus.select_proposer().unwrap();
     let block1 = blockchain.create_block(proposer.clone()).unwrap();
     consensus.record_proposal(&proposer).unwrap();
@@ -270,6 +276,9 @@ fn test_end_to_end_scenario() {
         5000,
         1,
     )).unwrap();
+    
+    // Small delay to ensure timestamp advances
+    std::thread::sleep(std::time::Duration::from_millis(10));
     
     let proposer = consensus.select_proposer().unwrap();
     let block2 = blockchain.create_block(proposer.clone()).unwrap();
