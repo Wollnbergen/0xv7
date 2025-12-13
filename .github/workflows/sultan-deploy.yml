@@ -12,21 +12,31 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Install protobuf compiler
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+    
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: wasm32-unknown-unknown
     
-    - name: Build Smart Contracts
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-
+    
+    - name: Build Sultan Node (Production)
       run: |
-        cd contracts/cw20-sultan
-        cargo build --release --target wasm32-unknown-unknown
+        cd sultan-core
+        cargo build --release
     
     - name: Run Tests
       run: |
-        cargo test --workspace
+        cargo test --workspace --all-features
     
-    - name: Deploy to Sultan Mainnet
-      if: github.ref == 'refs/heads/main'
+    - name: Verify Binary
       run: |
-        echo "Deploying Sultan Blockchain to mainnet..."
+        ls -la sultan-core/target/release/sultan-node || ls -la /tmp/cargo-target/release/sultan-node
+        echo "Sultan Node built successfully"
