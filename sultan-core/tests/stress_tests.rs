@@ -13,6 +13,8 @@ async fn stress_test_10_percent_capacity() {
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config.clone());
@@ -56,6 +58,8 @@ async fn stress_test_30_percent_capacity() {
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config.clone());
@@ -105,6 +109,8 @@ async fn stress_test_60_percent_capacity() {
         cross_shard_enabled: false, // Disable for pure throughput test
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config.clone());
@@ -154,6 +160,8 @@ async fn stress_test_80_percent_capacity() {
         cross_shard_enabled: false,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config);
@@ -196,6 +204,8 @@ async fn stress_test_100_percent_capacity() {
         cross_shard_enabled: false,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config);
@@ -239,6 +249,8 @@ async fn stress_test_110_percent_overcapacity() {
         cross_shard_enabled: false,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config);
@@ -286,6 +298,8 @@ async fn test_cross_shard_stress() {
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config);
@@ -341,6 +355,8 @@ async fn test_byzantine_fault_tolerance() {
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config);
@@ -389,6 +405,8 @@ async fn test_rollback_recovery() {
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config);
@@ -435,6 +453,8 @@ async fn test_concurrent_double_spend_prevention() {
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
         enable_fraud_proofs: true,
+        max_shards: 8_000,
+        auto_expand_threshold: 0.80,
     };
 
     let coordinator = ShardingCoordinator::new(config);
