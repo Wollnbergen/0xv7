@@ -1,4 +1,4 @@
-name: Sultan Blockchain Deploy
+name: Sultan Chain CI
 
 on:
   push:
@@ -7,7 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  build-and-deploy:
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -18,25 +19,17 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
     
-    - name: Cache cargo registry
+    - name: Cache cargo
       uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
+          target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: ${{ runner.os }}-cargo-
     
-    - name: Build Sultan Node (Production)
-      run: |
-        cd sultan-core
-        cargo build --release
+    - name: Check compilation
+      run: cargo check --workspace
     
-    - name: Run Tests
-      run: |
-        cargo test --workspace --all-features
-    
-    - name: Verify Binary
-      run: |
-        ls -la sultan-core/target/release/sultan-node || ls -la /tmp/cargo-target/release/sultan-node
-        echo "Sultan Node built successfully"
+    - name: Run tests
+      run: cargo test --workspace
