@@ -11,19 +11,25 @@ set -euo pipefail
 
 # Your validator servers (SSH user@host)
 VALIDATORS=(
-    # DigitalOcean (4 validators)
-    "root@159.223.129.2"    # sultan-val-nyc (NYC1) - Bootstrap node
-    "root@64.23.148.205"    # sultan-val-sfo (SFO3)
-    "root@159.223.213.180"  # sultan-val-ams (AMS3)
-    "root@165.232.161.55"   # sultan-val-sgp (SGP1)
+    # DigitalOcean (6 validators)
+    "root@192.241.154.140"  # NYC - Bootstrap node
+    "root@143.198.67.237"   # SFO
+    "root@188.166.102.7"    # AMS
+    "root@159.65.88.145"    # LON
+    "root@159.65.113.160"   # FRA
+    "root@188.166.218.123"  # SGP
+    # Hetzner (3 validators)
+    "root@116.203.92.158"   # NBG
+    "root@77.42.35.238"     # HEL
+    "root@49.13.26.15"      # FSN
 )
 
 # Bootstrap node (first validator - others connect to this)
 BOOTSTRAP_NODE="${VALIDATORS[0]}"
 BOOTSTRAP_DNS="rpc.sltn.io"
 
-# Binary download URL
-BINARY_URL="https://github.com/Wollnbergen/DOCS/releases/download/v1.1.0/sultan-node"
+# Binary download URL (REAL production binary with RocksDB, libp2p, etc.)
+BINARY_URL="https://github.com/Wollnbergen/0xv7/releases/download/v1.0.0/sultan-node"
 
 # Remote paths
 REMOTE_BIN_PATH="/root/sultan-node"

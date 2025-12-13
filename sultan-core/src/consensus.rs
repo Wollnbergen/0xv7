@@ -40,7 +40,7 @@ impl ConsensusEngine {
             validators: HashMap::new(),
             current_proposer: None,
             round: 0,
-            min_stake: 1000,
+            min_stake: 10_000, // 10,000 SLTN minimum stake requirement
             total_stake: 0,
         }
     }
@@ -246,6 +246,9 @@ mod tests {
     #[test]
     fn test_min_stake() {
         let mut consensus = ConsensusEngine::new();
-        assert!(consensus.add_validator("low_stake".to_string(), 500).is_err());
+        // Should reject stake below 10,000 minimum
+        assert!(consensus.add_validator("low_stake".to_string(), 9999).is_err());
+        // Should accept stake at or above 10,000
+        assert!(consensus.add_validator("valid_stake".to_string(), 10000).is_ok());
     }
 }
