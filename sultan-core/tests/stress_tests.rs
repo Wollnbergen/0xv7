@@ -430,7 +430,7 @@ async fn test_rollback_recovery() {
     };
 
     // This should fail and rollback
-    let mut cross_shard_tx = crate::sharding_production::CrossShardTransaction::new(0, 1, tx);
+    let mut cross_shard_tx = sultan_core::sharding_production::CrossShardTransaction::new(0, 1, tx);
     let result = coordinator.execute_cross_shard_commit(&mut cross_shard_tx).await;
 
     assert!(result.is_err(), "Should have failed due to insufficient balance");
@@ -490,12 +490,12 @@ async fn test_concurrent_double_spend_prevention() {
     let coord2 = coordinator_clone.clone();
 
     let handle1 = tokio::spawn(async move {
-        let mut ctx1 = crate::sharding_production::CrossShardTransaction::new(0, 1, tx1);
+        let mut ctx1 = sultan_core::sharding_production::CrossShardTransaction::new(0, 1, tx1);
         coord1.execute_cross_shard_commit(&mut ctx1).await
     });
 
     let handle2 = tokio::spawn(async move {
-        let mut ctx2 = crate::sharding_production::CrossShardTransaction::new(0, 2, tx2);
+        let mut ctx2 = sultan_core::sharding_production::CrossShardTransaction::new(0, 2, tx2);
         coord2.execute_cross_shard_commit(&mut ctx2).await
     });
 
