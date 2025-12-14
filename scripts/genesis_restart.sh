@@ -36,9 +36,19 @@ REMOTE_BIN_PATH="/root/sultan-node"
 REMOTE_DATA_PATH="/root/data"
 SERVICE_NAME="sultan"
 
-# Genesis accounts (address:balance in micro-units, 6 decimals)
-# Total supply: 500,000,000 SLTN = 500000000000000 micro-units
-GENESIS_ACCOUNTS="sultan1treasury:200000000000000,sultan1ecosystem:100000000000000,sultan1strategic:75000000000000,sultan1fundraising:60000000000000,sultan1team:40000000000000,sultan1liquidity:25000000000000"
+# Genesis accounts (address:balance in base units, 9 decimals)
+# 1 SLTN = 1,000,000,000 base units
+# Total supply: 500,000,000 SLTN
+# NOTE: Live network genesis was 70M. Full 500M requires governance upgrade.
+#
+# Distribution:
+#   Ecosystem Fund:     40% (200M) - Protocol development, grants
+#   Growth & Marketing: 20% (100M) - User acquisition, partnerships
+#   Strategic Reserve:  15% ( 75M) - Market stability, emergencies
+#   Fundraising:        12% ( 60M) - Investor allocation
+#   Team:                8% ( 40M) - Core contributors (vested)
+#   Liquidity:           5% ( 25M) - DEX pools, market making
+GENESIS_ACCOUNTS="sultan1ecosystemfund:200000000000000000,sultan1growth:100000000000000000,sultan1strategic:75000000000000000,sultan1fundraising:60000000000000000,sultan1team:40000000000000000,sultan1liquidity:25000000000000000"
 
 # SSH key to use
 SSH_KEY="$HOME/.ssh/sultan_do"
