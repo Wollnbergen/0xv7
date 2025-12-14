@@ -62,12 +62,12 @@ The result is a blockchain that processes transactions in microseconds, confirms
 
 We made a deliberate architectural decision to build Sultan as a **pure Rust implementation** rather than adopting existing frameworks:
 
-| Framework Approach | Sultan's Native Approach |
+| Traditional Approach | Sultan's Native Approach |
 |-------------------|-------------------------|
-| Cosmos SDK overhead | Direct state machine |
-| Go garbage collection | Zero-copy memory management |
-| CometBFT consensus bottleneck | Custom PoS optimized for speed |
-| ABCI serialization costs | Native Rust types |
+| Framework overhead | Direct state machine |
+| Garbage collection | Zero-copy memory management |
+| Generic consensus | Custom PoS optimized for speed |
+| Serialization costs | Native Rust types |
 | Framework limitations | Complete architectural freedom |
 
 **Benefits of our approach:**
@@ -599,7 +599,7 @@ Sultan uses a **fixed 4% annual inflation** to guarantee sustainable zero gas fe
 - Declining inflation fails at high TPS (Year 3+ at 64M TPS)
 - Fixed rate guarantees zero gas fees forever
 - Predictable, simple economics for validators and users
-- 4% is conservative compared to many L1s (Cosmos 7-20%, Solana ~8%)
+- 4% is conservative compared to many L1s (5-20% is common)
 
 ### 8.4 Staking Economics
 
@@ -929,4 +929,4 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 
 ---
 
-*This whitepaper reflects the production implementation of Sultan L1 blockchain. All specifications and metrics are verified from live network data. Sultan L1 is a native Rust implementation—not based on Cosmos SDK, Tendermint, or any external blockchain framework.*
+*This whitepaper reflects the production implementation of Sultan L1 blockchain. All specifications and metrics are verified from live network data.*

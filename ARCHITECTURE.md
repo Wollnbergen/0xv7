@@ -1,245 +1,145 @@
-## SDKs
-- **Wallet SDK**: APIs for stake/query_apy in `sdk.rs` (one-tap Telegram UX, hide complexity for mass adoption).
-- **DEX SDK**: APIs for cross_chain_swap in `sdk.rs` (<3s interop without bridges for BTC/ETH/SOL/TON).
-- **dApp SDK**: APIs for validator onboarding, governance voting in `blockchain.rs` (democratic, min 5k SLTN stake ~$1.1k, 30% mobile).
+# Sultan Chain Architecture
 
-**Developer Integration:**
-- SDKs are production-ready for integration with DEXs, dApps, and wallets.
-- Gas-free transactions on Sultan (subsidized by APY ~13.33% in `transaction_validator.rs`).
-- Trusted/reliable for enterprises and individuals (quantum/MEV secure, robust, and uncorruptible).
-# Sultan Blockchain - MVP Launch Plan (Updated October 01, 2025)
-## Phase 1: Core Infrastructure (August-October 01, 2025) - COMPLETE ✅
-**Goal: Bulletproof foundation**
-### August-October 01: Core Blockchain
-- [x] Transaction processing engine (blockchain.rs with sharded_process for 2M+ TPS).
-- [x] Block production (5-second blocks in main_updated.rs).
-- [x] Sharding (8 shards in blockchain.rs, ScyllaDB migration in scylla_db.rs for 99.999% uptime).
-- [x] Native token operations (SultanToken in types.rs with allocate_inflation for APY ~13.33%).
-- [x] Validator registration/staking (democratic in types.rs, min 5k SLTN, 30% mobile target in blockchain.rs).
-**Deliverable**: Codespaces migration complete, testnet alpha with 12k TPS (load_testing.rs benchmark), gas-free subsidies (transaction_validator.rs), quantum-proof signing (quantum.rs).
+## Overview
 
-## Phase 2: Telegram Integration (October 01-5, 2025) - IN PROGRESS ⚡
-**Goal: Seamless mobile experience**
-### October 1-3: Telegram Mini App
-- [ ] Wallet creation via Telegram ID (wallet.ts for seed encryption/biometric).
-- [ ] Send/receive with contacts (gas-free via subsidy_flag in transaction_validator.rs).
-- [ ] Native chain switching (interop stubs in ethereum-service/main.rs, solana-service/main.rs, ton-service/main.rs, bitcoin-service/main.rs for <3s swaps).
-- [ ] Push notifications (gRPC in grpc_service.rs for real-time).
-### October 4-5: Advanced Features
-- [ ] One-tap staking (APY ~13.33% in types.rs, mobile-ready).
-- [ ] Governance voting (consensus.rs with gRPC for democratic proposals).
-- [ ] Social recovery (wallet.ts stubs).
-- [ ] Biometric security (wallet.ts for enterprise crypto).
-**Deliverable**: Public beta with 10,000 users, one-tap UX (Telegram bot stubs), MEV resistance (mev_protection.go fair ordering).
+Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint, Substrate, or any external framework. Every component is custom-built for Sultan's specific requirements.
 
-## Phase 3: Launch Preparation (October 6-9, 2025) - PLANNED 📅
-**Goal: Production ready**
-### October 6-7: Stress Testing
-- [ ] 2M+ TPS load test (load_testing.rs, integration_test.rs for Scylla).
-- [ ] Cross-chain stress test (production_test.rs for <3s interop).
-- [ ] Security audit (CertiK for quantum/MEV/APY).
-- [ ] Bug bounty program (focus on transaction_validator.rs subsidies).
-### October 8-9: Ecosystem
-- [ ] Genesis validators (100 mobile + 20 professional in blockchain.rs).
-- [ ] Initial liquidity ($10M across chains via interop services).
-- [ ] Launch partners (3 major dApps).
-- [ ] Documentation & SDKs (SULTAN_TECH_AUDIT.md, ARCHITECTURE.md).
-**Deliverable**: Mainnet launch 🚀 on October 10, eternal P2P (libp2p stubs in Cargo.toml), Replit sunset.
+---
 
-## Success Metrics
-- 100,000 active wallets in first month.
-- $100M TVL within 90 days.
-- 1,000 mobile validators (30% target).
-- <3s average cross-chain transfer.
+## Production Architecture
 
-## Team Structure
-- **Core Protocol**: 8 engineers.
-- **Mobile/Telegram**: 6 engineers.
-- **DevRel**: 4 engineers.
-- **Security**: 2 engineers + external audits.
-- **Product/Design**: 4 people.
-- **Operations**: 3 people.
+### Core Modules (sultan-core/src/)
 
-## Budget Allocation
-- **Development**: $2M (6 months runway).
-- **Security Audits**: $500k.
-- **Infrastructure**: $300k.
-- **Marketing/Community**: $700k.
-- **Legal/Compliance**: $500k.
-- **Total Seed**: $4M.
+| Module | Purpose |
+|--------|---------|
+| `main.rs` | Node binary, RPC server, P2P networking |
+| `lib.rs` | Library exports for all modules |
+| `consensus.rs` | Proof of Stake consensus engine |
+| `staking.rs` | Validator registration, delegation, rewards |
+| `governance.rs` | On-chain proposals and voting |
+| `token_factory.rs` | Native token creation (no smart contracts) |
+| `native_dex.rs` | Built-in AMM for token swaps |
+| `sharding.rs` | Horizontal scaling (8 shards, expandable) |
+| `sharding_production.rs` | Production shard routing |
+| `sharded_blockchain.rs` | Multi-shard block production |
+| `bridge_integration.rs` | Cross-chain bridge coordinator |
+| `bridge_fees.rs` | Bridge fee calculation |
+| `economics.rs` | Inflation, rewards, APY calculations |
+| `transaction_validator.rs` | Transaction validation (zero-fee) |
+| `storage.rs` | Persistent state storage |
+| `types.rs` | Core data structures |
+| `config.rs` | Node configuration |
+| `quantum.rs` | Post-quantum cryptography (Dilithium) |
+| `mev_protection.rs` | MEV resistance |
 
-## Technical Decisions (FINAL)
-### What We're INCLUDING:
-1. ✅ 8 shards at launch (expandable to 8000).
-2. ✅ Native ETH/SOL/TON/BTC interoperability (<3s swaps).
-3. ✅ Mobile validator support (30% target).
-4. ✅ Telegram-native features (one-tap staking, gas-free).
-5. ✅ Basic DeFi (staking with APY ~13.33%, swaps).
-6. ✅ On-chain governance (democratic voting).
-### What We're EXCLUDING (for now):
-1. ❌ Complex DeFi (lending, derivatives).
-2. ❌ NFT marketplace.
-3. ❌ Traditional bridges to other chains.
-4. ❌ Smart contract VM (using native modules).
-5. ❌ Privacy features (ZK).
-6. ❌ Advanced MEV protection (basic in mev_protection.go).
-### What We're POSTPONING:
-1. 📅 Q2 2026: Smart contract support.
-2. 📅 Q3 2026: Privacy features.
-3. 📅 Q4 2026: Traditional bridges.
-4. 📅 2027: Full DeFi suite.
+### Cross-Chain Bridges (bridges/)
 
-## Go-to-Market Strategy
-### Launch Sequence:
-1. **Soft Launch**: Nigeria, Indonesia, India (mobile-first markets).
-2. **Telegram Campaign**: 50M user reach via channels.
-3. **Validator Incentives**: Free SLTN for first 1000 mobile validators.
-4. **Developer Grants**: $1M for apps built on Sultan.
-### Key Partnerships:
-1. **Telegram**: Official featured mini app.
-2. **Binance**: CEX listing at launch.
-3. **Circle**: USDC on Sultan day one.
-4. **Major Telegram Channel**: Exclusive launch partner.
+| Bridge | Status |
+|--------|--------|
+| Bitcoin | Active |
+| Ethereum | Active |
+| Solana | Active |
+| TON | Active |
 
-## Risk Mitigation
-### Technical Risks:
-- **Scalability**: Start conservative (12k TPS), scale to 2M+.
-- **Security**: 3 audits + formal verification of critical paths.
-- **Interoperability**: Extensive cross-chain testing in production_test.rs.
-### Market Risks:
-- **Adoption**: Focus on Telegram's 900M users.
-- **Competition**: Move fast, ship weekly.
-- **Regulatory**: Start in crypto-friendly jurisdictions.
+---
 
-## The Sultan Difference
-We're NOT trying to be:
-- Another "Ethereum killer"
-- A complex DeFi platform
-- A developer-first blockchain
-We ARE building:
-- The people's blockchain
-- Mobile-native from day one
-- Instant cross-chain transfers (<3s)
-- Telegram as the wallet
-## Launch Criteria (Must Have ALL)
-1. ✅ 99.9% uptime on testnet for 30 days.
-2. ✅ Successful security audit (no critical issues).
-3. ✅ 10,000 beta users with positive feedback.
-4. ✅ $10M committed liquidity.
-5. ✅ Legal opinion in 5 jurisdictions.
-6. ✅ Disaster recovery plan tested.
-## Post-Launch Priorities
-1. **Week 1**: Monitor stability, fix critical bugs.
-2. **Week 2-4**: Onboard first dApps.
-3. **Month 2**: Launch staking rewards (APY ~13.33%).
-4. **Month 3**: First governance proposal.
-5. **Month 6**: Smart contract support.
-## Communication Strategy
-- **Weekly**: Development updates on Twitter.
-- **Bi-weekly**: Community calls.
-- **Monthly**: Detailed progress reports.
-- **Real-time**: Telegram announcement channel.
-## Final Architecture Lock-In
-This is what we're building. No more feature additions until mainnet.
-**The Mission**: Make blockchain accessible to 1 billion people through their phones.
-**The Vision**: Every Telegram user is 1 tap away from Web3.
-**The Strategy**: Ship fast, iterate based on user feedback, dominate mobile.
-Let's build this. 🚀
-- 100,000 active wallets in first month.
-- $100M TVL within 90 days.
-- 1,000 mobile validators (30% target).
-- <3s average cross-chain transfer.
+## Key Design Decisions
 
-## Team Structure
-- **Core Protocol**: 8 engineers.
-- **Mobile/Telegram**: 6 engineers.
-- **DevRel**: 4 engineers.
-- **Security**: 2 engineers + external audits.
-- **Product/Design**: 4 people.
-- **Operations**: 3 people.
+### Why Native Rust (Not Cosmos SDK)?
 
-## Budget Allocation
-- **Development**: $2M (6 months runway).
-- **Security Audits**: $500k.
-- **Infrastructure**: $300k.
-- **Marketing/Community**: $700k.
-- **Legal/Compliance**: $500k.
-- **Total Seed**: $4M.
+| Challenge | Our Solution |
+|-----------|--------------|
+| Zero gas fees | Built into protocol - no "AnteHandler" workaround needed |
+| Native sharding | Custom implementation, not bolted on |
+| Token factory | Protocol-level, no CosmWasm contracts |
+| Full control | No framework constraints or upgrade delays |
 
-## Technical Decisions (FINAL)
-### What We're INCLUDING:
-1. ✅ 8 shards at launch (expandable to 8000).
-2. ✅ Native ETH/SOL/TON/BTC interoperability (<3s swaps).
-3. ✅ Mobile validator support (30% target).
-4. ✅ Telegram-native features (one-tap staking, gas-free).
-5. ✅ Basic DeFi (staking with APY ~13.33%, swaps).
-6. ✅ On-chain governance (democratic voting).
-### What We're EXCLUDING (for now):
-1. ❌ Complex DeFi (lending, derivatives).
-2. ❌ NFT marketplace.
-3. ❌ Traditional bridges to other chains.
-4. ❌ Smart contract VM (using native modules).
-5. ❌ Privacy features (ZK).
-6. ❌ Advanced MEV protection (basic in mev_protection.go).
-### What We're POSTPONING:
-1. 📅 Q2 2026: Smart contract support.
-2. 📅 Q3 2026: Privacy features.
-3. 📅 Q4 2026: Traditional bridges.
-4. 📅 2027: Full DeFi suite.
+### Token System
 
-## Go-to-Market Strategy
-### Launch Sequence:
-1. **Soft Launch**: Nigeria, Indonesia, India (mobile-first markets).
-2. **Telegram Campaign**: 50M user reach via channels.
-3. **Validator Incentives**: Free SLTN for first 1000 mobile validators.
-4. **Developer Grants**: $1M for apps built on Sultan.
-### Key Partnerships:
-1. **Telegram**: Official featured mini app.
-2. **Binance**: CEX listing at launch.
-3. **Circle**: USDC on Sultan day one.
-4. **Major Telegram Channel**: Exclusive launch partner.
+Sultan uses a **Native Token Factory** - tokens are created directly in the protocol without smart contracts:
 
-## Risk Mitigation
-### Technical Risks:
-- **Scalability**: Start conservative (12k TPS), scale to 2M+.
-- **Security**: 3 audits + formal verification of critical paths.
-- **Interoperability**: Extensive cross-chain testing in production_test.rs.
-### Market Risks:
-- **Adoption**: Focus on Telegram's 900M users.
-- **Competition**: Move fast, ship weekly.
-- **Regulatory**: Start in crypto-friendly jurisdictions.
+```rust
+// sultan-core/src/token_factory.rs
+pub async fn create_token(
+    &self,
+    creator: &str,
+    name: String,
+    symbol: String,
+    decimals: u8,
+    total_supply: u128,
+    ...
+) -> Result<String>
+```
 
-## The Sultan Difference
-We're NOT trying to be:
-- Another "Ethereum killer"
-- A complex DeFi platform
-- A developer-first blockchain
-We ARE building:
-- The people's blockchain
-- Mobile-native from day one
-- Instant cross-chain transfers (<3s)
-- Telegram as the wallet
-## Launch Criteria (Must Have ALL)
-1. ✅ 99.9% uptime on testnet for 30 days.
-2. ✅ Successful security audit (no critical issues).
-3. ✅ 10,000 beta users with positive feedback.
-4. ✅ $10M committed liquidity.
-5. ✅ Legal opinion in 5 jurisdictions.
-6. ✅ Disaster recovery plan tested.
-## Post-Launch Priorities
-1. **Week 1**: Monitor stability, fix critical bugs.
-2. **Week 2-4**: Onboard first dApps.
-3. **Month 2**: Launch staking rewards (APY ~13.33%).
-4. **Month 3**: First governance proposal.
-5. **Month 6**: Smart contract support.
-## Communication Strategy
-- **Weekly**: Development updates on Twitter.
-- **Bi-weekly**: Community calls.
-- **Monthly**: Detailed progress reports.
-- **Real-time**: Telegram announcement channel.
-## Final Architecture Lock-In
-This is what we're building. No more feature additions until mainnet.
-**The Mission**: Make blockchain accessible to 1 billion people through their phones.
-**The Vision**: Every Telegram user is 1 tap away from Web3.
-**The Strategy**: Ship fast, iterate based on user feedback, dominate mobile.
-Let's build this. 🚀
+**NOT using:** CosmWasm, CW20, CW721, or any smart contract system.
+
+### DEX System
+
+Sultan has a **Native DEX** built into the protocol:
+
+```rust
+// sultan-core/src/native_dex.rs
+pub async fn swap(
+    &self,
+    user: &str,
+    input_denom: &str,
+    output_denom: &str,
+    input_amount: u128,
+    min_output: u128,
+) -> Result<SwapResult>
+```
+
+---
+
+## Network Parameters
+
+| Parameter | Value |
+|-----------|-------|
+| Block Time | ~2 seconds |
+| Minimum Validator Stake | 10,000 SLTN |
+| Validator APY | ~13.33% |
+| Gas Fees | Zero (subsidized by inflation) |
+| Shards | 8 at launch (expandable to 8000) |
+| Consensus | Proof of Stake |
+
+---
+
+## What's NOT Production
+
+The `_archive/` folder contains legacy/experimental code:
+- `contracts-cosmwasm-legacy/` - Old CosmWasm experiments (not used)
+- `sultan-cosmos-*/` - Cosmos SDK experiments (abandoned)
+- Various other prototypes
+
+**All production code is in `sultan-core/`**
+
+---
+
+## Deployment
+
+### Production
+- **RPC:** https://rpc.sltn.io
+- **Validators:** 9 active
+- **Block Height:** 45,000+
+
+### Development
+```bash
+# Build
+cd sultan-core
+cargo build --release
+
+# Run node
+./target/release/sultan-node
+
+# Run tests
+cargo test --workspace
+```
+
+---
+
+## Documentation
+
+- [Technical Whitepaper](SULTAN_L1_TECHNICAL_WHITEPAPER.md) - Full technical specification
+- [Technical Deep Dive](docs/SULTAN_TECHNICAL_DEEP_DIVE.md) - Investor-focused explanation
+- [Validator Guide](VALIDATOR_GUIDE.md) - How to run a validator
+- [API Reference](docs/API_REFERENCE.md) - RPC endpoints
