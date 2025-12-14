@@ -59,7 +59,7 @@ Rust is a systems programming language known for:
 
 ### 1.1 Core Stack
 
-Sultan is a **native Rust implementation** - NOT a Cosmos SDK fork or EVM-compatible chain. This is critical for investor understanding.
+Sultan is a **native Rust L1 blockchain** built from scratch. Every component is custom-built for Sultan's specific requirements.
 
 | Layer | Technology | What It Is | Why It Matters |
 |-------|------------|------------|----------------|
@@ -94,26 +94,14 @@ sultan-core/src/
 └── [supporting modules]
 ```
 
-### 1.3 Why Not Cosmos SDK?
+### 1.3 Key Design Decisions
 
-**What is Cosmos SDK?**
-
-A popular framework for building blockchains. Chains like Osmosis, Celestia, and dYdX use it.
-
-**Why we chose not to use it:**
-
-| Reason | Explanation |
-|--------|-------------|
-| **Zero-fee model incompatible** | Cosmos SDK has a built-in "AnteHandler" that expects gas fees. Removing it breaks many assumptions in the codebase. |
-| **Sharding requirements** | Cosmos SDK doesn't support native sharding. We'd need to heavily modify it anyway. |
-| **Performance** | Pure Rust without framework overhead gives us ~10x better per-core throughput. |
-| **Customization** | Building features like native DEX and token factory is easier without fighting the framework. |
-
-**However:** We maintain IBC (Inter-Blockchain Communication) compatibility via our bridge layer for Cosmos ecosystem interoperability.
-
-**What is IBC?**
-
-A protocol that lets different blockchains communicate. Think of it as TCP/IP for blockchains - a standard way to send messages and tokens between chains.
+| Decision | Benefit |
+|----------|--------|
+| **Native Rust** | Maximum performance, memory safety, no framework overhead |
+| **Zero-fee model** | Built into protocol from day one - not retrofitted |
+| **Native sharding** | Horizontal scaling designed into architecture |
+| **Native DEX & Token Factory** | Protocol-level features, no smart contract complexity |
 
 ---
 
