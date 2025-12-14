@@ -570,7 +570,7 @@ Example: sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7l8qn5t2
 | **Name** | Sultan Token |
 | **Symbol** | SLTN |
 | **Type** | Native L1 Gas/Staking Token |
-| **Decimals** | 8 |
+| **Decimals** | 9 |
 | **Genesis Supply** | 500,000,000 SLTN |
 
 ### 8.2 Token Distribution

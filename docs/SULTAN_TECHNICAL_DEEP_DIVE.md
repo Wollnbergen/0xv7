@@ -612,8 +612,8 @@ Per-month reward = 3.65 × 30 = ~111 SLTN/month
 
 | Allocation | Percentage | Amount | Purpose |
 |------------|------------|--------|---------|
-| Treasury | 40% | 200,000,000 | Protocol development, grants |
-| Ecosystem | 20% | 100,000,000 | Partnerships, integrations |
+| Ecosystem Fund | 40% | 200,000,000 | Protocol development, grants |
+| Growth & Marketing | 20% | 100,000,000 | User acquisition, partnerships |
 | Strategic Reserve | 15% | 75,000,000 | Market stability, emergencies |
 | Fundraising | 12% | 60,000,000 | Investor allocation |
 | Team | 8% | 40,000,000 | Core contributors (vested) |

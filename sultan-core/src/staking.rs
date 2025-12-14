@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 
-const MIN_VALIDATOR_STAKE: u64 = 5_000_000_000_000; // 5,000 SLTN (with 9 decimals)
+const MIN_VALIDATOR_STAKE: u64 = 10_000_000_000_000; // 10,000 SLTN (with 9 decimals)
 const BLOCKS_PER_YEAR: u64 = 15_768_000; // 2-second blocks: (365*24*60*60)/2
 const BASE_APY: f64 = 0.1333; // 13.33% APY for validators
 
