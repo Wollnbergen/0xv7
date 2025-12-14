@@ -93,3 +93,9 @@ impl ZKBridge {
         Ok(true)
     }
 }
+
+impl Default for ZKBridge {
+    fn default() -> Self {
+        Self::new()
+    }
+}

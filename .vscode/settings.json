@@ -1,4 +1,7 @@
 {
-  "python.terminal.activateEnvironment": true,
-  "python.defaultInterpreterPath": "/opt/conda/envs/0xv7/bin/python"
+  "terminal.integrated.shellIntegration.enabled": false,
+  "terminal.integrated.profiles.linux": {
+    "Clean Bash": { "path": "/workspaces/0xv7/.vscode/bash-clean.sh" }
+  },
+  "terminal.integrated.defaultProfile.linux": "Clean Bash"
 }

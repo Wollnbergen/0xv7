@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package sultan;
+
+service Sultan {
+    rpc GetStatus(Empty) returns (StatusResponse);
+}
+
+message Empty {}
+
+message StatusResponse {
+    string version = 1;
+    bool syncing = 2;
+}

@@ -1,0 +1,47 @@
+{
+  "week1": {
+    "status": "COMPLETE",
+    "percentage": 100,
+    "tasks": {
+      "cosmos_sdk": true,
+      "tendermint": true,
+      "p2p_networking": true,
+      "account_system": true,
+      "transaction_processing": true
+    }
+  },
+  "week2": {
+    "status": "COMPLETE",
+    "percentage": 100,
+    "tasks": {
+      "cosmwasm": true,
+      "cw20_tokens": true,
+      "nft_contract": true,
+      "defi_contracts": true,
+      "zero_gas": true
+    }
+  },
+  "week3": {
+    "status": "COMPLETE",
+    "percentage": 100,
+    "tasks": {
+      "validator_staking": true,
+      "slashing": true,
+      "hd_wallet": true,
+      "rate_limiting": true,
+      "ddos_protection": true
+    }
+  },
+  "week4": {
+    "status": "NOT_STARTED",
+    "percentage": 0,
+    "tasks": {
+      "hyper_module": false,
+      "parallel_processing": false,
+      "state_pruning": false,
+      "database_optimization": false,
+      "load_testing": false
+    }
+  },
+  "overall_progress": 50
+}

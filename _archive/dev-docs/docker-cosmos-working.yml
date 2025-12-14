@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  sultan-cosmos:
+    image: interchainio/simapp:v0.46.7
+    container_name: sultan-cosmos-node
+    ports:
+      - "26656:26656"  # P2P
+      - "26657:26657"  # RPC  
+      - "1317:1317"    # REST API
+      - "9090:9090"    # gRPC
+    environment:
+      - CHAIN_ID=sultan-1
+      - MINIMUM_GAS_PRICES=0stake
+    volumes:
+      - ./sultan-chain-data:/root/.simapp
+    command: |
+      sh -c "
+        if [ ! -f /root/.simapp/config/genesis.json ]; then
+          echo 'Initializing new chain...'
+          simd init sultan-node --chain-id sultan-1 --home /root/.simapp
+          simd keys add validator --keyring-backend test --home /root/.simapp
+          simd add-genesis-account validator 1000000000stake --keyring-backend test --home /root/.simapp
+          simd gentx validator 100000000stake --keyring-backend test --chain-id sultan-1 --home /root/.simapp
+          simd collect-gentxs --home /root/.simapp
+        fi
+        echo 'Starting Cosmos node...'
+        simd start --home /root/.simapp --minimum-gas-prices 0stake
+      "

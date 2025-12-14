@@ -1,0 +1,14 @@
+{
+  "name": "Sultan DEX",
+  "version": "1.0.0",
+  "pairs": [
+    {"base": "native:usltn", "quote": "cw20:wSLTN"},
+    {"base": "native:usltn", "quote": "cw20:USDS"},
+    {"base": "cw20:USDS", "quote": "cw20:GOLD"}
+  ],
+  "fees": {
+    "swap": 0.003,
+    "protocol": 0.0,
+    "gas": 0.0
+  }
+}

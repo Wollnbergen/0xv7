@@ -1,0 +1,58 @@
+{
+  "chainId": "sultan-1",
+  "chainName": "Sultan L1",
+  "rpc": "https://rpc.sultanchain.io",
+  "rest": "https://api.sultanchain.io",
+  "bip44": {
+    "coinType": 118
+  },
+  "bech32Config": {
+    "bech32PrefixAccAddr": "sultan",
+    "bech32PrefixAccPub": "sultanpub",
+    "bech32PrefixValAddr": "sultanvaloper",
+    "bech32PrefixValPub": "sultanvaloperpub",
+    "bech32PrefixConsAddr": "sultanvalcons",
+    "bech32PrefixConsPub": "sultanvalconspub"
+  },
+  "currencies": [
+    {
+      "coinDenom": "SLTN",
+      "coinMinimalDenom": "usltn",
+      "coinDecimals": 9,
+      "coinGeckoId": "sultan",
+      "coinImageUrl": "https://sultanchain.io/assets/logo.png"
+    }
+  ],
+  "feeCurrencies": [
+    {
+      "coinDenom": "SLTN",
+      "coinMinimalDenom": "usltn",
+      "coinDecimals": 9,
+      "coinGeckoId": "sultan",
+      "gasPriceStep": {
+        "low": 0.01,
+        "average": 0.025,
+        "high": 0.04
+      }
+    }
+  ],
+  "stakeCurrency": {
+    "coinDenom": "SLTN",
+    "coinMinimalDenom": "usltn",
+    "coinDecimals": 9,
+    "coinGeckoId": "sultan"
+  },
+  "features": [
+    "ibc-transfer",
+    "ibc-go",
+    "staking",
+    "governance",
+    "cosmwasm",
+    "wasmd_0.24+",
+    "no-legacy-stdTx"
+  ],
+  "walletUrlForStaking": "https://wallet.sultanchain.io",
+  "govUrl": "https://governance.sultanchain.io",
+  "explorerUrlToTx": "https://explorer.sultanchain.io/tx/{txHash}",
+  "beta": false
+}

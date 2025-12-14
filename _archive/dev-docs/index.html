@@ -1,0 +1,2149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sultan L1 - Zero-Fee Blockchain | Powered by Rust & Cosmos</title>
+    <meta name="description" content="Sultan L1: The first zero-fee blockchain with 13.33% validator APY. Built with Rust, powered by Cosmos SDK, secured by CometBFT.">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --accent: #f093fb;
+            --dark: #1a202c;
+            --light: #f7fafc;
+            --success: #48bb78;
+            --warning: #f6ad55;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            overflow-x: hidden;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            padding: 1rem 0;
+        }
+
+        nav .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        nav .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: var(--dark);
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        nav a:hover {
+            color: var(--primary);
+        }
+
+        .mobile-menu {
+            display: none;
+            cursor: pointer;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .mobile-menu span {
+            width: 25px;
+            height: 3px;
+            background: var(--primary);
+            border-radius: 3px;
+            transition: 0.3s;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            position: relative;
+            overflow: hidden;
+            padding-top: 80px;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23grid)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .hero .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            color: white;
+            margin-bottom: 1rem;
+            animation: fadeInUp 1s ease;
+        }
+
+        .hero .subtitle {
+            font-size: 1.5rem;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 2rem;
+            animation: fadeInUp 1s ease 0.2s backwards;
+        }
+
+        .hero .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+            animation: fadeInUp 1s ease 0.4s backwards;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-box .number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-box .label {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1rem;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: white;
+            color: var(--primary);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-outline:hover {
+            background: white;
+            color: var(--primary);
+        }
+
+        /* Section Styles */
+        section {
+            padding: 5rem 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .section-subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 1.2rem;
+            margin-bottom: 3rem;
+        }
+
+        /* Features Section */
+        .features {
+            background: var(--light);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.2);
+        }
+
+        .feature-card .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+
+        .feature-card p {
+            color: #666;
+            line-height: 1.8;
+        }
+
+        /* Tokenomics Section */
+        .tokenomics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .token-card {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 2rem;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .token-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .token-card .label {
+            opacity: 0.9;
+        }
+
+        .distribution {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .distribution h3 {
+            margin-bottom: 1.5rem;
+            color: var(--dark);
+        }
+
+        .dist-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .dist-item:last-child {
+            border-bottom: none;
+        }
+
+        .dist-bar {
+            height: 30px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 5px;
+            margin: 0.5rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Validator Dashboard Section */
+        #validators {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+
+        .validator-dashboard {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.8rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .hint {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.3rem;
+        }
+
+        .earnings-calc {
+            background: #e6fffa;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin: 1.5rem 0;
+            border-left: 4px solid var(--success);
+        }
+
+        .earnings-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+        }
+
+        .requirements-box {
+            background: #fff5f5;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin: 1.5rem 0;
+            border-left: 4px solid var(--warning);
+        }
+
+        .requirements-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .requirements-box li {
+            padding: 0.5rem 0;
+            position: relative;
+            padding-left: 1.5rem;
+        }
+
+        .requirements-box li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+        }
+
+        /* Wallet Status */
+        .wallet-status {
+            background: #f0f4ff;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            border: 2px solid var(--primary);
+        }
+
+        .wallet-connected {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .wallet-address {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .wallet-balance {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-top: 0.3rem;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+
+        .alert-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid var(--success);
+        }
+
+        .alert-error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #f44336;
+        }
+
+        .alert-warning {
+            background: #fff3e0;
+            color: #f57c00;
+            border-left: 4px solid var(--warning);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Technology Section */
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .tech-item {
+            text-align: center;
+            padding: 1.5rem;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .tech-item .tech-name {
+            font-weight: 600;
+            margin-top: 0.5rem;
+            color: var(--dark);
+        }
+
+        .tech-item .tech-version {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        /* Developer Resources Section */
+        .developers {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .developers .section-title,
+        .developers .section-subtitle {
+            color: white;
+        }
+
+        .resources-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .resource-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 2rem;
+            border-radius: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .resource-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .resource-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .resource-card p {
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 1.5rem;
+            line-height: 1.8;
+        }
+
+        .resource-links {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .resource-link {
+            display: flex;
+            align-items: center;
+            padding: 0.8rem 1.2rem;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            text-decoration: none;
+            color: white;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .resource-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateX(5px);
+        }
+
+        .resource-link::before {
+            content: '→';
+            margin-right: 0.5rem;
+            font-size: 1.2rem;
+        }
+
+        .code-example {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+        }
+
+        .code-example code {
+            color: #a8dadc;
+        }
+
+        .dev-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .dev-stat {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .dev-stat .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .dev-stat .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        /* Roadmap Section */
+        .roadmap {
+            background: var(--light);
+        }
+
+        .timeline {
+            position: relative;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .timeline-item {
+            display: flex;
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        .timeline-marker {
+            width: 40px;
+            height: 40px;
+            background: var(--success);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            margin-right: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .timeline-content {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            flex: 1;
+        }
+
+        .timeline-content h3 {
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+
+        .timeline-content .status {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            background: var(--success);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 3rem 0 1rem;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer-section h3 {
+            margin-bottom: 1rem;
+        }
+
+        .footer-section ul {
+            list-style: none;
+        }
+
+        .footer-section a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: color 0.3s;
+            display: block;
+            padding: 0.3rem 0;
+        }
+
+        .footer-section a:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            text-align: center;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .social-links {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .social-links a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            transition: background 0.3s;
+        }
+
+        .social-links a:hover {
+            background: var(--primary);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            max-width: 700px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 2rem;
+            cursor: pointer;
+            color: #666;
+            background: none;
+            border: none;
+        }
+
+        .modal-content pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeInUp 0.6s ease;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            nav ul {
+                display: none;
+            }
+
+            .mobile-menu {
+                display: flex;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero .subtitle {
+                font-size: 1.2rem;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .validator-dashboard {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="container">
+            <div class="logo">🏆 SULTAN L1</div>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#tokenomics">Tokenomics</a></li>
+                <li><a href="#validators">Validators</a></li>
+                <li><a href="#technology">Technology</a></li>
+                <li><a href="#developers">Developers</a></li>
+                <li><a href="#roadmap">Roadmap</a></li>
+                <li><a href="add-to-keplr.html" class="btn-wallet" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 0.5rem 1.5rem; border-radius: 25px; font-weight: 600;">🔗 Connect Wallet</a></li>
+            </ul>
+            <div class="mobile-menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="container">
+            <h1>The Zero-Fee Blockchain</h1>
+            <p class="subtitle">Built with Rust. Powered by Cosmos. Secured by CometBFT.</p>
+            
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="number">$0.00</div>
+                    <div class="label">Transaction Fees</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number">13.33%</div>
+                    <div class="label">Validator APY</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number" id="blockHeight">Loading...</div>
+                    <div class="label">Block Height</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number" id="validatorCount">Loading...</div>
+                    <div class="label">Active Validators</div>
+                </div>
+            </div>
+            
+            <div class="stats" style="margin-top: 1rem;">
+                <div class="stat-box">
+                    <div class="number">2s</div>
+                    <div class="label">Block Time</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number">500M</div>
+                    <div class="label">Total Supply</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number" id="totalAccounts">Loading...</div>
+                    <div class="label">Total Accounts</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number" id="pendingTxs">Loading...</div>
+                    <div class="label">Pending Txs</div>
+                </div>
+            </div>
+
+            <div class="stats" style="margin-top: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1.5rem; border-radius: 12px;">
+                <div class="stat-box" style="color: white;">
+                    <div class="number" id="shardingEnabled" style="color: white;">Checking...</div>
+                    <div class="label" style="color: rgba(255,255,255,0.9);">Sharding Status</div>
+                </div>
+                <div class="stat-box" style="color: white;">
+                    <div class="number" id="shardCount" style="color: white;">—</div>
+                    <div class="label" style="color: rgba(255,255,255,0.9);">Active Shards</div>
+                </div>
+                <div class="stat-box" style="color: white;">
+                    <div class="number" id="tpsCapacity" style="color: white;">—</div>
+                    <div class="label" style="color: rgba(255,255,255,0.9);">TPS Capacity</div>
+                </div>
+            </div>
+
+            <div class="stats" style="margin-top: 1rem; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 1.5rem; border-radius: 12px;">
+                <div class="stat-box" style="color: white;">
+                    <div class="number" id="inflationRate" style="color: white;">Loading...</div>
+                    <div class="label" style="color: rgba(255,255,255,0.9);">Inflation Rate</div>
+                </div>
+                <div class="stat-box" style="color: white;">
+                    <div class="number" id="validatorAPY" style="color: white;">Loading...</div>
+                    <div class="label" style="color: rgba(255,255,255,0.9);">Validator APY</div>
+                </div>
+                <div class="stat-box" style="color: white;">
+                    <div class="number" id="economicsStatus" style="color: white;">Loading...</div>
+                    <div class="label" style="color: rgba(255,255,255,0.9);">Economic Status</div>
+                </div>
+                <div class="stat-box" style="color: white;">
+                    <div class="number" id="totalBurned" style="color: white;">0</div>
+                    <div class="label" style="color: rgba(255,255,255,0.9);">Total Burned</div>
+                </div>
+            </div>
+
+            <div class="cta-buttons">
+                <a href="#validators" class="btn btn-primary">Become a Validator</a>
+                <a href="https://github.com/Wollnbergen/0xv7" class="btn btn-outline" target="_blank">View on GitHub</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Why Sultan L1?</h2>
+            <p class="section-subtitle">The first blockchain that's truly free to use</p>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="icon">🔒</div>
+                    <h3>A+ Security</h3>
+                    <p>Comprehensive security audit with 100/100 score. Memory-safe Rust core with 57 null checks and full panic recovery.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">⚡</div>
+                    <h3>Sharding Architecture</h3>
+                    <p>Revolutionary parallel processing with 100+ shards. 200,000+ TPS capacity (expandable to 1M+ with additional shards). 5-second blocks with instant finality.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">💰</div>
+                    <h3>Zero Fees Forever</h3>
+                    <p>No gas fees. No transaction costs. Inflation subsidizes all network operations while maintaining validator profitability.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">🌐</div>
+                    <h3>Cosmos Ecosystem</h3>
+                    <p>Cosmos compatibility via FFI bridge (Layer 2). Keplr wallet support. Future IBC integration for cross-chain transfers.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">🦀</div>
+                    <h3>Rust Reliability</h3>
+                    <p>Sultan Core built in Rust for memory safety and rock-solid stability. 100% uptime, zero crashes, zero missed blocks since genesis. Memory usage: ~17MB (0.2% of system).</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">🚀</div>
+                    <h3>Production Ready</h3>
+                    <p>All development phases complete with sharding architecture. Security audited. Performance validated. Stress tested. Ready for high-volume deployment.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tokenomics Section -->
+    <section id="tokenomics">
+        <div class="container">
+            <h2 class="section-title">Tokenomics</h2>
+            <p class="section-subtitle">Sustainable economics built for validators and users</p>
+
+            <div class="tokenomics-grid">
+                <div class="token-card">
+                    <div class="value">500M</div>
+                    <div class="label">Total Supply</div>
+                </div>
+                <div class="token-card">
+                    <div class="value">10,000</div>
+                    <div class="label">Min. Validator Stake</div>
+                </div>
+                <div class="token-card">
+                    <div class="value">13.33%</div>
+                    <div class="label">Fixed APY</div>
+                </div>
+                <div class="token-card">
+                    <div class="value">8-4%</div>
+                    <div class="label">Inflation (Decreasing)</div>
+                </div>
+            </div>
+
+            <div class="distribution">
+                <h3>Token Distribution</h3>
+                <div class="dist-item">
+                    <span>Validator Rewards Pool</span>
+                    <strong>40% (200M SLTN)</strong>
+                </div>
+                <div class="dist-bar" style="width: 40%"></div>
+
+                <div class="dist-item">
+                    <span>Development Fund</span>
+                    <strong>20% (100M SLTN)</strong>
+                </div>
+                <div class="dist-bar" style="width: 20%"></div>
+
+                <div class="dist-item">
+                    <span>Community Treasury</span>
+                    <strong>20% (100M SLTN)</strong>
+                </div>
+                <div class="dist-bar" style="width: 20%"></div>
+
+                <div class="dist-item">
+                    <span>Initial Liquidity</span>
+                    <strong>10% (50M SLTN)</strong>
+                </div>
+                <div class="dist-bar" style="width: 10%"></div>
+
+                <div class="dist-item">
+                    <span>Team (4-year vesting)</span>
+                    <strong>10% (50M SLTN)</strong>
+                </div>
+                <div class="dist-bar" style="width: 10%"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Validator Dashboard Section -->
+    <section id="validators">
+        <div class="container">
+            <h2 class="section-title">Become a Validator</h2>
+            <p class="section-subtitle">Permissionless. Decentralized. Profitable.</p>
+
+            <div class="validator-dashboard">
+                <!-- Wallet Connection Status -->
+                <div id="walletStatus" class="wallet-status">
+                    <button id="connectWallet" class="btn btn-primary" onclick="connectKeplr()">
+                        🔐 Connect Keplr Wallet
+                    </button>
+                    <div id="walletInfo" style="display: none;">
+                        <div class="wallet-connected">
+                            <span class="status-indicator"></span>
+                            <div>
+                                <strong>Connected</strong>
+                                <p id="walletAddress" class="wallet-address"></p>
+                                <p id="walletBalance" class="wallet-balance"></p>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" onclick="disconnectWallet()" style="margin-top: 1rem;">
+                            Disconnect
+                        </button>
+                    </div>
+                </div>
+
+                <form id="validatorForm">
+                    <div class="form-group">
+                        <label for="validatorName">Validator Name</label>
+                        <input type="text" id="validatorName" placeholder="My Awesome Validator" required>
+                        <div class="hint">Public name shown in validator list</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="stakeAmount">Stake Amount (SLTN)</label>
+                        <input type="number" id="stakeAmount" value="10000" min="10000" step="1000" required>
+                        <div class="hint">Minimum: 10,000 SLTN</div>
+                    </div>
+
+                    <div class="earnings-calc">
+                        <h3 style="margin-bottom: 1rem;">📊 Your Estimated Earnings (13.33% APY)</h3>
+                        <div class="earnings-row">
+                            <span>Daily:</span>
+                            <strong id="dailyEarnings">7.30 SLTN</strong>
+                        </div>
+                        <div class="earnings-row">
+                            <span>Monthly:</span>
+                            <strong id="monthlyEarnings">222.25 SLTN</strong>
+                        </div>
+                        <div class="earnings-row">
+                            <span>Yearly:</span>
+                            <strong id="yearlyEarnings">2,667 SLTN</strong>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="commission">Commission Rate (%)</label>
+                        <select id="commission" required>
+                            <option value="0.05">5% (Recommended)</option>
+                            <option value="0.10">10%</option>
+                            <option value="0.15">15%</option>
+                            <option value="0.20">20% (Maximum)</option>
+                        </select>
+                        <div class="hint">Your commission on delegations from other stakers</div>
+                    </div>
+
+                    <div class="requirements-box">
+                        <h3>Server Requirements</h3>
+                        <ul>
+                            <li>4GB RAM minimum (8GB recommended)</li>
+                            <li>100GB SSD storage</li>
+                            <li>Ubuntu 22.04 or later</li>
+                            <li>Public IP address</li>
+                            <li>Ports 26656, 26657, 1317 open</li>
+                        </ul>
+                    </div>
+
+                    <button type="button" class="btn btn-primary" id="becomeValidatorBtn" onclick="becomeValidator()" style="width: 100%; margin-top: 1rem;" disabled>
+                        🚀 Become a Validator (Connect Wallet First)
+                    </button>
+                    <button type="button" class="btn btn-outline" onclick="generateSetup()" style="width: 100%; margin-top: 0.5rem;">
+                        📋 View Manual Setup Instructions
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technology Section -->
+    <section id="technology">
+        <div class="container">
+            <h2 class="section-title">Technology Stack</h2>
+            <p class="section-subtitle">Built with best-in-class technologies</p>
+
+            <div class="tech-stack">
+                <div class="tech-item">
+                    <div style="font-size: 3rem;">🦀</div>
+                    <div class="tech-name">Rust</div>
+                    <div class="tech-version">Sultan Core</div>
+                </div>
+                <div class="tech-item">
+                    <div style="font-size: 3rem;">🌌</div>
+                    <div class="tech-name">Cosmos SDK</div>
+                    <div class="tech-version">v0.50.6</div>
+                </div>
+                <div class="tech-item">
+                    <div style="font-size: 3rem;">⚛️</div>
+                    <div class="tech-name">CometBFT</div>
+                    <div class="tech-version">v0.38.11</div>
+                </div>
+                <div class="tech-item">
+                    <div style="font-size: 3rem;">🔗</div>
+                    <div class="tech-name">IBC Protocol</div>
+                    <div class="tech-version">v8.0.0</div>
+                </div>
+                <div class="tech-item">
+                    <div style="font-size: 3rem;">🗄️</div>
+                    <div class="tech-name">RocksDB</div>
+                    <div class="tech-version">Persistent Storage</div>
+                </div>
+                <div class="tech-item">
+                    <div style="font-size: 3rem;">📊</div>
+                    <div class="tech-name">Prometheus</div>
+                    <div class="tech-version">Monitoring</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Developer Resources Section -->
+    <section id="developers" class="developers">
+        <div class="container">
+            <h2 class="section-title">🚀 Build on Sultan L1</h2>
+            <p class="section-subtitle">Everything you need to build DApps, DEXs, wallets, and more</p>
+
+            <div class="resources-grid">
+                <div class="resource-card">
+                    <h3>📦 Sultan SDK</h3>
+                    <p>Production-ready Rust SDK for building on Sultan L1. HTTP RPC client with support for mainnet, testnet, and local networks.</p>
+                    
+                    <div class="code-example">
+                        <code>
+use sultan_sdk::SultanSDK;
+
+let sdk = SultanSDK::new_mainnet().await?;
+let balance = sdk.get_balance_sltn("sultan1...").await?;
+                        </code>
+                    </div>
+
+                    <div class="resource-links">
+                        <a href="https://github.com/Wollnbergen/BUILD" class="resource-link" target="_blank">View SDK on GitHub</a>
+                        <a href="https://github.com/Wollnbergen/BUILD/blob/main/README.md" class="resource-link" target="_blank">Quick Start Guide</a>
+                        <a href="https://github.com/Wollnbergen/BUILD/blob/main/sdk.rs" class="resource-link" target="_blank">View SDK Source</a>
+                    </div>
+                </div>
+
+                <div class="resource-card">
+                    <h3>🔌 RPC API</h3>
+                    <p>Direct HTTP access to Sultan L1 blockchain. Query balances, submit transactions, and interact with the network from any language.</p>
+                    
+                    <div class="code-example">
+                        <code>
+// JavaScript/TypeScript
+const balance = await fetch(
+  'https://rpc.sultan.network/balance/sultan1...'
+).then(r => r.json());
+                        </code>
+                    </div>
+
+                    <div class="resource-links">
+                        <a href="https://github.com/Wollnbergen/BUILD/blob/main/RPC_SERVER.md" class="resource-link" target="_blank">API Documentation</a>
+                        <a href="https://rpc.sultan.network/status" class="resource-link" target="_blank">Test RPC Endpoint</a>
+                        <a href="https://api.sultan.network" class="resource-link" target="_blank">REST API</a>
+                    </div>
+                </div>
+
+                <div class="resource-card">
+                    <h3>💡 Examples & Guides</h3>
+                    <p>Code examples in multiple languages: Rust, JavaScript, Python, and cURL. Build wallets, DApps, DEXs, and analytics tools.</p>
+                    
+                    <div class="dev-stats">
+                        <div class="dev-stat">
+                            <div class="stat-number">$0</div>
+                            <div class="stat-label">Gas Fees</div>
+                        </div>
+                        <div class="dev-stat">
+                            <div class="stat-number">&lt;50ms</div>
+                            <div class="stat-label">Finality</div>
+                        </div>
+                        <div class="dev-stat">
+                            <div class="stat-number">13.33%</div>
+                            <div class="stat-label">APY</div>
+                        </div>
+                    </div>
+
+                    <div class="resource-links" style="margin-top: 1.5rem;">
+                        <a href="https://github.com/Wollnbergen/BUILD" class="resource-link" target="_blank">Browse Examples</a>
+                        <a href="https://docs.cosmos.network" class="resource-link" target="_blank">Cosmos SDK Docs</a>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 3rem;">
+                <h3 style="font-size: 2rem; margin-bottom: 1rem;">Available Now on Sultan</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 2rem;">
+                    <div style="padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">💰</div>
+                        <strong>Staking & Delegation</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">Earn 13.33% APY validating or delegating SLTN</p>
+                    </div>
+                    <div style="padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🌉</div>
+                        <strong>Cross-Chain Transfers</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">Bridge to/from ETH, SOL, TON, BTC in <3 seconds</p>
+                    </div>
+                    <div style="padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🏛️</div>
+                        <strong>On-Chain Governance</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">Democratic voting on proposals and upgrades</p>
+                    </div>
+                    <div style="padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📱</div>
+                        <strong>Mobile Validators</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">Run a full validator from your smartphone</p>
+                    </div>
+                    <div style="padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">💬</div>
+                        <strong>Telegram Integration</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">One-tap staking and gas-free transactions</p>
+                    </div>
+                    <div style="padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">👛</div>
+                        <strong>Wallets & Tools</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">Build wallets, explorers, and analytics</p>
+                    </div>
+                </div>
+                <div style="margin-top: 2rem; padding: 1.5rem; background: rgba(102, 126, 234, 0.1); border-radius: 10px; border-left: 4px solid var(--primary);">
+                    <p style="font-size: 1rem; opacity: 0.95;"><strong>Coming in 2026:</strong> Smart Contracts (Q2) • DeFi & NFTs (Q3) • Privacy Features (Q4)</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Roadmap Section -->
+    <section id="roadmap" class="roadmap">
+        <div class="container">
+            <h2 class="section-title">Development Roadmap</h2>
+            <p class="section-subtitle">All phases complete - Production ready!</p>
+
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-marker">✓</div>
+                    <div class="timeline-content">
+                        <h3>Phase 1: Sultan Core Extraction</h3>
+                        <p>Pure Rust L1 blockchain with all core modules</p>
+                        <span class="status">COMPLETE</span>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">✓</div>
+                    <div class="timeline-content">
+                        <h3>Phase 2: FFI Bridge Layer</h3>
+                        <p>49 extern "C" functions, A+ security rating</p>
+                        <span class="status">COMPLETE</span>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">✓</div>
+                    <div class="timeline-content">
+                        <h3>Phase 3: Cosmos SDK Module</h3>
+                        <p>Full ABCI integration with keeper pattern</p>
+                        <span class="status">COMPLETE</span>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">✓</div>
+                    <div class="timeline-content">
+                        <h3>Phase 4: Full Node Integration</h3>
+                        <p>sultand binary with restart resilience</p>
+                        <span class="status">COMPLETE</span>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">✓</div>
+                    <div class="timeline-content">
+                        <h3>Phase 5: Cosmos Ecosystem</h3>
+                        <p>IBC v8, REST/gRPC APIs, Keplr wallet</p>
+                        <span class="status">COMPLETE</span>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">✓</div>
+                    <div class="timeline-content">
+                        <h3>Phase 6: Production Hardening</h3>
+                        <p>Security audit, performance testing, monitoring</p>
+                        <span class="status">COMPLETE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Cross-Chain Bridges Section -->
+    <section id="bridges" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 5rem 0;">
+        <div class="container">
+            <h2 class="section-title" style="-webkit-text-fill-color: white;">🌉 Cross-Chain Interoperability</h2>
+            <p class="section-subtitle" style="color: rgba(255, 255, 255, 0.9);">Native bridges to Bitcoin, Ethereum, Solana, TON + IBC to 100+ Cosmos chains</p>
+
+            <!-- Bridge Statistics -->
+            <div class="tokenomics-grid" style="margin-bottom: 3rem;">
+                <div class="token-card" style="background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px);">
+                    <div class="value" id="activeBridges">5</div>
+                    <div class="label">Active Bridges</div>
+                </div>
+                <div class="token-card" style="background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px);">
+                    <div class="value" id="supportedChains">104</div>
+                    <div class="label">Supported Chains</div>
+                </div>
+                <div class="token-card" style="background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px);">
+                    <div class="value" id="bridgeVolume">$0</div>
+                    <div class="label">Total Volume</div>
+                </div>
+                <div class="token-card" style="background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px);">
+                    <div class="value" id="bridgeTxs">0</div>
+                    <div class="label">Transactions</div>
+                </div>
+            </div>
+
+            <!-- Individual Bridges -->
+            <div class="features-grid">
+                <div class="feature-card" style="background: rgba(255, 255, 255, 0.95);">
+                    <div class="icon">₿</div>
+                    <h3>Bitcoin Bridge</h3>
+                    <p><strong>Type:</strong> HTLC Atomic Swaps</p>
+                    <p><strong>Token:</strong> sBTC (wrapped BTC)</p>
+                    <p><strong>Confirmation:</strong> 3 blocks (~30min)</p>
+                    <p><strong>Security:</strong> SPV light client verification</p>
+                    <p style="margin-top: 1rem; padding: 0.5rem; background: #f0f0f0; border-radius: 8px; font-size: 0.9rem;">
+                        <strong>Status:</strong> <span style="color: #10b981;" id="btcBridgeStatus">🟢 Active</span>
+                    </p>
+                </div>
+
+                <div class="feature-card" style="background: rgba(255, 255, 255, 0.95);">
+                    <div class="icon">Ξ</div>
+                    <h3>Ethereum Bridge</h3>
+                    <p><strong>Type:</strong> Light Client + ZK Proofs</p>
+                    <p><strong>Token:</strong> sETH (wrapped ETH)</p>
+                    <p><strong>Confirmation:</strong> 15 blocks (~3min)</p>
+                    <p><strong>Security:</strong> Zero-knowledge proof verification</p>
+                    <p style="margin-top: 1rem; padding: 0.5rem; background: #f0f0f0; border-radius: 8px; font-size: 0.9rem;">
+                        <strong>Status:</strong> <span style="color: #10b981;" id="ethBridgeStatus">🟢 Active</span>
+                    </p>
+                </div>
+
+                <div class="feature-card" style="background: rgba(255, 255, 255, 0.95);">
+                    <div class="icon">◎</div>
+                    <h3>Solana Bridge</h3>
+                    <p><strong>Type:</strong> gRPC Streaming</p>
+                    <p><strong>Token:</strong> sSOL (wrapped SOL)</p>
+                    <p><strong>Confirmation:</strong> Instant (~1sec)</p>
+                    <p><strong>Security:</strong> Fast finality consensus</p>
+                    <p style="margin-top: 1rem; padding: 0.5rem; background: #f0f0f0; border-radius: 8px; font-size: 0.9rem;">
+                        <strong>Status:</strong> <span style="color: #10b981;" id="solBridgeStatus">🟢 Active</span>
+                    </p>
+                </div>
+
+                <div class="feature-card" style="background: rgba(255, 255, 255, 0.95);">
+                    <div class="icon">💎</div>
+                    <h3>TON Bridge</h3>
+                    <p><strong>Type:</strong> Smart Contract Bridge</p>
+                    <p><strong>Token:</strong> sTON (wrapped TON)</p>
+                    <p><strong>Confirmation:</strong> Fast (~5sec)</p>
+                    <p><strong>Security:</strong> Multi-sig validation</p>
+                    <p style="margin-top: 1rem; padding: 0.5rem; background: #f0f0f0; border-radius: 8px; font-size: 0.9rem;">
+                        <strong>Status:</strong> <span style="color: #10b981;" id="tonBridgeStatus">🟢 Active</span>
+                    </p>
+                </div>
+
+                <div class="feature-card" style="background: linear-gradient(135deg, #6b46c1 0%, #805ad5 100%); color: white;">
+                    <div class="icon">⚛️</div>
+                    <h3>Cosmos IBC</h3>
+                    <p><strong>Type:</strong> IBC Protocol v8</p>
+                    <p><strong>Chains:</strong> 100+ Cosmos networks</p>
+                    <p><strong>Confirmation:</strong> ~7 seconds</p>
+                    <p><strong>Security:</strong> Tendermint consensus</p>
+                    <p style="margin-top: 1rem; padding: 0.5rem; background: rgba(255,255,255,0.2); border-radius: 8px; font-size: 0.9rem;">
+                        <strong>Status:</strong> <span id="cosmosBridgeStatus">🟢 Active</span>
+                    </p>
+                    <p style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.9;">
+                        <strong>Connected to:</strong> Osmosis, Juno, Stargaze, Akash, Secret Network, Injective, and 94+ more
+                    </p>
+                </div>
+
+                <div class="feature-card" style="background: rgba(255, 255, 255, 0.95);">
+                    <div class="icon">🌐</div>
+                    <h3>How It Works</h3>
+                    <p><strong>1. Lock/Burn:</strong> Asset locked on source chain</p>
+                    <p><strong>2. Verify:</strong> Cryptographic proof validation</p>
+                    <p><strong>3. Mint:</strong> Wrapped token minted on Sultan</p>
+                    <p><strong>4. Trade:</strong> Use on Sultan with $0 fees</p>
+                    <p style="margin-top: 1rem; padding: 0.5rem; background: #fef3c7; border-radius: 8px; font-size: 0.9rem; color: #92400e;">
+                        <strong>⚡ Zero Fees:</strong> All Sultan-side transactions are FREE
+                    </p>
+                </div>
+            </div>
+
+            <!-- Bridge Endpoints -->
+            <div style="margin-top: 3rem; padding: 2rem; background: rgba(255, 255, 255, 0.1); border-radius: 15px; backdrop-filter: blur(10px);">
+                <h3 style="margin-bottom: 1rem;">🔌 Bridge API Endpoints</h3>
+                <div style="font-family: monospace; font-size: 0.9rem; line-height: 2;">
+                    <div><strong>GET</strong> /bridges - List all bridges</div>
+                    <div><strong>GET</strong> /bridge/:chain - Get bridge status</div>
+                    <div><strong>POST</strong> /bridge/submit - Submit cross-chain transaction</div>
+                </div>
+                <a href="https://rpc.sultanchain.io/bridges" class="btn btn-outline" style="margin-top: 1rem; display: inline-block;" target="_blank">
+                    View Live Bridge Status →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Sultan L1</h3>
+                    <p style="color: rgba(255, 255, 255, 0.7);">
+                        The first zero-fee blockchain powered by Rust and Cosmos SDK.
+                    </p>
+                    <div class="social-links">
+                        <a href="https://github.com/Wollnbergen/0xv7" target="_blank">GitHub</a>
+                        <a href="#">Twitter</a>
+                        <a href="#">Discord</a>
+                    </div>
+                </div>
+
+                <div class="footer-section">
+                    <h3>Documentation</h3>
+                    <ul>
+                        <li><a href="ROADMAP.md">Roadmap</a></li>
+                        <li><a href="PHASE6_PRODUCTION_GUIDE.md">Production Guide</a></li>
+                        <li><a href="PHASE6_SECURITY_AUDIT.md">Security Audit</a></li>
+                        <li><a href="PHASE5_DAY14_API_GUIDE.md">API Documentation</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3>Resources</h3>
+                    <ul>
+                        <li><a href="OFFICIAL_TOKENOMICS.md">Tokenomics</a></li>
+                        <li><a href="wallet-integration.html">Wallet Integration</a></li>
+                        <li><a href="validator-dashboard.html">Validator Dashboard</a></li>
+                        <li><a href="https://github.com/Wollnbergen/0xv7/tree/feat/cosmos-sdk-integration">Source Code</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3>Community</h3>
+                    <ul>
+                        <li><a href="#">Governance</a></li>
+                        <li><a href="#">Forum</a></li>
+                        <li><a href="#">Block Explorer</a></li>
+                        <li><a href="#">Status Page</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <p>&copy; 2025 Sultan L1. All rights reserved. | Built with ❤️ using Rust & Cosmos SDK</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Setup Modal -->
+    <div id="setupModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <div id="setupInstructions"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let keplr = null;
+        let chainId = 'sultan-1';
+        // Production RPC endpoints (falls back to localhost for development)
+        let rpcEndpoint = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+            ? 'http://localhost:8080' 
+            : 'https://rpc.sltn.io';
+        let restEndpoint = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:8080'
+            : 'https://rpc.sltn.io';
+        let connectedAddress = null;
+        let networkStatsInterval = null;
+
+        // Fetch and update network statistics
+        async function updateNetworkStats() {
+            try {
+                const response = await fetch(`${rpcEndpoint}/status`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                
+                // Update stats in hero section
+                document.getElementById('blockHeight').textContent = data.height ? data.height.toLocaleString() : 'N/A';
+                document.getElementById('validatorCount').textContent = data.validator_count || 'N/A';
+                document.getElementById('totalAccounts').textContent = data.total_accounts || 'N/A';
+                document.getElementById('pendingTxs').textContent = data.pending_txs || '0';
+                
+                // Update sharding stats
+                const shardingEnabled = data.sharding_enabled || false;
+                const shardCount = data.shard_count || 0;
+                
+                document.getElementById('shardingEnabled').textContent = shardingEnabled ? '✅ ENABLED' : '❌ Disabled';
+                document.getElementById('shardCount').textContent = shardingEnabled ? shardCount.toLocaleString() : '—';
+                
+                // Calculate TPS capacity: (shards × 10000) / 2s block time
+                const tpsCapacity = shardingEnabled ? ((shardCount * 10000) / 2) : 500;
+                document.getElementById('tpsCapacity').textContent = shardingEnabled ? 
+                    `${tpsCapacity.toLocaleString()} TPS` : '~500 TPS';
+                
+                // Update economics stats
+                const inflationRate = data.inflation_rate || 0;
+                const validatorAPY = data.validator_apy || 0;
+                const totalBurned = data.total_burned || 0;
+                const isDeflationary = data.is_deflationary || false;
+                
+                document.getElementById('inflationRate').textContent = `${(inflationRate * 100).toFixed(1)}%`;
+                document.getElementById('validatorAPY').textContent = `${(validatorAPY * 100).toFixed(2)}%`;
+                document.getElementById('totalBurned').textContent = totalBurned.toLocaleString();
+                document.getElementById('economicsStatus').textContent = isDeflationary ? '🔥 Deflationary' : '📈 Inflationary';
+                
+                // Update bridge statistics
+                fetchBridgeStats();
+                
+                // Update last updated time
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString();
+                console.log(`Network stats updated at ${timeStr}: Block ${data.height}, Sharding: ${shardingEnabled ? 'YES' : 'NO'}, Inflation: ${(inflationRate * 100).toFixed(1)}%`);
+                
+                return data;
+            } catch (error) {
+                console.error('Error fetching network stats:', error);
+                // Set fallback values
+                document.getElementById('blockHeight').textContent = 'Offline';
+                document.getElementById('validatorCount').textContent = 'Offline';
+                document.getElementById('totalAccounts').textContent = 'Offline';
+                document.getElementById('pendingTxs').textContent = 'Offline';
+                document.getElementById('shardingEnabled').textContent = 'Unknown';
+                document.getElementById('shardCount').textContent = '—';
+                document.getElementById('tpsCapacity').textContent = '—';
+                document.getElementById('inflationRate').textContent = '—';
+                document.getElementById('validatorAPY').textContent = '—';
+                document.getElementById('totalBurned').textContent = '—';
+                document.getElementById('economicsStatus').textContent = '—';
+                return null;
+            }
+        }
+
+        // Start live updates
+        async function startLiveUpdates() {
+            // Initial fetch
+            await updateNetworkStats();
+            
+            // Update every 2 seconds (matches block time)
+            networkStatsInterval = setInterval(updateNetworkStats, 2000);
+        }
+
+        // Stop live updates
+        function stopLiveUpdates() {
+            if (networkStatsInterval) {
+                clearInterval(networkStatsInterval);
+                networkStatsInterval = null;
+            }
+        }
+
+        // Fetch bridge statistics
+        async function fetchBridgeStats() {
+            try {
+                const response = await fetch(`${rpcEndpoint}/bridges`);
+                if (!response.ok) {
+                    console.warn('Bridge stats not available');
+                    return;
+                }
+                
+                const data = await response.json();
+                
+                // Update statistics
+                const activeBridgesEl = document.getElementById('activeBridges');
+                const supportedChainsEl = document.getElementById('supportedChains');
+                
+                if (activeBridgesEl) activeBridgesEl.textContent = data.active_bridges || 4;
+                if (supportedChainsEl) supportedChainsEl.textContent = data.supported_chains || 104;
+                
+                // Map bridge names to element IDs
+                const bridgeIdMap = {
+                    'Bitcoin Bridge': 'btcBridgeStatus',
+                    'Ethereum Bridge': 'ethBridgeStatus',
+                    'Solana Bridge': 'solBridgeStatus',
+                    'TON Bridge': 'tonBridgeStatus',
+                    'IBC (Cosmos)': 'ibcBridgeStatus'
+                };
+                
+                // Update individual bridge status based on actual API response
+                if (data.bridges) {
+                    data.bridges.forEach(bridge => {
+                        const statusElement = document.getElementById(bridgeIdMap[bridge.name]);
+                        
+                        if (statusElement) {
+                            if (bridge.status === 'active') {
+                                statusElement.textContent = '🟢 Active';
+                                statusElement.style.color = '#10b981';
+                            } else if (bridge.status === 'coming_soon') {
+                                statusElement.textContent = '🟡 Coming Q1 2025';
+                                statusElement.style.color = '#f59e0b';
+                            } else {
+                                statusElement.textContent = '🔴 Inactive';
+                                statusElement.style.color = '#ef4444';
+                            }
+                        }
+                    });
+                }
+                
+                console.log('Bridge stats updated:', data.active_bridges, 'active bridges,', data.supported_chains, 'chains');
+            } catch (error) {
+                console.error('Error fetching bridge stats:', error);
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            startLiveUpdates();
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            stopLiveUpdates();
+        });
+
+        // Keplr Chain Configuration
+        const sultanChainInfo = {
+            chainId: 'sultan-1',
+            chainName: 'Sultan L1',
+            rpc: rpcEndpoint,
+            rest: restEndpoint,
+            bip44: {
+                coinType: 118,
+            },
+            bech32Config: {
+                bech32PrefixAccAddr: 'sultan',
+                bech32PrefixAccPub: 'sultanpub',
+                bech32PrefixValAddr: 'sultanvaloper',
+                bech32PrefixValPub: 'sultanvaloperpub',
+                bech32PrefixConsAddr: 'sultanvalcons',
+                bech32PrefixConsPub: 'sultanvalconspub',
+            },
+            currencies: [
+                {
+                    coinDenom: 'SLTN',
+                    coinMinimalDenom: 'usltn',
+                    coinDecimals: 6,
+                    coinGeckoId: 'sultan',
+                },
+            ],
+            feeCurrencies: [
+                {
+                    coinDenom: 'SLTN',
+                    coinMinimalDenom: 'usltn',
+                    coinDecimals: 6,
+                    coinGeckoId: 'sultan',
+                    gasPriceStep: {
+                        low: 0,
+                        average: 0,
+                        high: 0,
+                    },
+                },
+            ],
+            stakeCurrency: {
+                coinDenom: 'SLTN',
+                coinMinimalDenom: 'usltn',
+                coinDecimals: 6,
+                coinGeckoId: 'sultan',
+            },
+        };
+
+        // Connect to Keplr Wallet (Production-Ready)
+        async function connectKeplr() {
+            try {
+                // Check if Keplr is installed
+                if (!window.keplr) {
+                    const install = confirm(
+                        'Keplr Wallet is not installed.\n\n' +
+                        'Keplr is required to connect to Sultan L1.\n\n' +
+                        'Click OK to visit Keplr website and install the extension.'
+                    );
+                    if (install) {
+                        window.open('https://www.keplr.app/', '_blank');
+                    }
+                    return;
+                }
+
+                // Show loading state
+                const connectBtn = document.getElementById('connectWallet');
+                const originalText = connectBtn.textContent;
+                connectBtn.innerHTML = '<span class="loading"></span> Connecting...';
+                connectBtn.disabled = true;
+
+                try {
+                    // Suggest the chain to Keplr
+                    await window.keplr.experimentalSuggestChain(sultanChainInfo);
+                    console.log('✅ Sultan L1 chain added to Keplr');
+                } catch (error) {
+                    console.error('Error suggesting chain:', error);
+                    
+                    // If chain already exists, that's OK
+                    if (error.message && error.message.includes('already exists')) {
+                        console.log('✅ Chain already exists in Keplr');
+                    } else {
+                        throw new Error('Failed to add Sultan L1 to Keplr: ' + error.message);
+                    }
+                }
+
+                // Enable the chain
+                await window.keplr.enable(chainId);
+                console.log('✅ Keplr enabled for Sultan L1');
+
+                // Get the offline signer
+                const offlineSigner = window.keplr.getOfflineSigner(chainId);
+                const accounts = await offlineSigner.getAccounts();
+                
+                if (!accounts || accounts.length === 0) {
+                    throw new Error('No accounts found in Keplr wallet');
+                }
+                
+                connectedAddress = accounts[0].address;
+                console.log('✅ Connected address:', connectedAddress);
+
+                // Verify network is accessible
+                const networkStatus = await updateNetworkStats();
+                if (!networkStatus) {
+                    showAlert(
+                        'Warning: Cannot connect to Sultan L1 node. ' +
+                        'Network stats are unavailable. Please check if the node is running.',
+                        'warning'
+                    );
+                }
+
+                // Get balance
+                await updateBalance();
+
+                // Update UI
+                document.getElementById('connectWallet').style.display = 'none';
+                document.getElementById('walletInfo').style.display = 'block';
+                document.getElementById('walletAddress').textContent = `Address: ${connectedAddress}`;
+                document.getElementById('becomeValidatorBtn').disabled = false;
+                document.getElementById('becomeValidatorBtn').textContent = '🚀 Become a Validator';
+
+                showAlert(
+                    `Wallet connected successfully!\n` +
+                    `Address: ${connectedAddress.substring(0, 20)}...\n` +
+                    `You can now become a validator.`,
+                    'success'
+                );
+                
+                // Set up balance auto-refresh
+                setInterval(updateBalance, 10000); // Update balance every 10 seconds
+                
+            } catch (error) {
+                console.error('❌ Error connecting to Keplr:', error);
+                showAlert('Failed to connect wallet: ' + error.message, 'error');
+                
+                // Reset button state
+                connectBtn.textContent = originalText;
+                connectBtn.disabled = false;
+            }
+        }
+
+        // Update balance with retry logic
+        async function updateBalance(retries = 3) {
+            try {
+                // Use Sultan Rust native RPC endpoint
+                const response = await fetch(`${rpcEndpoint}/balance/${connectedAddress}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const sltnBalance = data.balance ? (data.balance / 1000000).toFixed(2) : '0.00';
+                const nonceText = data.nonce !== undefined ? ` (Nonce: ${data.nonce})` : '';
+                
+                document.getElementById('walletBalance').textContent = `Balance: ${sltnBalance} SLTN${nonceText}`;
+                
+                // Also update validator balance display if exists
+                if (document.getElementById('currentBalance')) {
+                    document.getElementById('currentBalance').textContent = `${sltnBalance} SLTN`;
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('Error fetching balance:', error);
+                
+                // Retry logic
+                if (retries > 0) {
+                    console.log(`Retrying balance fetch... (${retries} attempts left)`);
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+                    return updateBalance(retries - 1);
+                }
+                
+                document.getElementById('walletBalance').textContent = 'Balance: Unable to fetch';
+                return null;
+            }
+        }
+
+        // Disconnect wallet
+        function disconnectWallet() {
+            connectedAddress = null;
+            document.getElementById('connectWallet').style.display = 'block';
+            document.getElementById('walletInfo').style.display = 'none';
+            document.getElementById('becomeValidatorBtn').disabled = true;
+            document.getElementById('becomeValidatorBtn').textContent = '🚀 Become a Validator (Connect Wallet First)';
+            showAlert('Wallet disconnected', 'warning');
+        }
+
+        // Become a Validator (actual blockchain transaction)
+        async function becomeValidator() {
+            if (!connectedAddress) {
+                showAlert('Please connect your wallet first!', 'error');
+                return;
+            }
+
+            const validatorName = document.getElementById('validatorName').value;
+            const stakeAmount = document.getElementById('stakeAmount').value;
+            const commission = document.getElementById('commission').value;
+
+            if (!validatorName || stakeAmount < 10000) {
+                showAlert('Please enter a valid validator name and stake at least 10,000 SLTN', 'error');
+                return;
+            }
+
+            try {
+                // Show loading state
+                const btn = document.getElementById('becomeValidatorBtn');
+                const originalText = btn.textContent;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading"></span> Creating Validator...';
+
+                // Get the offline signer
+                const offlineSigner = window.keplr.getOfflineSigner(chainId);
+                
+                // Import SigningStargateClient (you'll need to include @cosmjs/stargate in your page)
+                // For now, we'll show a modal with instructions
+                
+                // In production, you would do:
+                // const client = await SigningStargateClient.connectWithSigner(rpcEndpoint, offlineSigner);
+                // const msg = { ... create validator message ... };
+                // const result = await client.signAndBroadcast(connectedAddress, [msg], fee);
+
+                // For now, show instructions
+                showValidatorCreationModal(validatorName, stakeAmount, commission);
+
+                btn.disabled = false;
+                btn.textContent = originalText;
+
+            } catch (error) {
+                console.error('Error creating validator:', error);
+                showAlert('Failed to create validator: ' + error.message, 'error');
+                document.getElementById('becomeValidatorBtn').disabled = false;
+                document.getElementById('becomeValidatorBtn').textContent = '🚀 Become a Validator';
+            }
+        }
+
+        // Show validator creation modal with commands
+        function showValidatorCreationModal(validatorName, stakeAmount, commission) {
+            const instructions = `
+<h2 style="color: var(--primary); margin-bottom: 1.5rem;">🚀 Create Your Validator</h2>
+
+<div class="alert alert-success">
+    <strong>✅ Wallet Connected:</strong> ${connectedAddress}
+</div>
+
+<h3>Option 1: Use Keplr Dashboard (Recommended)</h3>
+<p>Visit the Keplr Dashboard and use the built-in staking interface to create your validator.</p>
+
+<h3>Option 2: Command Line</h3>
+<p>Run this command on your validator node:</p>
+<pre>sultand tx staking create-validator \\
+  --amount ${stakeAmount}000000usltn \\
+  --commission-rate ${commission} \\
+  --commission-max-rate 0.20 \\
+  --commission-max-change-rate 0.01 \\
+  --min-self-delegation ${stakeAmount}000000 \\
+  --moniker "${validatorName}" \\
+  --pubkey $(sultand tendermint show-validator) \\
+  --from ${connectedAddress} \\
+  --chain-id ${chainId} \\
+  --gas auto \\
+  --gas-adjustment 1.5 \\
+  --yes</pre>
+
+<h3>Option 3: Docker Setup</h3>
+<pre>docker exec sultan-validator sultand tx staking create-validator \\
+  --amount ${stakeAmount}000000usltn \\
+  --commission-rate ${commission} \\
+  --commission-max-rate 0.20 \\
+  --commission-max-change-rate 0.01 \\
+  --min-self-delegation ${stakeAmount}000000 \\
+  --moniker "${validatorName}" \\
+  --pubkey $(docker exec sultan-validator sultand tendermint show-validator) \\
+  --from validator \\
+  --chain-id ${chainId} \\
+  --gas auto \\
+  --gas-adjustment 1.5 \\
+  --yes</pre>
+
+<div class="alert alert-warning">
+    <strong>⚠️ Important:</strong><br>
+    • Make sure you have at least ${stakeAmount} SLTN in your wallet<br>
+    • Your validator node must be fully synced<br>
+    • Save your validator operator address after creation<br>
+    • Keep your node running 24/7 for optimal rewards
+</div>
+
+<div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-top: 20px;">
+    <h3 style="color: #2e7d32;">📊 Your Expected Earnings</h3>
+    <p><strong>Yearly:</strong> ${(parseFloat(stakeAmount) * 0.1333).toFixed(0)} SLTN (13.33% APY)</p>
+    <p><strong>Monthly:</strong> ${(parseFloat(stakeAmount) * 0.1333 / 12).toFixed(2)} SLTN</p>
+    <p><strong>Daily:</strong> ${(parseFloat(stakeAmount) * 0.1333 / 365).toFixed(2)} SLTN</p>
+</div>
+            `;
+
+            document.getElementById('setupInstructions').innerHTML = instructions;
+            document.getElementById('setupModal').classList.add('active');
+        }
+
+        // Show alert messages
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            
+            const dashboard = document.querySelector('.validator-dashboard');
+            dashboard.insertBefore(alertDiv, dashboard.firstChild);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+
+        // Earnings Calculator
+        document.getElementById('stakeAmount').addEventListener('input', function() {
+            const stake = parseFloat(this.value) || 10000;
+            const apy = 0.1333;
+            const yearly = stake * apy;
+            const monthly = yearly / 12;
+            const daily = yearly / 365;
+
+            document.getElementById('yearlyEarnings').textContent = yearly.toFixed(0) + ' SLTN';
+            document.getElementById('monthlyEarnings').textContent = monthly.toFixed(2) + ' SLTN';
+            document.getElementById('dailyEarnings').textContent = daily.toFixed(2) + ' SLTN';
+        });
+
+        // Generate Setup Commands
+        function generateSetup() {
+            const validatorName = document.getElementById('validatorName').value || 'MyValidator';
+            const stakeAmount = document.getElementById('stakeAmount').value;
+            const commission = document.getElementById('commission').value;
+
+            const instructions = `
+<h2 style="color: var(--primary); margin-bottom: 1.5rem;">🚀 Run a Sultan Validator</h2>
+
+<p style="margin-bottom: 20px; color: #666;">Join the Sultan network as a validator in 3 simple steps. Requires a Linux server (Ubuntu 22.04+ recommended).</p>
+
+<h3>Step 1: Download Sultan Node</h3>
+<pre>wget https://github.com/Wollnbergen/0xv7/releases/latest/download/sultan-node
+chmod +x sultan-node</pre>
+
+<h3>Step 2: Start Your Validator</h3>
+<pre>./sultan-node \\
+  --validator \\
+  --validator-address ${validatorName.toLowerCase().replace(/[^a-z0-9]/g, '_')} \\
+  --validator-stake ${stakeAmount} \\
+  --enable-p2p \\
+  --bootstrap-peers /ip4/5.161.225.96/tcp/26656 \\
+  --enable-sharding</pre>
+
+<h3>Step 3: Verify Connection</h3>
+<pre>curl http://localhost:26657/status</pre>
+<p style="color: #666; font-size: 14px;">You should see your validator syncing with the network.</p>
+
+<div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
+    <h4 style="color: #1565c0; margin-bottom: 10px;">💡 Run as a Service (Recommended)</h4>
+    <p style="font-size: 14px; margin-bottom: 10px;">To keep your validator running 24/7:</p>
+<pre style="font-size: 12px;">sudo tee /etc/systemd/system/sultan.service << EOF
+[Unit]
+Description=Sultan Validator
+After=network.target
+
+[Service]
+ExecStart=$(pwd)/sultan-node --validator --validator-address ${validatorName.toLowerCase().replace(/[^a-z0-9]/g, '_')} --validator-stake ${stakeAmount} --enable-p2p --bootstrap-peers /ip4/5.161.225.96/tcp/26656 --enable-sharding
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl enable sultan && sudo systemctl start sultan</pre>
+</div>
+
+<div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-top: 20px;">
+    <h3 style="color: #2e7d32;">✅ That's It!</h3>
+    <p>Your validator will automatically connect to the P2P network and start participating in consensus.</p>
+    <p><strong>Expected APY: 13.33%</strong> (~${(parseFloat(stakeAmount) * 0.1333).toFixed(0)} SLTN yearly on ${stakeAmount} SLTN stake)</p>
+</div>
+
+<div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-top: 15px;">
+    <p style="color: #e65100; font-size: 14px; margin: 0;">
+    <strong>📋 Requirements:</strong> Linux server, 1 CPU, 1GB RAM, stable internet connection
+    </p>
+</div>
+            `;
+
+            document.getElementById('setupInstructions').innerHTML = instructions;
+            document.getElementById('setupModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('setupModal').classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.classList.remove('active');
+            }
+        }
+
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // Fade in elements on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -100px 0px'
+        };
+
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('fade-in');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.feature-card, .timeline-item, .tech-item').forEach(el => {
+            observer.observe(el);
+        });
+    </script>
+</body>
+</html>

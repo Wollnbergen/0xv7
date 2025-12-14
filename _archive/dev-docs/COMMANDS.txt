@@ -1,0 +1,33 @@
+⚡ SULTAN CHAIN - QUICK COMMAND REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 QUICK START:
+  ./status                          # One-line status check
+  ./SULTAN.sh                       # Interactive menu
+  ./START_AND_STATUS.sh             # Start services & show status
+
+📊 DASHBOARDS:
+  ./VIEW_DASHBOARD.sh               # Open web dashboard
+  "$BROWSER" /workspaces/0xv7/production_dashboard.html
+
+🔧 MANAGEMENT:
+  ./SULTAN_MANAGER.sh               # Full management system
+  ./BLOCKCHAIN_STATS.sh             # Detailed statistics
+  ./TEST_CHAIN.sh                   # Test all endpoints
+
+🛠️ SERVICE CONTROL:
+  ./PYTHON_SERVICES.sh              # Start all services
+  pkill -f "python.*sultan_server"  # Stop all services
+  tail -f /tmp/py_*.log             # View logs
+
+🔗 API TESTING:
+  curl http://localhost:4001/consensus_state  # Consensus
+  curl http://localhost:3000                  # Main API
+  curl http://localhost:3030                  # RPC
+  curl http://localhost:5001/status           # P2P
+
+📦 DATA EXPORT:
+  ./SULTAN_MANAGER.sh               # Select option 9
+  ls -la /workspaces/0xv7/exports/  # View exports
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

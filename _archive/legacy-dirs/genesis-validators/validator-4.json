@@ -1,0 +1,11 @@
+{
+  "validator_id": 4,
+  "name": "genesis-validator-4",
+  "address": "sultan1validator6439f3cc4df6ebaaeb6fffb80cb2dc790e",
+  "stake": "10000000000000",
+  "commission": 0.0910158,
+  "moniker": "Sultan Genesis Validator #4",
+  "website": "https://sultanchain.io/validators/4",
+  "details": "Genesis validator for Sultan L1 mainnet",
+  "created_at": 1763975115
+}

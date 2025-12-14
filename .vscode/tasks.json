@@ -2,11 +2,93 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "pytest",
+      "label": "Scylla: start",
       "type": "shell",
-      "command": "pytest -q",
+      "command": "bash -lc 'scripts/scylla_dev.sh start'",
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      "label": "Scylla: status",
+      "type": "shell",
+      "command": "bash -lc 'scripts/scylla_dev.sh status'",
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      "label": "Scylla: seed",
+      "type": "shell",
+      "command": "bash -lc 'scripts/scylla_dev.sh seed'",
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      "label": "Scylla: reset",
+      "type": "shell",
+      "command": "bash -lc 'scripts/scylla_dev.sh reset'",
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      "label": "Scylla: recreate",
+      "type": "shell",
+      "command": "bash -lc 'scripts/scylla_dev.sh recreate'",
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      "label": "Scylla: logs",
+      "type": "shell",
+      "command": "bash -lc 'scripts/scylla_dev.sh logs'",
+      "presentation": { "reveal": "always" }
+    },
+
+    {
+      "label": "Tests: cargo test (all)",
+      "type": "shell",
+      "command": "bash -lc 'cargo test --all --all-features'",
       "group": "test",
-      "problemMatcher": []
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      "label": "Tests: cargo test (node)",
+      "type": "shell",
+      "command": "bash -lc 'cargo test -p node --all-features'",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      "label": "Tests: with Scylla",
+      "dependsOn": ["Scylla: start", "Tests: cargo test (node)"],
+      "dependsOrder": "sequence"
+    },
+    {
+      "label": "Tests: cargo test (filter)",
+      "type": "shell",
+      "command": "bash -lc 'cargo test --all --all-features ${input:testFilter}'",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clear": true }
+    },
+
+    {
+      "label": "Lint: clippy",
+      "type": "shell",
+      "command": "bash -lc 'cargo clippy --all --all-features -- -D warnings'",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      "label": "Format: cargo fmt",
+      "type": "shell",
+      "command": "bash -lc 'cargo fmt --all'",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clear": true }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "testFilter",
+      "type": "promptString",
+      "description": "Optional test name filter (leave empty to run all)",
+      "default": ""
     }
   ]
 }

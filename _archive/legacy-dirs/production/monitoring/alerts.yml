@@ -1,0 +1,27 @@
+groups:
+  - name: sultan_chain_alerts
+    interval: 30s
+    rules:
+      - alert: HighTxLatency
+        expr: transaction_latency_seconds > 0.5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Transaction latency is high"
+          
+      - alert: LowTPS
+        expr: transactions_per_second < 100000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TPS below 100k threshold"
+          
+      - alert: ValidatorDown
+        expr: up{job="sultan-chain"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Validator node is down"

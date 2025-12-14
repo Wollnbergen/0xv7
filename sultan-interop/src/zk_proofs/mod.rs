@@ -130,3 +130,9 @@ impl ZKProofSystem {
         Ok(is_valid)
     }
 }
+
+impl Default for ZKProofSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}

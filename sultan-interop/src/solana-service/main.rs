@@ -22,7 +22,8 @@ impl ChainService for SolanaService {
         &self,
         request: tonic::Request<VerifyStateRequest>,
     ) -> Result<tonic::Response<VerifyStateResponse>, tonic::Status> {
-        info!("gRPC VerifyState request for chain: solana");
+        let req = request.into_inner();
+        info!("gRPC VerifyState request for chain: {}", req.chain);
         Ok(tonic::Response::new(VerifyStateResponse {
             verified: true,
             message: "".to_string(),
@@ -57,9 +58,14 @@ impl ChainService for SolanaService {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     info!("🚀 Initializing Solana Service with gRPC");
-    let addr = "0.0.0.0:50052".parse()?;
-    let service = SolanaService::default();
+
+    let addr_str =
+        std::env::var("SOLANA_GRPC_ADDR").unwrap_or_else(|_| "0.0.0.0:50052".to_string());
+    let addr = addr_str.parse()?;
+
     info!("⚡ Starting Solana gRPC server on {}", addr);
+    let service = SolanaService; // unit struct, no Default call needed
+
     Server::builder()
         .add_service(ChainServiceServer::new(service))
         .serve(addr)

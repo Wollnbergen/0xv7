@@ -1,11 +1,14 @@
 {
   "name": "sultan-telegram-mini-app",
   "version": "1.0.0",
-  "type": "module",
   "scripts": {
     "start": "vite",
     "build": "vite build",
-    "test": "jest"
+    "test": "jest",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@noble/ed25519": "^2.3.0",
@@ -13,8 +16,10 @@
     "@tanstack/react-query": "^5.56.2",
     "@ton/ton": "^15.3.1",
     "@vitejs/plugin-react": "^5.0.4",
+    "axios": "^1.13.2",
     "bip39": "^3.1.0",
     "bitcoinjs-lib": "^6.1.0",
+    "crypto": "^1.0.1",
     "crypto-js": "^4.2.0",
     "express": "^5.1.0",
     "framer-motion": "^11.11.1",
@@ -25,8 +30,11 @@
     "viem": "^2.35.1"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/react": "^18.3.11",
-    "jest": "^30.0.5",
+    "jest": "^30.2.0",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3",
     "vite": "^7.1.9"

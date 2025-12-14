@@ -5,7 +5,7 @@
 
 **Developer Integration:**
 - SDKs are production-ready for integration with DEXs, dApps, and wallets.
-- Gas-free transactions on Sultan (subsidized by APY ~26.67% in `transaction_validator.rs`).
+- Gas-free transactions on Sultan (subsidized by APY ~13.33% in `transaction_validator.rs`).
 - Trusted/reliable for enterprises and individuals (quantum/MEV secure, robust, and uncorruptible).
 # Sultan Blockchain - MVP Launch Plan (Updated October 01, 2025)
 ## Phase 1: Core Infrastructure (August-October 01, 2025) - COMPLETE ✅
@@ -14,7 +14,7 @@
 - [x] Transaction processing engine (blockchain.rs with sharded_process for 2M+ TPS).
 - [x] Block production (5-second blocks in main_updated.rs).
 - [x] Sharding (8 shards in blockchain.rs, ScyllaDB migration in scylla_db.rs for 99.999% uptime).
-- [x] Native token operations (SultanToken in types.rs with allocate_inflation for APY ~26.67%).
+- [x] Native token operations (SultanToken in types.rs with allocate_inflation for APY ~13.33%).
 - [x] Validator registration/staking (democratic in types.rs, min 5k SLTN, 30% mobile target in blockchain.rs).
 **Deliverable**: Codespaces migration complete, testnet alpha with 12k TPS (load_testing.rs benchmark), gas-free subsidies (transaction_validator.rs), quantum-proof signing (quantum.rs).
 
@@ -26,7 +26,7 @@
 - [ ] Native chain switching (interop stubs in ethereum-service/main.rs, solana-service/main.rs, ton-service/main.rs, bitcoin-service/main.rs for <3s swaps).
 - [ ] Push notifications (gRPC in grpc_service.rs for real-time).
 ### October 4-5: Advanced Features
-- [ ] One-tap staking (APY ~26.67% in types.rs, mobile-ready).
+- [ ] One-tap staking (APY ~13.33% in types.rs, mobile-ready).
 - [ ] Governance voting (consensus.rs with gRPC for democratic proposals).
 - [ ] Social recovery (wallet.ts stubs).
 - [ ] Biometric security (wallet.ts for enterprise crypto).
@@ -74,7 +74,7 @@
 2. ✅ Native ETH/SOL/TON/BTC interoperability (<3s swaps).
 3. ✅ Mobile validator support (30% target).
 4. ✅ Telegram-native features (one-tap staking, gas-free).
-5. ✅ Basic DeFi (staking with APY ~26.67%, swaps).
+5. ✅ Basic DeFi (staking with APY ~13.33%, swaps).
 6. ✅ On-chain governance (democratic voting).
 ### What We're EXCLUDING (for now):
 1. ❌ Complex DeFi (lending, derivatives).
@@ -131,7 +131,7 @@ We ARE building:
 ## Post-Launch Priorities
 1. **Week 1**: Monitor stability, fix critical bugs.
 2. **Week 2-4**: Onboard first dApps.
-3. **Month 2**: Launch staking rewards (APY ~26.67%).
+3. **Month 2**: Launch staking rewards (APY ~13.33%).
 4. **Month 3**: First governance proposal.
 5. **Month 6**: Smart contract support.
 ## Communication Strategy
@@ -172,7 +172,7 @@ Let's build this. 🚀
 2. ✅ Native ETH/SOL/TON/BTC interoperability (<3s swaps).
 3. ✅ Mobile validator support (30% target).
 4. ✅ Telegram-native features (one-tap staking, gas-free).
-5. ✅ Basic DeFi (staking with APY ~26.67%, swaps).
+5. ✅ Basic DeFi (staking with APY ~13.33%, swaps).
 6. ✅ On-chain governance (democratic voting).
 ### What We're EXCLUDING (for now):
 1. ❌ Complex DeFi (lending, derivatives).
@@ -229,7 +229,7 @@ We ARE building:
 ## Post-Launch Priorities
 1. **Week 1**: Monitor stability, fix critical bugs.
 2. **Week 2-4**: Onboard first dApps.
-3. **Month 2**: Launch staking rewards (APY ~26.67%).
+3. **Month 2**: Launch staking rewards (APY ~13.33%).
 4. **Month 3**: First governance proposal.
 5. **Month 6**: Smart contract support.
 ## Communication Strategy

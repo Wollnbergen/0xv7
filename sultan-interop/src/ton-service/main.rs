@@ -20,7 +20,7 @@ pub struct TonService;
 impl ChainService for TonService {
     async fn verify_state(
         &self,
-        request: tonic::Request<VerifyStateRequest>,
+        _request: tonic::Request<VerifyStateRequest>,
     ) -> Result<tonic::Response<VerifyStateResponse>, tonic::Status> {
         info!("gRPC VerifyState request for chain: ton");
         Ok(tonic::Response::new(VerifyStateResponse {
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     info!("🚀 Initializing TON Service with gRPC");
     let addr = "0.0.0.0:50053".parse()?;
-    let service = TonService::default();
+    let service = TonService; // unit struct; `default()` unnecessary
     info!("⚡ Starting TON gRPC server on {}", addr);
     Server::builder()
         .add_service(ChainServiceServer::new(service))

@@ -1,0 +1,55 @@
+# Prometheus configuration for Sultan L1 monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'sultan-l1-mainnet'
+    environment: 'production'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'localhost:9093'
+
+# Load rules
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Sultan Node metrics
+  - job_name: 'sultan-node'
+    static_configs:
+      - targets: ['localhost:26657']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Node Exporter (system metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+    scrape_interval: 15s
+
+  # Nginx metrics
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['localhost:9113']
+    scrape_interval: 15s
+
+  # Process Exporter
+  - job_name: 'process-exporter'
+    static_configs:
+      - targets: ['localhost:9256']
+    scrape_interval: 15s
+
+# Remote write (optional - for long-term storage)
+# remote_write:
+#   - url: 'http://localhost:9009/write'
+#     queue_config:
+#       max_samples_per_send: 10000
+#       max_shards: 30
+#       capacity: 100000

@@ -1,0 +1,72 @@
+[package]
+name = "sultan-coordinator"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "sultan_coordinator"
+path = "src/lib.rs"
+
+[[bin]]
+name = "p2p_node"
+path = "src/p2p_node.rs"
+
+[[bin]]
+name = "telegram_bot"
+path = "src/bin/telegram_bot.rs"
+
+[[bin]]
+name = "grpc_client"
+path = "src/bin/grpc_client.rs"
+
+[dependencies]
+libp2p = { version = "0.53", features = ["tcp", "relay", "ping", "dns", "async-std", "noise", "yamux"] }
+libp2p-swarm-derive = "0.34"
+sultan_interop = { package = "sultan-interop", path = "../sultan-interop" }
+hex = "0.4"
+tokio = { version = "1.47", features = ["full"] }
+uuid = "1.10"
+scylla = "1.3.1"
+anyhow = "1.0"
+chrono = "0.4"
+clap = { version = "4.5", features = ["derive"] }
+futures = "0.3"
+pqcrypto-dilithium = "0.4"
+pqcrypto-traits = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+teloxide = { version = "0.17", default-features = false, features = ["macros", "rustls"] }
+toml = "0.8"
+tracing = "0.1"
+prost = { workspace = true }
+tonic = { workspace = true, features = ["tls", "tls-webpki-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+tonic-build = { workspace = true }
+tracing-subscriber = { workspace = true }
+rocksdb = "=0.22.0"
+bincode = "2.0.1"
+serde_json = "1.0.145"
+tokio-stream = "0.1.17"
+jsonrpc-core = "18"
+jsonrpc-http-server = "18"
+jsonwebtoken = "9"
+redis = { workspace = true }
+prometheus = "0.13"
+tiny_http = "0.12"
+lazy_static = "1.4"
+dotenvy = "0.15"
+warp = "0.3"
+sha2 = "0.10"
+
+# Added for secure wallet key generation/storage
+aes-gcm = { version = "0.10", features = ["aes"] }
+hkdf = "0.12"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+base64 = "0.22"
+
+[dev-dependencies]
+tokio = { version = "1.47", features = ["test-util"] }
+tracing-test = "0.2.5"
+
+[build-dependencies]
+tonic-build.workspace = true
