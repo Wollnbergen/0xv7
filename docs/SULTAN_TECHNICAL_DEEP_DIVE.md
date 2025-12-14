@@ -608,9 +608,7 @@ Per-month reward = 3.65 × 30 = ~111 SLTN/month
 
 ### 4.6 Token Supply (Genesis)
 
-**CURRENT ISSUE:** Genesis has 70M SLTN but docs specify 500M.
-
-**Target Distribution (500M):**
+**Total Supply: 500,000,000 SLTN**
 
 | Allocation | Percentage | Amount | Purpose |
 |------------|------------|--------|---------|

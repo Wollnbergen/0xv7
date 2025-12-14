@@ -36,8 +36,9 @@ REMOTE_BIN_PATH="/root/sultan-node"
 REMOTE_DATA_PATH="/root/data"
 SERVICE_NAME="sultan"
 
-# Genesis accounts (address:balance)
-GENESIS_ACCOUNTS="sultan1treasury:50000000000000000,sultan1ecosystem:20000000000000000"
+# Genesis accounts (address:balance in micro-units, 6 decimals)
+# Total supply: 500,000,000 SLTN = 500000000000000 micro-units
+GENESIS_ACCOUNTS="sultan1treasury:200000000000000,sultan1ecosystem:100000000000000,sultan1strategic:75000000000000,sultan1fundraising:60000000000000,sultan1team:40000000000000,sultan1liquidity:25000000000000"
 
 # SSH key to use
 SSH_KEY="$HOME/.ssh/sultan_do"
