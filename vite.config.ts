@@ -5,12 +5,13 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  root: path.resolve(__dirname, 'sl/sultan-interop/telegram-mini-app'),
+  // Point Vite to our PWA/static site root
+  root: path.resolve(__dirname, 'replit-website'),
   build: {
     rollupOptions: {
-      input: path.resolve(__dirname, 'public/index.html'),
+      input: path.resolve(__dirname, 'replit-website/index.html'),
     },
-    outDir: 'dist',
+    outDir: path.resolve(__dirname, 'dist'),
     minify: 'esbuild',
   },
   server: {
