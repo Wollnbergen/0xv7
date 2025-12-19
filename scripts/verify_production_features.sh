@@ -7,8 +7,8 @@ echo
 # 1. Check sharding configuration
 echo "1️⃣ Sharding Configuration:"
 grep -A 5 "fn default()" /workspaces/0xv7/sultan-core/src/sharding_production.rs | grep "shard_count\|max_shards"
-echo "   ✅ Launch: 8 shards"
-echo "   ✅ Max: 8,000 shards"
+echo "   ✅ Launch: 16 shards"
+echo "   ✅ Max: 16,000 shards"
 echo
 
 # 2. Check mobile validator files

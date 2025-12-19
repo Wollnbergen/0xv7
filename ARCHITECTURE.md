@@ -19,7 +19,7 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `governance.rs` | On-chain proposals and voting |
 | `token_factory.rs` | Native token creation (no smart contracts) |
 | `native_dex.rs` | Built-in AMM for token swaps |
-| `sharding.rs` | Horizontal scaling (8 shards, expandable) |
+| `sharding.rs` | Horizontal scaling (16 shards at launch, expandable to 8,000) |
 | `sharding_production.rs` | Production shard routing |
 | `sharded_blockchain.rs` | Multi-shard block production |
 | `bridge_integration.rs` | Cross-chain bridge coordinator |
