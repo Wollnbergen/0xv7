@@ -31,9 +31,9 @@ const SHARD_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Configuration for production sharding
 /// 
-/// Launch Strategy:
-/// - Start: 8 shards (64K TPS)
-/// - Auto-expand: up to 8000 shards (64M TPS)
+/// Launch Strategy (2-second blocks):
+/// - Start: 16 shards (64K TPS)
+/// - Auto-expand: up to 8000 shards (32M TPS)
 /// - Expansion trigger: >80% load on any shard
 #[derive(Debug, Clone)]
 pub struct ShardConfig {
@@ -49,9 +49,9 @@ pub struct ShardConfig {
 impl Default for ShardConfig {
     fn default() -> Self {
         Self {
-            shard_count: 8,              // Launch with 8 shards
+            shard_count: 16,             // Launch with 16 shards (64K TPS with 2s blocks)
             max_shards: 8_000,           // Expandable to 8000
-            tx_per_shard: 8_000,         // 8K TPS per shard
+            tx_per_shard: 8_000,         // 8K tx per shard per block
             cross_shard_enabled: true,
             byzantine_tolerance: 1,       // Tolerate 1 faulty shard
             enable_fraud_proofs: true,
@@ -1076,7 +1076,7 @@ impl ShardingCoordinator {
 
     pub fn get_tps_capacity(&self) -> u64 {
         let tx_per_block = self.config.shard_count as u64 * self.config.tx_per_shard as u64;
-        tx_per_block / 1 // 1-second blocks for sub-second finality
+        tx_per_block / 2 // 2-second blocks (8 shards * 8K tx = 64K tx/block / 2s = 32K TPS)
     }
 }
 

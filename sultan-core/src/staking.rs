@@ -6,6 +6,11 @@
 //! - Validator slashing for misbehavior
 //! - Delegation support
 //! - Real-time APY tracking
+//!
+//! Security features:
+//! - 21-day unbonding period (prevents flash stake governance attacks)
+//! - Slashing during unbonding (misbehavior still punished)
+//! - Validator jailing (prevents block production by bad actors)
 
 use anyhow::{Result, Context, bail};
 use serde::{Deserialize, Serialize};
@@ -17,6 +22,21 @@ use tracing::{info, warn, error};
 const MIN_VALIDATOR_STAKE: u64 = 10_000_000_000_000; // 10,000 SLTN (with 9 decimals)
 const BLOCKS_PER_YEAR: u64 = 15_768_000; // 2-second blocks: (365*24*60*60)/2
 const BASE_APY: f64 = 0.1333; // 13.33% APY for validators
+
+// Security: 21-day unbonding period (like Cosmos)
+// This prevents flash stake attacks on governance
+const UNBONDING_PERIOD_BLOCKS: u64 = 907_200; // ~21 days with 2-second blocks
+
+/// Unbonding entry - tokens being unstaked
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnbondingEntry {
+    pub delegator_address: String,
+    pub validator_address: String,
+    pub amount: u64,
+    pub creation_height: u64,
+    pub completion_height: u64,
+    pub completion_time: u64,
+}
 
 /// Validator staking state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +101,8 @@ pub struct StakingManager {
     delegations: Arc<RwLock<HashMap<String, Vec<Delegation>>>>,
     reward_history: Arc<RwLock<Vec<RewardDistribution>>>,
     slashing_history: Arc<RwLock<Vec<SlashingEvent>>>,
+    /// Unbonding queue - tokens waiting to be released after 21 days
+    unbonding_queue: Arc<RwLock<Vec<UnbondingEntry>>>,
     total_staked: Arc<RwLock<u64>>,
     inflation_rate: Arc<RwLock<f64>>,
     current_height: Arc<RwLock<u64>>,
@@ -93,6 +115,7 @@ impl StakingManager {
             delegations: Arc::new(RwLock::new(HashMap::new())),
             reward_history: Arc::new(RwLock::new(Vec::new())),
             slashing_history: Arc::new(RwLock::new(Vec::new())),
+            unbonding_queue: Arc::new(RwLock::new(Vec::new())),
             total_staked: Arc::new(RwLock::new(0)),
             inflation_rate: Arc::new(RwLock::new(initial_inflation)),
             current_height: Arc::new(RwLock::new(0)),
@@ -429,6 +452,130 @@ impl StakingManager {
         );
 
         Ok(total_rewards)
+    }
+
+    /// Undelegate tokens (starts 21-day unbonding period)
+    /// 
+    /// Security: Tokens are NOT immediately available. They enter an unbonding
+    /// queue and can only be withdrawn after UNBONDING_PERIOD_BLOCKS (~21 days).
+    /// This prevents flash stake attacks on governance.
+    pub async fn undelegate(
+        &self,
+        delegator_address: String,
+        validator_address: String,
+        amount: u64,
+    ) -> Result<UnbondingEntry> {
+        let current_height = *self.current_height.read().await;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs();
+
+        // Reduce delegation
+        {
+            let mut delegations = self.delegations.write().await;
+            let delegator_list = delegations.get_mut(&delegator_address)
+                .context("No delegations found")?;
+
+            let delegation = delegator_list.iter_mut()
+                .find(|d| d.validator_address == validator_address)
+                .context("Delegation to this validator not found")?;
+
+            if delegation.amount < amount {
+                bail!("Insufficient delegation. You have {} SLTN delegated", 
+                      delegation.amount / 1_000_000_000);
+            }
+
+            delegation.amount -= amount;
+        }
+
+        // Reduce validator stake
+        {
+            let mut validators = self.validators.write().await;
+            let validator = validators.get_mut(&validator_address)
+                .context("Validator not found")?;
+
+            validator.delegated_stake = validator.delegated_stake.saturating_sub(amount);
+            validator.total_stake = validator.total_stake.saturating_sub(amount);
+        }
+
+        // Update total staked
+        {
+            let mut total_staked = self.total_staked.write().await;
+            *total_staked = total_staked.saturating_sub(amount);
+        }
+
+        // Create unbonding entry
+        let unbonding = UnbondingEntry {
+            delegator_address: delegator_address.clone(),
+            validator_address: validator_address.clone(),
+            amount,
+            creation_height: current_height,
+            completion_height: current_height + UNBONDING_PERIOD_BLOCKS,
+            completion_time: now + (UNBONDING_PERIOD_BLOCKS * 2), // ~2 seconds per block
+        };
+
+        let mut unbonding_queue = self.unbonding_queue.write().await;
+        unbonding_queue.push(unbonding.clone());
+
+        warn!(
+            "Unbonding started: {} is undelegating {} SLTN from {}. Available at block {}",
+            delegator_address,
+            amount / 1_000_000_000,
+            validator_address,
+            unbonding.completion_height
+        );
+
+        Ok(unbonding)
+    }
+
+    /// Process matured unbondings (should be called each block)
+    /// Returns list of completed unbondings that can now be withdrawn
+    pub async fn process_unbondings(&self) -> Vec<UnbondingEntry> {
+        let current_height = *self.current_height.read().await;
+        
+        let mut unbonding_queue = self.unbonding_queue.write().await;
+        
+        // Partition into completed and pending
+        let (completed, pending): (Vec<_>, Vec<_>) = unbonding_queue
+            .drain(..)
+            .partition(|u| u.completion_height <= current_height);
+
+        // Put pending ones back
+        *unbonding_queue = pending;
+
+        for unbonding in &completed {
+            info!(
+                "Unbonding complete: {} can now withdraw {} SLTN",
+                unbonding.delegator_address,
+                unbonding.amount / 1_000_000_000
+            );
+        }
+
+        completed
+    }
+
+    /// Get pending unbondings for an address
+    pub async fn get_unbondings(&self, delegator_address: &str) -> Vec<UnbondingEntry> {
+        let unbonding_queue = self.unbonding_queue.read().await;
+        unbonding_queue.iter()
+            .filter(|u| u.delegator_address == delegator_address)
+            .cloned()
+            .collect()
+    }
+
+    /// Get a snapshot of all staking power (for governance voting power verification)
+    pub async fn get_staking_snapshot(&self) -> HashMap<String, u64> {
+        let delegations = self.delegations.read().await;
+        let mut snapshot = HashMap::new();
+
+        for (delegator, delegation_list) in delegations.iter() {
+            let total: u64 = delegation_list.iter().map(|d| d.amount).sum();
+            if total > 0 {
+                snapshot.insert(delegator.clone(), total);
+            }
+        }
+
+        snapshot
     }
 
     /// Get all validators

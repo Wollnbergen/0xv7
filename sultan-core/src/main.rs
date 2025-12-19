@@ -1156,6 +1156,8 @@ mod rpc {
         proposal_type: String,
         initial_deposit: u64,
         parameters: Option<HashMap<String, String>>,
+        telegram_discussion_url: Option<String>,
+        discord_discussion_url: Option<String>,
     }
 
     async fn handle_submit_proposal(
@@ -1179,6 +1181,8 @@ mod rpc {
             proposal_type,
             req.initial_deposit,
             req.parameters,
+            req.telegram_discussion_url,
+            req.discord_discussion_url,
         ).await {
             Ok(proposal_id) => Ok(warp::reply::json(&serde_json::json!({
                 "proposal_id": proposal_id,
