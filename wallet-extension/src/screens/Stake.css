@@ -180,3 +180,23 @@
 .text-center {
   text-align: center;
 }
+
+/* Become Validator CTA */
+.become-validator-cta {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  background: linear-gradient(135deg, rgba(0, 212, 170, 0.1) 0%, rgba(0, 212, 170, 0.05) 100%);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.become-validator-cta p {
+  margin: 0 0 var(--spacing-md);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.become-validator-cta .btn {
+  font-weight: 600;
+}

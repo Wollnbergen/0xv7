@@ -391,6 +391,15 @@ interface ClaimRewardsRequest {
   publicKey: string;
 }
 
+interface CreateValidatorRequest {
+  validatorAddress: string;
+  moniker: string;
+  initialStake: string;
+  commissionRate: number;
+  signature: string;
+  publicKey: string;
+}
+
 // ============================================================================
 // Governance Type Mappers (snake_case from blockchain -> camelCase for UI)
 // ============================================================================
@@ -496,6 +505,32 @@ export const sultanAPI = {
   claimRewards: async (req: ClaimRewardsRequest): Promise<{ hash: string }> => {
     return rpc<{ hash: string }>('claim_rewards_tx', {
       delegator: req.delegatorAddress,
+      signature: req.signature,
+      public_key: req.publicKey,
+    });
+  },
+
+  /**
+   * Create a new validator (become a validator)
+   * Requires minimum 10,000 SLTN stake
+   * Endpoint: POST /staking/create_validator
+   */
+  createValidator: async (req: CreateValidatorRequest): Promise<{ 
+    validatorAddress: string; 
+    stake: string; 
+    commission: number;
+    status: string;
+  }> => {
+    return restApi<{ 
+      validatorAddress: string; 
+      stake: string; 
+      commission: number;
+      status: string;
+    }>('/staking/create_validator', 'POST', {
+      validator_address: req.validatorAddress,
+      moniker: req.moniker,
+      initial_stake: parseInt(req.initialStake, 10),
+      commission_rate: req.commissionRate,
       signature: req.signature,
       public_key: req.publicKey,
     });

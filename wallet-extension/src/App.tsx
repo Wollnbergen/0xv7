@@ -10,6 +10,7 @@ import Dashboard from './screens/Dashboard';
 import Send from './screens/Send';
 import Receive from './screens/Receive';
 import Stake from './screens/Stake';
+import BecomeValidator from './screens/BecomeValidator';
 import Settings from './screens/Settings';
 import Activity from './screens/Activity';
 import Governance from './screens/Governance';
@@ -61,6 +62,10 @@ function App() {
       <Route 
         path="/stake" 
         element={isInitialized && !isLocked ? <Stake /> : <Navigate to="/" replace />} 
+      />
+      <Route 
+        path="/become-validator" 
+        element={isInitialized && !isLocked ? <BecomeValidator /> : <Navigate to="/" replace />} 
       />
       <Route 
         path="/settings" 

@@ -347,6 +347,17 @@ export default function Stake() {
             {(!validators || validators.length === 0) && (
               <p className="text-muted text-center">No validators available</p>
             )}
+
+            {/* Become Validator CTA */}
+            <div className="become-validator-cta">
+              <p>Want to run your own validator?</p>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => navigate('/become-validator')}
+              >
+                🚀 Become a Validator
+              </button>
+            </div>
           </div>
         )}
       </div>
