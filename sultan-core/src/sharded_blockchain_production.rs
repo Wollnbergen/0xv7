@@ -30,7 +30,7 @@ impl ShardedBlockchainProduction {
         info!(
             "Creating PRODUCTION sharded blockchain: {} shards, {} TPS capacity",
             config.shard_count,
-            (config.shard_count * config.tx_per_shard) as u64 / 5
+            (config.shard_count * config.tx_per_shard) as u64 / 2 // 2-second blocks
         );
 
         let coordinator = Arc::new(ShardingCoordinator::new(config.clone()));
@@ -297,7 +297,7 @@ mod tests {
         let blockchain = ShardedBlockchainProduction::new(config);
         let capacity = blockchain.get_tps_capacity();
         
-        // 1024 shards * 8000 tx/shard / 5 sec blocks = 1,638,400 TPS
-        assert_eq!(capacity, 1_638_400);
+        // 1024 shards * 8000 tx/shard / 2 sec blocks = 4,096,000 TPS
+        assert_eq!(capacity, 4_096_000);
     }
 }

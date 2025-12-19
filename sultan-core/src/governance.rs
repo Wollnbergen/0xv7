@@ -23,13 +23,13 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 const PROPOSAL_DEPOSIT: u64 = 1_000_000_000_000; // 1,000 SLTN
-const VOTING_PERIOD_BLOCKS: u64 = 100_800; // ~7 days with 5s blocks
+const VOTING_PERIOD_BLOCKS: u64 = 302_400; // ~7 days with 2s blocks (7*24*60*60/2)
 const MIN_QUORUM: f64 = 0.334; // 33.4% of total stake must vote
 const PASS_THRESHOLD: f64 = 0.50; // 50% of votes must be YES
 
 // Security constants
 const MAX_ACTIVE_PROPOSALS_PER_ADDRESS: usize = 3; // Rate limit proposals
-const PROPOSAL_COOLDOWN_BLOCKS: u64 = 14_400; // ~1 day between proposals from same address
+const PROPOSAL_COOLDOWN_BLOCKS: u64 = 43_200; // ~1 day between proposals from same address (24*60*60/2)
 const VETO_THRESHOLD: f64 = 0.334; // >33.4% NoWithVeto = proposal fails & deposit burned
 
 // Multi-sig requirements for critical proposals
@@ -44,7 +44,7 @@ const MIN_UNBONDING_DAYS: u64 = 7; // Min 7 day unbonding
 const MAX_UNBONDING_DAYS: u64 = 28; // Max 28 day unbonding
 
 // Discussion requirements
-const DISCUSSION_PERIOD_BLOCKS: u64 = 28_800; // ~2 days for Telegram discussion before voting
+const DISCUSSION_PERIOD_BLOCKS: u64 = 86_400; // ~2 days for Telegram discussion before voting (2*24*60*60/2)
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ProposalType {
@@ -267,7 +267,7 @@ impl GovernanceManager {
                     bail!(
                         "Rate limit: Please wait {} more blocks (~{} hours) before submitting another proposal",
                         blocks_remaining,
-                        blocks_remaining / 720 // ~720 blocks per hour with 5s blocks
+                        blocks_remaining / 1800 // ~1800 blocks per hour with 2s blocks
                     );
                 }
             }

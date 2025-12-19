@@ -236,9 +236,9 @@ impl ShardingCoordinator {
     /// Get total TPS capacity
     pub fn get_tps_capacity(&self) -> u64 {
         // Each shard can process tx_per_shard transactions per block
-        // With 5-second blocks: (shard_count * tx_per_shard) / 5
+        // With 2-second blocks: (shard_count * tx_per_shard) / 2
         let tx_per_block = self.config.shard_count as u64 * self.config.tx_per_shard as u64;
-        tx_per_block / 5 // 5-second blocks
+        tx_per_block / 2 // 2-second blocks
     }
 
     /// Get shard statistics
