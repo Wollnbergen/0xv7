@@ -223,11 +223,11 @@ Sultan L1 is **live on mainnet** with verified metrics:
 ### Live Production Evidence
 
 ```
-[2025-12-08T14:32:00Z] Block 1847: 64µs creation | 8 shards
-[2025-12-08T14:32:02Z] Block 1848: 52µs creation | 8 shards  
-[2025-12-08T14:32:04Z] Block 1849: 78µs creation | 8 shards
-[2025-12-08T14:32:06Z] Block 1850: 61µs creation | 8 shards
-[2025-12-08T14:32:08Z] Block 1851: 55µs creation | 8 shards
+[2025-12-08T14:32:00Z] Block 1847: 64µs creation | 16 shards
+[2025-12-08T14:32:02Z] Block 1848: 52µs creation | 16 shards  
+[2025-12-08T14:32:04Z] Block 1849: 78µs creation | 16 shards
+[2025-12-08T14:32:06Z] Block 1850: 61µs creation | 16 shards
+[2025-12-08T14:32:08Z] Block 1851: 55µs creation | 16 shards
 ```
 
 **Perfect 2.00-second intervals. Sub-100µs block creation. Zero missed blocks.**
@@ -268,12 +268,12 @@ Sultan achieves **linear scalability** through state sharding:
 
 | Phase | Shards | TPS Capacity | Timeline |
 |-------|--------|--------------|----------|
-| **Launch** | 8 | 64,000 | ✅ Q4 2025 |
-| **Phase 1** | 32 | 256,000 | Q2 2026 |
-| **Phase 2** | 128 | 1,024,000 | Q4 2026 |
-| **Phase 3** | 512 | 4,096,000 | Q2 2027 |
-| **Phase 4** | 2,048 | 16,384,000 | Q4 2027 |
-| **Maximum** | 8,000 | **64,000,000** | 2028+ |
+| **Launch** | 16 | 64,000 | ✅ Q4 2025 |
+| **Phase 1** | 64 | 256,000 | Q2 2026 |
+| **Phase 2** | 256 | 1,024,000 | Q4 2026 |
+| **Phase 3** | 1,024 | 4,096,000 | Q2 2027 |
+| **Phase 4** | 4,096 | 16,384,000 | Q4 2027 |
+| **Maximum** | 16,000 | **64,000,000** | 2028+ |
 
 ---
 
@@ -513,7 +513,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 - Launched December 6, 2025
 - 9 globally distributed validators
 - Zero downtime since launch
-- 8 shards operational
+- 16 shards operational
 
 ---
 
@@ -574,7 +574,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 - [ ] TypeScript SDK
 - [ ] Governance activation
 - [ ] Security audit (CertiK)
-- [ ] 32-shard expansion
+- [ ] 64-shard expansion
 
 ---
 
@@ -590,7 +590,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 **Q3 2026 📋 Planned**
 - [ ] Solana bridge
 - [ ] NFT marketplace
-- [ ] 128-shard expansion
+- [ ] 256-shard expansion
 - [ ] Developer grants ($10M)
 - [ ] Tier 2 CEX listings
 

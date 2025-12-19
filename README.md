@@ -77,7 +77,7 @@ cargo test --workspace
 | Minimum Stake | 10,000 SLTN |
 | Validator APY | ~13.33% |
 | Gas Fees | Zero (subsidized) |
-| Shards | 8 (expandable) |
+| Shards | 16 at launch (expandable to 16,000) |
 
 ---
 

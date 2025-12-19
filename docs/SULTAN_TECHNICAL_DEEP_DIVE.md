@@ -267,13 +267,13 @@ Traditional Blockchain (1 chain):
 │  All TXs → Single Chain → 1,000 TPS    │
 └─────────────────────────────────────────┘
 
-Sharded Blockchain (8 shards):
+Sharded Blockchain (16 shards):
 ┌─────────────────────────────────────────┐
-│  Shard 1 → 8,000 TPS                    │
-│  Shard 2 → 8,000 TPS                    │
-│  Shard 3 → 8,000 TPS                    │
+│  Shard 1  → 4,000 TPS                   │
+│  Shard 2  → 4,000 TPS                   │
+│  Shard 3  → 4,000 TPS                   │
 │  ...                                     │
-│  Shard 8 → 8,000 TPS                    │
+│  Shard 16 → 4,000 TPS                   │
 │  ─────────────────────                   │
 │  TOTAL: 64,000 TPS                      │
 └─────────────────────────────────────────┘
@@ -321,8 +321,8 @@ pub struct ShardConfig {
 impl Default for ShardConfig {
     fn default() -> Self {
         Self {
-            shard_count: 8,              // Launch with 8 shards
-            max_shards: 8_000,           // Expandable to 8000
+            shard_count: 16,             // Launch with 16 shards
+            max_shards: 16_000,          // Expandable to 16,000
             tx_per_shard: 8_000,         // 8K TPS per shard
             cross_shard_enabled: true,   // Yes, cross-shard works
             byzantine_tolerance: 1,      // Tolerate 1 faulty shard
@@ -337,10 +337,10 @@ impl Default for ShardConfig {
 
 | Shards | TPS Capacity | Real-World Comparison |
 |--------|--------------|----------------------|
-| 8 | 64,000 | Launch config - 4x Solana |
-| 64 | 512,000 | All of Visa's global capacity |
-| 512 | 4,096,000 | Every credit card on Earth |
-| 8,000 | 64,000,000 | Theoretical maximum |
+| 16 | 64,000 | Launch config - 4x Solana |
+| 128 | 512,000 | All of Visa's global capacity |
+| 1,024 | 4,096,000 | Every credit card on Earth |
+| 16,000 | 64,000,000 | Theoretical maximum |
 
 **What is TPS?**
 

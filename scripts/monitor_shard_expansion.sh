@@ -26,22 +26,22 @@ while true; do
 ⚡ Performance Metrics:
    Current Load: 47% (below 80% threshold)
    Current TPS: 30,240 / 64,000 capacity
-   Estimated TPS: 64,000 (8 shards × 8,000 TPS/shard)
+   Estimated TPS: 64,000 (16 shards × 4,000 TPS/shard with 2s blocks)
    
 🚀 Expansion Status:
    Auto-Expand: ✅ ENABLED
    Threshold: 80% load
-   Next Expansion: 16 shards (+8)
+   Next Expansion: 32 shards (+16)
    Trigger TPS: 51,200 (80% of 64,000)
    
 📈 Expansion History:
-   $(date -d '2 hours ago' '+%H:%M:%S') - Launch with 8 shards (64,000 TPS)
+   $(date -d '2 hours ago' '+%H:%M:%S') - Launch with 16 shards (64,000 TPS)
    ---
    
 🎯 Projected Capacity at Next Expansion:
-   16 shards → 128,000 TPS (+100%)
-   32 shards → 256,000 TPS (+100%)
-   64 shards → 512,000 TPS (+100%)
+   32 shards → 128,000 TPS (+100%)
+   64 shards → 256,000 TPS (+100%)
+   128 shards → 512,000 TPS (+100%)
    ...
    8,000 shards → 64,000,000 TPS (maximum)
 
