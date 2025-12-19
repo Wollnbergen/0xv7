@@ -310,8 +310,7 @@ pub use sharded_blockchain_production::ShardedBlockchainProduction;
 // From sharding_production.rs
 pub struct ShardConfig {
     pub shard_count: usize,         // How many shards active now
-    pub max_shards: usize,          // Maximum we can expand to
-    pub tx_per_shard: usize,        // TPS capacity per shard
+    pub tx_per_shard: usize,        // TX capacity per shard per block
     pub cross_shard_enabled: bool,  // Allow TXs between shards
     pub byzantine_tolerance: usize,  // How many faulty shards tolerated
     pub enable_fraud_proofs: bool,   // Cryptographic verification
@@ -321,13 +320,13 @@ pub struct ShardConfig {
 impl Default for ShardConfig {
     fn default() -> Self {
         Self {
-            shard_count: 16,             // Launch with 16 shards
-            max_shards: 16_000,          // Expandable to 16,000
-            tx_per_shard: 8_000,         // 8K TPS per shard
+            shard_count: 16,             // Launch with 16 shards (64K TPS)
+            tx_per_shard: 8_000,         // 8K tx/block = 4K TPS per shard (2s blocks)
             cross_shard_enabled: true,   // Yes, cross-shard works
             byzantine_tolerance: 1,      // Tolerate 1 faulty shard
             enable_fraud_proofs: true,   // Full verification enabled
             auto_expand_threshold: 0.80, // Add shards at 80% load
+            // Note: No max_shards - unlimited expansion
         }
     }
 }
@@ -586,6 +585,39 @@ If 80% staked (400M):
 | 80% | 5.00% | ~42 SLTN |
 
 *Why it matters:* Self-balancing economics. Low staking ratio = high APY = incentive to stake. High staking ratio = lower APY = some unstake to use tokens.
+
+### 4.4.1 Validator Commission (How Validators Earn More)
+
+**What is Commission?**
+
+Validators charge a percentage of their delegators' rewards. This incentivizes running validator infrastructure.
+
+**How it works:**
+
+```
+Validator sets 10% commission rate
+Delegator stakes 100,000 SLTN with validator
+At 13.33% APY:
+  - Gross reward: 100,000 × 13.33% = 13,330 SLTN/year
+  - Commission to validator: 13,330 × 10% = 1,333 SLTN
+  - Net to delegator: 13,330 - 1,333 = 11,997 SLTN (12% effective APY)
+```
+
+**Validator Economics Example:**
+
+| Component | Amount | Return |
+|-----------|--------|--------|
+| Own stake | 50,000 SLTN | 6,665 SLTN (13.33%) |
+| Delegations received | 500,000 SLTN | — |
+| Commission (10%) | — | 6,665 SLTN |
+| **Total earnings** | — | **13,330 SLTN/year** |
+| **Effective APY on own stake** | — | **26.6%** |
+
+*Why it matters:* Validators can earn significantly more than passive stakers. Larger delegations = higher earnings. This incentivizes reliable validator operation.
+
+**Marketing Summary:**
+- **Validators:** Earn up to 13.33% APY + commission (15%+ effective)
+- **Delegators:** Earn up to ~12% APY (after validator commission)
 
 ### 4.5 Reward Distribution
 

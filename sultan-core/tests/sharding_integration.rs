@@ -162,10 +162,11 @@ mod sharding_tests {
 
     #[tokio::test]
     async fn test_tps_capacity() {
+        // TPS formula: (shard_count × tx_per_shard) / 2 (2-second blocks)
         let test_configs = vec![
-            (10, 10_000, 20_000),
-            (50, 10_000, 100_000),
-            (100, 10_000, 200_000),
+            (10, 10_000, 50_000),    // 10 * 10000 / 2 = 50K
+            (50, 10_000, 250_000),   // 50 * 10000 / 2 = 250K
+            (100, 10_000, 500_000),  // 100 * 10000 / 2 = 500K
         ];
         
         for (shards, tx_per_shard, expected_tps) in test_configs {
@@ -198,8 +199,9 @@ mod sharding_tests {
         
         let stats = blockchain.get_stats();
         
+        // TPS formula: (100 shards × 10000 tx/shard) / 2 = 500K TPS
         assert_eq!(stats.shard_count, 100);
-        assert_eq!(stats.estimated_tps, 200_000);
+        assert_eq!(stats.estimated_tps, 500_000);
         assert_eq!(stats.total_transactions, 0);
         assert_eq!(stats.total_processed, 0);
         
