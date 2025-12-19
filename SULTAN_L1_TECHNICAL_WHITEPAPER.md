@@ -19,8 +19,8 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 |---------------|-------|
 | **Block Time** | 2.00 seconds (verified) |
 | **Finality** | Immediate (single-block) |
-| **Active Shards** | 8 |
-| **TPS Capacity** | 64,000 (base) → 64M (max) |
+| **Active Shards** | 16 |
+| **TPS Capacity** | 64,000 (launch) → 64M+ (unlimited) |
 | **Validators** | 15 (globally distributed) |
 | **Consensus** | Custom Proof-of-Stake |
 | **Network Protocol** | libp2p |
@@ -81,7 +81,7 @@ We made a deliberate architectural decision to build Sultan as a **pure Rust imp
 
 1. **Native Rust Blockchain Engine** - Built from first principles, not framework-dependent
 2. **libp2p Networking** - Battle-tested P2P with Kademlia DHT and GossipSub
-3. **Dynamic Sharding** - Horizontal scaling from 8 to 8,000 shards
+3. **Dynamic Sharding** - Horizontal scaling from 16 shards at launch with unlimited auto-expansion
 4. **Zero Gas Fees** - Sustainable economics through inflation-based validator rewards
 5. **Post-Quantum Security** - Dilithium3 signatures for future-proof protection
 6. **Instant Finality** - No confirmation wait times, single-block settlement
@@ -106,7 +106,7 @@ We made a deliberate architectural decision to build Sultan as a **pure Rust imp
 │         │                    │                    │              │
 │  ┌──────▼──────┐     ┌──────▼──────┐     ┌──────▼──────┐       │
 │  │   Shard 0   │     │   Shard 1   │     │  Shard N    │       │
-│  │   8K TPS    │     │   8K TPS    │     │   8K TPS    │       │
+│  │  4K TPS ea  │     │  4K TPS ea  │     │  4K TPS ea  │       │
 │  └──────┬──────┘     └──────┬──────┘     └──────┬──────┘       │
 │         │                    │                    │              │
 │  ┌──────▼───────────────────▼───────────────────▼──────────┐   │
@@ -281,11 +281,11 @@ Sultan partitions blockchain state across multiple shards, each capable of proce
 
 | Parameter | Value |
 |-----------|-------|
-| Active Shards | 8 |
-| Maximum Shards | 8,000 |
-| TPS per Shard | 8,000 |
-| Base Capacity | 64,000 TPS |
-| Maximum Capacity | 64,000,000 TPS |
+| Launch Shards | 16 |
+| Auto-Expansion | Unlimited |
+| TPS per Shard | 8,000 tx/block (4,000 TPS with 2s blocks) |
+| Launch Capacity | 64,000 TPS |
+| Maximum Capacity | Unlimited (64M+ TPS at 16,000 shards) |
 
 ### 4.2 Shard Assignment
 
@@ -354,7 +354,7 @@ Sultan can dynamically expand shards based on network demand:
 4. Activate new shards
 5. Rebalance transaction routing
 
-**Migration Timeline:** 2-4 hours for doubling (e.g., 8 → 16 shards)
+**Migration Timeline:** 2-4 hours for doubling (e.g., 16 → 32 shards)
 
 ---
 
@@ -623,6 +623,20 @@ At 70% staked: APY = 4% / 0.70 = 5.71%
 - Sustainable long-term without excessive dilution
 - Competitive with other PoS networks (vs 3-7% industry average)
 
+**Validator Commission (How Validators Earn More):**
+
+Validators earn additional income through commission on delegator rewards:
+
+| Role | Base APY | Commission | Effective APY |
+|------|----------|------------|---------------|
+| **Validator** | 13.33% | +5-10% of delegator rewards | 14-16%+ |
+| **Delegator** | 13.33% | -5-10% to validator | 12-12.7% |
+
+*Example: Validator with 50K own stake + 500K delegated at 10% commission:*
+- Own stake: 50K × 13.33% = 6,665 SLTN/year
+- Commission: 500K × 13.33% × 10% = 6,665 SLTN/year
+- **Total: 13,330 SLTN/year (26.6% effective return on own stake)**
+
 ### 8.5 Fee Structure
 
 Sultan implements **zero base gas fees** with optional priority fees:
@@ -878,10 +892,10 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 | Block Time | 2 seconds |
 | Finality | Immediate (1 block) |
 | Block Creation | 50-105µs |
-| Active Shards | 8 |
-| Maximum Shards | 8,000 |
+| Active Shards | 16 |
+| Maximum Shards | Unlimited |
 | Base TPS | 64,000 |
-| Maximum TPS | 64,000,000 |
+| Maximum TPS | 64,000,000+ |
 | Consensus | Custom PoS |
 | Minimum Validator Stake | 10,000 SLTN |
 | Genesis Supply | 500,000,000 SLTN |

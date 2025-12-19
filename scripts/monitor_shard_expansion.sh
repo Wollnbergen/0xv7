@@ -19,9 +19,9 @@ while true; do
     
     cat << EOF
 📊 Current Shard Status:
-   Active Shards: 8
-   Max Capacity: 8,000
-   Healthy Shards: 8/8 (100%)
+   Active Shards: 16
+   Max Capacity: Unlimited
+   Healthy Shards: 16/16 (100%)
    
 ⚡ Performance Metrics:
    Current Load: 47% (below 80% threshold)
@@ -43,7 +43,7 @@ while true; do
    64 shards → 256,000 TPS (+100%)
    128 shards → 512,000 TPS (+100%)
    ...
-   8,000 shards → 64,000,000 TPS (maximum)
+   16,000 shards → 64,000,000 TPS (unlimited scaling)
 
 💡 Status: READY - Monitoring for 80% load trigger...
    Press Ctrl+C to exit

@@ -28,8 +28,7 @@ fn test_shard_routing() {
 #[test]
 fn test_coordinator_initialization() {
     let config = ShardConfig {
-        shard_count: 8,           // Launch default
-        max_shards: 8_000,        // Maximum expansion
+        shard_count: 16,           // Launch default
         tx_per_shard: 8_000,
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
@@ -39,19 +38,17 @@ fn test_coordinator_initialization() {
 
     let coordinator = ShardingCoordinator::new(config.clone());
     
-    assert_eq!(coordinator.shards.len(), 8);
-    assert_eq!(coordinator.config.shard_count, 8);
-    assert_eq!(coordinator.config.max_shards, 8_000);
+    assert_eq!(coordinator.shards.len(), 16);
+    assert_eq!(coordinator.config.shard_count, 16);
     
-    println!("✅ Coordinator initialized with {} shards (max: {})", 
-        coordinator.shards.len(), coordinator.config.max_shards);
+    println!("✅ Coordinator initialized with {} shards (unlimited expansion)", 
+        coordinator.shards.len());
 }
 
 #[test]
 fn test_transaction_classification() {
     let config = ShardConfig {
-        shard_count: 8,
-        max_shards: 8_000,
+        shard_count: 16,
         tx_per_shard: 8_000,
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
@@ -97,8 +94,7 @@ fn test_transaction_classification() {
 #[tokio::test]
 async fn test_cross_shard_queue() {
     let config = ShardConfig {
-        shard_count: 8,
-        max_shards: 8_000,
+        shard_count: 16,
         tx_per_shard: 8_000,
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
@@ -202,8 +198,7 @@ fn test_idempotency_key_generation() {
 #[tokio::test]
 async fn test_distributed_locks() {
     let config = ShardConfig {
-        shard_count: 8,
-        max_shards: 8_000,
+        shard_count: 16,
         tx_per_shard: 8_000,
         cross_shard_enabled: true,
         byzantine_tolerance: 1,
@@ -254,41 +249,40 @@ async fn test_2s_block_time() {
 #[tokio::test]
 async fn test_shard_auto_expansion() {
     let mut config = ShardConfig::default();
-    config.shard_count = 8;
-    config.max_shards = 64;
+    config.shard_count = 16;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
-    assert_eq!(coordinator.shards.len(), 8, "Should start with 8 shards");
+    assert_eq!(coordinator.shards.len(), 16, "Should start with 16 shards");
     
     // Expand shards
-    coordinator.expand_shards(8).await.unwrap();
+    coordinator.expand_shards(16).await.unwrap();
     
-    assert_eq!(coordinator.shards.len(), 16, "Should have 16 shards after expansion");
-    assert_eq!(coordinator.config.shard_count, 16);
+    assert_eq!(coordinator.shards.len(), 32, "Should have 32 shards after expansion");
+    assert_eq!(coordinator.config.shard_count, 32);
     
-    // Expand to max
-    coordinator.expand_shards(100).await.unwrap();
+    // Expand more - no cap!
+    coordinator.expand_shards(32).await.unwrap();
     
-    assert_eq!(coordinator.shards.len(), 64, "Should cap at max_shards (64)");
+    assert_eq!(coordinator.shards.len(), 64, "Should have 64 shards - unlimited expansion");
     assert_eq!(coordinator.config.shard_count, 64);
     
-    println!("✅ Auto-expansion test: 8 → 16 → 64 shards (max capacity)");
+    println!("✅ Auto-expansion test: 16 → 32 → 64 shards (unlimited)");
 }
 
 #[tokio::test]
 async fn test_launch_configuration() {
     let config = ShardConfig::default();
     
-    assert_eq!(config.shard_count, 8, "Launch with 8 shards");
-    assert_eq!(config.max_shards, 8_000, "Expandable to 8000");
-    assert_eq!(config.tx_per_shard, 8_000, "8K TPS per shard");
+    assert_eq!(config.shard_count, 16, "Launch with 16 shards");
+    assert_eq!(config.tx_per_shard, 8_000, "8K TPS per shard per block");
     assert_eq!(config.auto_expand_threshold, 0.80, "Expand at 80% load");
     
     let coordinator = ShardingCoordinator::new(config);
     let capacity = coordinator.get_tps_capacity();
     
-    assert_eq!(capacity, 64_000, "Launch capacity: 64K TPS (8 * 8K)");
+    // 16 shards * 8K tx/block / 2 sec = 64K TPS
+    assert_eq!(capacity, 64_000, "Launch capacity: 64K TPS (16 * 8K / 2)");
     
-    println!("✅ Launch config: 8 shards, 64K TPS, expandable to 8K shards (64M TPS)");
+    println!("✅ Launch config: 16 shards, 64K TPS, unlimited auto-expansion");
 }

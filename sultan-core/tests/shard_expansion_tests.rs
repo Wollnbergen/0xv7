@@ -9,7 +9,6 @@ use std::time::Instant;
 async fn test_expansion_basic() {
     let mut config = ShardConfig::default();
     config.shard_count = 8;
-    config.max_shards = 32;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
@@ -21,23 +20,22 @@ async fn test_expansion_basic() {
     println!("📊 After +8: {} shards", coordinator.shards.len());
     assert_eq!(coordinator.shards.len(), 16);
     
-    // Expand by 16 more (should cap at 32)
+    // Expand by 16 more (unlimited expansion)
     coordinator.expand_shards(16).await.unwrap();
-    println!("📊 After +16: {} shards (capped at max)", coordinator.shards.len());
+    println!("📊 After +16: {} shards", coordinator.shards.len());
     assert_eq!(coordinator.shards.len(), 32);
     
-    // Try to expand beyond max (idempotent: should return Ok but do nothing)
+    // Expand by 10 more (unlimited - no cap)
     coordinator.expand_shards(10).await.unwrap();
-    assert_eq!(coordinator.shards.len(), 32, "Should stay at max capacity");
+    assert_eq!(coordinator.shards.len(), 42, "Should expand without limit");
     
-    println!("✅ Expansion caps correctly at max_shards and is idempotent");
+    println!("✅ Expansion works correctly with unlimited scaling");
 }
 
 #[tokio::test]
 async fn test_expansion_preserves_data() {
     let mut config = ShardConfig::default();
     config.shard_count = 4;
-    config.max_shards = 16;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
@@ -79,7 +77,6 @@ async fn test_expansion_preserves_data() {
 async fn test_expansion_concurrent_transactions() {
     let mut config = ShardConfig::default();
     config.shard_count = 4;
-    config.max_shards = 8;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
@@ -136,7 +133,6 @@ async fn test_expansion_concurrent_transactions() {
 async fn test_expansion_health_monitoring() {
     let mut config = ShardConfig::default();
     config.shard_count = 4;
-    config.max_shards = 12;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
@@ -166,29 +162,29 @@ async fn test_expansion_health_monitoring() {
 async fn test_expansion_capacity_calculation() {
     let mut config = ShardConfig::default();
     config.shard_count = 8;
-    config.max_shards = 64;
     config.tx_per_shard = 8_000;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
+    // TPS formula: shards × tx_per_shard ÷ 2 (2-second blocks)
     let capacity_8 = coordinator.get_tps_capacity();
     println!("📊 Capacity with 8 shards: {} TPS", capacity_8);
-    assert_eq!(capacity_8, 64_000, "8 * 8000 = 64K TPS");
+    assert_eq!(capacity_8, 32_000, "8 * 8000 / 2 = 32K TPS");
     
     coordinator.expand_shards(8).await.unwrap();
     let capacity_16 = coordinator.get_tps_capacity();
     println!("📊 Capacity with 16 shards: {} TPS", capacity_16);
-    assert_eq!(capacity_16, 128_000, "16 * 8000 = 128K TPS");
+    assert_eq!(capacity_16, 64_000, "16 * 8000 / 2 = 64K TPS");
     
     coordinator.expand_shards(16).await.unwrap();
     let capacity_32 = coordinator.get_tps_capacity();
     println!("📊 Capacity with 32 shards: {} TPS", capacity_32);
-    assert_eq!(capacity_32, 256_000, "32 * 8000 = 256K TPS");
+    assert_eq!(capacity_32, 128_000, "32 * 8000 / 2 = 128K TPS");
     
     coordinator.expand_shards(32).await.unwrap();
     let capacity_64 = coordinator.get_tps_capacity();
     println!("📊 Capacity with 64 shards: {} TPS", capacity_64);
-    assert_eq!(capacity_64, 512_000, "64 * 8000 = 512K TPS");
+    assert_eq!(capacity_64, 256_000, "64 * 8000 / 2 = 256K TPS");
     
     println!("✅ Capacity scales linearly with shard count");
 }
@@ -197,7 +193,6 @@ async fn test_expansion_capacity_calculation() {
 async fn test_expansion_idempotent() {
     let mut config = ShardConfig::default();
     config.shard_count = 8;
-    config.max_shards = 16;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
@@ -205,28 +200,25 @@ async fn test_expansion_idempotent() {
     coordinator.expand_shards(4).await.unwrap();
     assert_eq!(coordinator.shards.len(), 12);
     
-    // Try to expand to 12 again (should do nothing or add more)
+    // Zero expansion should not change shard count
     coordinator.expand_shards(0).await.unwrap();
     assert_eq!(coordinator.shards.len(), 12, "Zero expansion should not change shard count");
     
-    // Expand to max
-    coordinator.expand_shards(100).await.unwrap();
-    assert_eq!(coordinator.shards.len(), 16, "Should cap at max");
+    // Expand by 4 more (unlimited scaling)
+    coordinator.expand_shards(4).await.unwrap();
+    assert_eq!(coordinator.shards.len(), 16);
     
-    // Try to expand beyond max multiple times (idempotent: all should return Ok)
-    for _ in 0..5 {
-        coordinator.expand_shards(10).await.unwrap(); // Should succeed idempotently
-        assert_eq!(coordinator.shards.len(), 16, "Shard count should not change");
-    }
+    // Expand again - unlimited scaling allows continued growth
+    coordinator.expand_shards(8).await.unwrap();
+    assert_eq!(coordinator.shards.len(), 24);
     
-    println!("✅ Expansion is idempotent and safe");
+    println!("✅ Expansion is idempotent and supports unlimited scaling");
 }
 
 #[tokio::test]
 async fn test_load_based_expansion_trigger() {
     let mut config = ShardConfig::default();
     config.shard_count = 4;
-    config.max_shards = 16;
     config.tx_per_shard = 100; // Low threshold for testing
     config.auto_expand_threshold = 0.80;
     
@@ -256,7 +248,6 @@ async fn test_load_based_expansion_trigger() {
 async fn test_expansion_to_production_scale() {
     let mut config = ShardConfig::default();
     config.shard_count = 8;
-    config.max_shards = 8_000;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
@@ -283,9 +274,10 @@ async fn test_expansion_to_production_scale() {
     
     assert_eq!(coordinator.shards.len(), 1024);
     
+    // TPS formula: shards × tx_per_shard ÷ 2 (2-second blocks)
     let capacity = coordinator.get_tps_capacity();
     println!("   Final capacity: {} TPS", capacity);
-    assert_eq!(capacity, 8_192_000, "1024 * 8000 = 8.2M TPS");
+    assert_eq!(capacity, 4_096_000, "1024 * 8000 / 2 = 4.1M TPS");
     
     println!("✅ Can scale to production levels quickly");
 }
@@ -294,7 +286,6 @@ async fn test_expansion_to_production_scale() {
 async fn test_expansion_rollback_safety() {
     let mut config = ShardConfig::default();
     config.shard_count = 4;
-    config.max_shards = 8;
     
     let mut coordinator = ShardingCoordinator::new(config);
     
