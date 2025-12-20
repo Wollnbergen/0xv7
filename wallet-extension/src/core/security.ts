@@ -124,6 +124,16 @@ export class SecureString {
     secureWipe(bytes);
     return str;
   }
+
+  /**
+   * Reveal the secret value as a string.
+   * SECURITY: The returned string is immutable and cannot be wiped.
+   * Use only when absolutely necessary (e.g., passing to library functions).
+   * Alias for toString() with more explicit naming.
+   */
+  reveal(): string {
+    return this.toString();
+  }
   
   /**
    * Securely destroy this secure string
@@ -355,6 +365,71 @@ export function isSessionValid(): boolean {
   
   const elapsed = Date.now() - currentSession.lastActivity;
   return elapsed < SESSION_TIMEOUT_MS;
+}
+
+// Session PIN storage for verification (in-memory only, hash only)
+let sessionPinHash: string | null = null;
+
+/**
+ * Set the session PIN hash for verification
+ * SECURITY: Only stores hash, never the plain PIN
+ */
+export function setSessionPinHash(pinHash: string): void {
+  sessionPinHash = pinHash;
+}
+
+/**
+ * Clear the session PIN hash
+ */
+export function clearSessionPinHash(): void {
+  sessionPinHash = null;
+}
+
+/**
+ * Hash a PIN for comparison/storage
+ * Uses SHA-256 for consistency
+ * Exported for use in unlock flow
+ */
+export function hashPinForVerification(pin: string): string {
+  const encoder = new TextEncoder();
+  const hash = sha256(encoder.encode(pin));
+  return Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Verify a PIN against the session PIN hash
+ * SECURITY: Used to re-verify PIN before sensitive operations like signing
+ * 
+ * @param pin - The PIN entered by the user
+ * @returns True if PIN matches, false otherwise
+ */
+export async function verifySessionPin(pin: string): Promise<boolean> {
+  // Check if locked out
+  if (isLockedOut()) {
+    const remaining = getLockoutRemaining();
+    throw new Error(`Too many attempts. Try again in ${remaining} seconds.`);
+  }
+
+  if (!sessionPinHash) {
+    // No session PIN stored - session may have expired
+    return false;
+  }
+
+  const inputHash = hashPinForVerification(pin);
+  
+  // Use constant-time comparison to prevent timing attacks
+  const encoder = new TextEncoder();
+  const storedBytes = encoder.encode(sessionPinHash);
+  const inputBytes = encoder.encode(inputHash);
+  
+  const isValid = constantTimeEqual(storedBytes, inputBytes);
+  
+  if (!isValid) {
+    // Record failed attempt for rate limiting
+    recordFailedAttempt();
+  }
+  
+  return isValid;
 }
 
 // ============================================================================

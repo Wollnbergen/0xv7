@@ -29,6 +29,9 @@ import {
   checkSessionTimeout,
   startSession,
   endSession as endSecuritySession,
+  setSessionPinHash,
+  clearSessionPinHash,
+  hashPinForVerification,
 } from '../core/security';
 
 interface WalletState {
@@ -300,11 +303,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       clearFailedAttempts();
       setSessionPin(pin);
       
+      // SECURITY: Store hashed PIN for transaction verification
+      const pinHash = hashPinForVerification(pin);
+      setSessionPinHash(pinHash);
+      
       // Initialize security session with auto-lock callback
       startSession(() => {
         // This will be called when session expires
         wallet.destroy();
         clearSession();
+        clearSessionPinHash();
       });
       
       const accounts = wallet.getAccounts();
@@ -338,6 +346,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const lock = useCallback(() => {
     state.wallet?.destroy();
     clearSession();
+    clearSessionPinHash(); // SECURITY: Clear PIN hash on lock
     endSecuritySession(); // End the security session timer
     
     setState(prev => ({

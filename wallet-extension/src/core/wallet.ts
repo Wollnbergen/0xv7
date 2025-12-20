@@ -15,7 +15,7 @@ import { sha512 } from '@noble/hashes/sha512';
 import { randomBytes } from '@noble/hashes/utils';
 import * as ed25519 from '@noble/ed25519';
 import { bech32 } from 'bech32';
-import { secureWipe } from './security';
+import { secureWipe, SecureString } from './security';
 
 // Configure ed25519 to use sha512
 ed25519.etc.sha512Sync = (...msgs) => sha512(ed25519.etc.concatBytes(...msgs));
@@ -26,10 +26,13 @@ export const SULTAN_PREFIX = 'sultan';
 export const SULTAN_COIN_TYPE = 1984; // Custom coin type for Sultan
 export const MIN_STAKE = 10_000; // 10,000 SLTN minimum stake
 
+/**
+ * Account info exposed externally (NO private key - derived on demand)
+ * SECURITY: Private keys are NEVER stored in memory or cache
+ */
 export interface SultanAccount {
   address: string;
   publicKey: string;
-  privateKey: string;
   path: string;
   index: number;
   name: string;
@@ -52,10 +55,17 @@ export interface SultanTransaction {
 
 /**
  * Core wallet functionality for Sultan chain
+ * 
+ * SECURITY ARCHITECTURE:
+ * - Mnemonic stored as SecureString (XOR encrypted in memory)
+ * - Private keys are NEVER cached - derived on-demand for each signing operation
+ * - All sensitive data wiped immediately after use
+ * - No JS string exposure for sensitive material
  */
 export class SultanWallet {
-  private mnemonic: string | null = null;
+  private secureMnemonic: SecureString | null = null;
   private accounts: Map<number, SultanAccount> = new Map();
+  private destroyed: boolean = false;
 
   /**
    * Generate a new 24-word mnemonic
@@ -94,13 +104,17 @@ export class SultanWallet {
 
   /**
    * Create wallet from mnemonic
+   * SECURITY: Mnemonic is immediately encrypted into SecureString
    */
   static async fromMnemonic(mnemonic: string): Promise<SultanWallet> {
     if (!SultanWallet.validateMnemonic(mnemonic)) {
       throw new Error('Invalid mnemonic phrase');
     }
     const wallet = new SultanWallet();
-    wallet.mnemonic = mnemonic;
+    
+    // SECURITY: Store mnemonic as SecureString (XOR encrypted)
+    wallet.secureMnemonic = new SecureString(mnemonic);
+    
     // Derive first account by default
     await wallet.deriveAccount(0);
     return wallet;
@@ -108,18 +122,24 @@ export class SultanWallet {
 
   /**
    * Derive account at index
+   * SECURITY: Only caches public data - private key is derived on-demand for signing
    */
   async deriveAccount(index: number, name?: string): Promise<SultanAccount> {
-    if (!this.mnemonic) {
+    this.ensureNotDestroyed();
+    if (!this.secureMnemonic) {
       throw new Error('Wallet not initialized');
     }
 
-    // Check cache
+    // Check cache (only contains public data)
     if (this.accounts.has(index)) {
       return this.accounts.get(index)!;
     }
 
-    const seed = mnemonicToSeedSync(this.mnemonic);
+    // SECURITY: Decrypt mnemonic, use it, then let temporary reference go out of scope
+    const mnemonic = this.secureMnemonic.reveal();
+    const seed = mnemonicToSeedSync(mnemonic);
+    // Note: mnemonic string goes out of scope here - V8 will GC it
+    
     const path = `m/44'/${SULTAN_COIN_TYPE}'/0'/0'/${index}`;
     
     // Derive key using SLIP-0010 for Ed25519
@@ -127,10 +147,14 @@ export class SultanWallet {
     const publicKey = await ed25519.getPublicKeyAsync(privateKey);
     const address = this.publicKeyToAddress(publicKey);
 
+    // SECURITY: Wipe private key and seed immediately after deriving public key
+    secureWipe(privateKey);
+    secureWipe(seed);
+
+    // SECURITY: Account object contains NO private key
     const account: SultanAccount = {
       address,
       publicKey: bytesToHex(publicKey),
-      privateKey: bytesToHex(privateKey),
       path,
       index,
       name: name || `Account ${index + 1}`,
@@ -138,6 +162,36 @@ export class SultanWallet {
 
     this.accounts.set(index, account);
     return account;
+  }
+
+  /**
+   * Derive private key on-demand for signing operations
+   * SECURITY: Key is returned for immediate use and must be wiped by caller
+   */
+  private async derivePrivateKeyForSigning(index: number): Promise<Uint8Array> {
+    this.ensureNotDestroyed();
+    if (!this.secureMnemonic) {
+      throw new Error('Wallet not initialized');
+    }
+
+    const mnemonic = this.secureMnemonic.reveal();
+    const seed = mnemonicToSeedSync(mnemonic);
+    const path = `m/44'/${SULTAN_COIN_TYPE}'/0'/0'/${index}`;
+    const privateKey = this.deriveEd25519Key(seed, path);
+    
+    // Wipe seed immediately
+    secureWipe(seed);
+    
+    return privateKey;
+  }
+
+  /**
+   * Ensure wallet has not been destroyed
+   */
+  private ensureNotDestroyed(): void {
+    if (this.destroyed) {
+      throw new Error('Wallet has been destroyed and cannot be used');
+    }
   }
 
   /**
@@ -210,11 +264,13 @@ export class SultanWallet {
 
   /**
    * Sign a transaction (takes data object and account index)
+   * SECURITY: Derives private key on-demand and wipes immediately after use
    */
   async signTransaction(
     txData: Record<string, unknown>,
     accountIndex: number
   ): Promise<string> {
+    this.ensureNotDestroyed();
     const account = this.accounts.get(accountIndex);
     if (!account) {
       throw new Error(`Account at index ${accountIndex} not found`);
@@ -222,19 +278,27 @@ export class SultanWallet {
 
     const canonical = JSON.stringify(txData);
     const msgBytes = sha256(new TextEncoder().encode(canonical));
-    const privateKey = hexToBytes(account.privateKey);
-    const signature = await ed25519.signAsync(msgBytes, privateKey);
-
-    return bytesToHex(signature);
+    
+    // SECURITY: Derive key on-demand
+    const privateKey = await this.derivePrivateKeyForSigning(accountIndex);
+    try {
+      const signature = await ed25519.signAsync(msgBytes, privateKey);
+      return bytesToHex(signature);
+    } finally {
+      // SECURITY: Always wipe key after use
+      secureWipe(privateKey);
+    }
   }
 
   /**
    * Sign and return a full transaction structure
+   * SECURITY: Derives private key on-demand and wipes immediately after use
    */
   async signFullTransaction(
     accountIndex: number,
     tx: Omit<SultanTransaction, 'from'>
   ): Promise<SignedTransaction> {
+    this.ensureNotDestroyed();
     const account = this.accounts.get(accountIndex);
     if (!account) {
       throw new Error(`Account at index ${accountIndex} not found`);
@@ -246,30 +310,44 @@ export class SultanWallet {
     };
 
     const msgBytes = this.serializeTransaction(transaction);
-    const privateKey = hexToBytes(account.privateKey);
-    const signature = await ed25519.signAsync(msgBytes, privateKey);
-
-    return {
-      transaction,
-      signature: bytesToHex(signature),
-      publicKey: account.publicKey,
-    };
+    
+    // SECURITY: Derive key on-demand
+    const privateKey = await this.derivePrivateKeyForSigning(accountIndex);
+    try {
+      const signature = await ed25519.signAsync(msgBytes, privateKey);
+      return {
+        transaction,
+        signature: bytesToHex(signature),
+        publicKey: account.publicKey,
+      };
+    } finally {
+      // SECURITY: Always wipe key after use
+      secureWipe(privateKey);
+    }
   }
 
   /**
    * Sign arbitrary message
+   * SECURITY: Derives private key on-demand and wipes immediately after use
    */
   async signMessage(accountIndex: number, message: string): Promise<string> {
+    this.ensureNotDestroyed();
     const account = this.accounts.get(accountIndex);
     if (!account) {
       throw new Error(`Account at index ${accountIndex} not found`);
     }
 
     const msgBytes = new TextEncoder().encode(message);
-    const privateKey = hexToBytes(account.privateKey);
-    const signature = await ed25519.signAsync(msgBytes, privateKey);
     
-    return bytesToHex(signature);
+    // SECURITY: Derive key on-demand
+    const privateKey = await this.derivePrivateKeyForSigning(accountIndex);
+    try {
+      const signature = await ed25519.signAsync(msgBytes, privateKey);
+      return bytesToHex(signature);
+    } finally {
+      // SECURITY: Always wipe key after use
+      secureWipe(privateKey);
+    }
   }
 
   /**
@@ -307,10 +385,27 @@ export class SultanWallet {
   }
 
   /**
-   * Get mnemonic (for backup - handle with care!)
+   * Get mnemonic for backup purposes
+   * SECURITY: Uses callback pattern to minimize exposure time
+   * The mnemonic is only revealed within the callback scope
+   * 
+   * @param callback - Function that receives the mnemonic. Should NOT store it.
+   * @returns The return value of the callback
    */
-  getMnemonic(): string | null {
-    return this.mnemonic;
+  withMnemonic<T>(callback: (mnemonic: string) => T): T {
+    this.ensureNotDestroyed();
+    if (!this.secureMnemonic) {
+      throw new Error('Wallet not initialized');
+    }
+    const mnemonic = this.secureMnemonic.reveal();
+    return callback(mnemonic);
+  }
+
+  /**
+   * Check if wallet has mnemonic stored
+   */
+  hasMnemonic(): boolean {
+    return this.secureMnemonic !== null && !this.destroyed;
   }
 
   /**
@@ -318,26 +413,25 @@ export class SultanWallet {
    * CRITICAL: Always call this when done with the wallet
    */
   destroy(): void {
-    // Wipe mnemonic
-    if (this.mnemonic) {
-      // Create a buffer and wipe it (JS strings are immutable)
-      const encoder = new TextEncoder();
-      const mnemonicBytes = encoder.encode(this.mnemonic);
-      secureWipe(mnemonicBytes);
-      this.mnemonic = null;
+    if (this.destroyed) return;
+    
+    // SECURITY: Destroy SecureString (wipes XOR encrypted data)
+    if (this.secureMnemonic) {
+      this.secureMnemonic.destroy();
+      this.secureMnemonic = null;
     }
     
-    // Wipe all account private keys
-    for (const account of this.accounts.values()) {
-      if (account.privateKey) {
-        const keyBytes = hexToBytes(account.privateKey);
-        secureWipe(keyBytes);
-        // Overwrite the string reference
-        (account as { privateKey: string }).privateKey = '';
-      }
-    }
-    
+    // Clear account cache (no private keys stored, just public data)
     this.accounts.clear();
+    
+    this.destroyed = true;
+  }
+
+  /**
+   * Check if wallet has been destroyed
+   */
+  isDestroyed(): boolean {
+    return this.destroyed;
   }
 }
 

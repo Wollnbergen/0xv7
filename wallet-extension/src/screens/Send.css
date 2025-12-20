@@ -229,3 +229,90 @@
   padding: var(--spacing-lg);
   width: 100%;
 }
+/* PIN Verification Step */
+.pin-header {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.pin-header h2 {
+  margin: var(--spacing-md) 0 var(--spacing-sm);
+}
+
+.lock-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(0, 212, 170, 0.15);
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.lock-icon svg {
+  stroke: currentColor;
+}
+
+.tx-summary-mini {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-xl);
+  font-size: 0.9rem;
+}
+
+.tx-summary-mini .amount {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.tx-summary-mini .arrow {
+  color: var(--text-muted);
+}
+
+.tx-summary-mini .recipient {
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.pin-input-group {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
+.pin-input {
+  width: 48px;
+  height: 56px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.pin-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2);
+}
+
+.pin-input::-webkit-outer-spin-button,
+.pin-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pin-input[type=number] {
+  -moz-appearance: textfield;
+}
