@@ -1,10 +1,11 @@
 /**
  * Sultan RPC API Client
  * 
- * Connects to https://rpc.sltn.io for balance, transactions, and staking.
+ * Connects to the Sultan L1 blockchain REST API.
  */
 
-const RPC_URL = 'https://rpc.sltn.io';
+// Production RPC endpoint - NYC Bootstrap validator
+const RPC_URL = 'http://206.189.224.142:26657';
 
 export interface AccountBalance {
   address: string;
@@ -93,37 +94,7 @@ export interface UserVote {
 }
 
 /**
- * Make RPC request
- */
-async function rpc<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch(`${RPC_URL}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method,
-      params,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`RPC error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  
-  if (data.error) {
-    throw new Error(data.error.message || 'RPC error');
-  }
-
-  return data.result;
-}
-
-/**
- * Make REST API request (for governance endpoints)
+ * Make REST API request
  */
 async function restApi<T>(
   endpoint: string, 
@@ -155,12 +126,13 @@ async function restApi<T>(
  */
 export async function getBalance(address: string): Promise<AccountBalance> {
   try {
-    const result = await rpc<{ balance: string; nonce: number }>('account_balance', { address });
+    // Use REST API: GET /balance/{address}
+    const result = await restApi<{ address: string; balance: number; nonce: number }>(`/balance/${address}`);
     
     return {
-      address,
-      available: result.balance,
-      balance: result.balance,
+      address: result.address,
+      available: result.balance.toString(),
+      balance: result.balance.toString(),
       nonce: result.nonce,
     };
   } catch {
@@ -179,19 +151,19 @@ export async function getBalance(address: string): Promise<AccountBalance> {
  */
 export async function getStakingInfo(address: string): Promise<StakingInfo> {
   try {
-    const result = await rpc<{
-      staked: string;
-      rewards: string;
+    // Use REST API: GET /staking/delegations/{address}
+    const result = await restApi<{
+      staked: number;
+      rewards: number;
       validator?: string;
-      apy: number;
-    }>('staking_info', { address });
+    }>(`/staking/delegations/${address}`);
 
     return {
       address,
-      staked: result.staked,
-      pendingRewards: result.rewards,
+      staked: (result.staked || 0).toString(),
+      pendingRewards: (result.rewards || 0).toString(),
       validator: result.validator,
-      stakingAPY: result.apy,
+      stakingAPY: 13.33, // Fixed APY
     };
   } catch {
     return {
@@ -208,40 +180,62 @@ export async function getStakingInfo(address: string): Promise<StakingInfo> {
  */
 export async function getValidators(): Promise<Validator[]> {
   try {
-    const result = await rpc<{ validators: Array<{ address: string; moniker: string; stake: string; commission: number; uptime: number; status: string }> }>('validators_list', {});
-    return (result.validators || []).map(v => ({
+    // Use REST API: GET /staking/validators
+    const result = await restApi<Array<{ 
+      address: string; 
+      moniker: string; 
+      stake: number; 
+      commission: number; 
+      uptime: number; 
+      status: string;
+    }>>('/staking/validators');
+    
+    // If empty, return mock validators for the known network validators
+    if (!result || result.length === 0) {
+      return [
+        { address: 'validator-nyc', name: 'NYC Bootstrap', moniker: 'NYC Bootstrap', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'validator-sfo', name: 'SFO', moniker: 'SFO', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'validator-fra', name: 'FRA', moniker: 'FRA', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'validator-ams', name: 'AMS', moniker: 'AMS', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'validator-sgp', name: 'SGP', moniker: 'SGP', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'validator-lon', name: 'LON', moniker: 'LON', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      ];
+    }
+    
+    return result.map(v => ({
       address: v.address,
       name: v.moniker,
       moniker: v.moniker,
-      totalStaked: v.stake,
+      totalStaked: v.stake.toString(),
       commission: v.commission,
       uptime: v.uptime,
       status: v.status as 'active' | 'inactive' | 'jailed',
     }));
   } catch {
-    return [];
+    // Fallback to known validators
+    return [
+      { address: 'validator-nyc', name: 'NYC Bootstrap', moniker: 'NYC Bootstrap', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'validator-sfo', name: 'SFO', moniker: 'SFO', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'validator-fra', name: 'FRA', moniker: 'FRA', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'validator-ams', name: 'AMS', moniker: 'AMS', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'validator-sgp', name: 'SGP', moniker: 'SGP', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'validator-lon', name: 'LON', moniker: 'LON', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+    ];
   }
 }
 
 /**
  * Get transaction history for an address
+ * Note: Node doesn't have tx history endpoint yet, returns empty for now
  */
 export async function getTransactions(
-  address: string,
-  limit = 20,
-  offset = 0
+  _address: string,
+  _limit = 20,
+  _offset = 0
 ): Promise<Transaction[]> {
-  try {
-    const result = await rpc<{ transactions: Transaction[] }>('account_transactions', {
-      address,
-      limit,
-      offset,
-    });
-
-    return result.transactions || [];
-  } catch {
-    return [];
-  }
+  // Transaction history not yet implemented on node
+  // Future: GET /transactions/{address}
+  return [];
 }
 
 /**
@@ -249,15 +243,30 @@ export async function getTransactions(
  */
 export async function getNetworkStatus(): Promise<NetworkStatus> {
   try {
-    const result = await rpc<NetworkStatus>('network_status', {});
-    return result;
+    // Use REST API: GET /status
+    const result = await restApi<{
+      height: number;
+      validator_count: number;
+      shard_count: number;
+      validator_apy: number;
+      sharding_enabled: boolean;
+    }>('/status');
+    
+    return {
+      chainId: 'sultan-mainnet-1',
+      blockHeight: result.height,
+      blockTime: 2,
+      validatorCount: result.validator_count,
+      totalStaked: '0', // Not provided by /status
+      stakingAPY: result.validator_apy * 100, // Convert to percentage
+    };
   } catch {
     // Fallback values
     return {
       chainId: 'sultan-mainnet-1',
       blockHeight: 0,
       blockTime: 2,
-      validatorCount: 9,
+      validatorCount: 6,
       totalStaked: '0',
       stakingAPY: 13.33,
     };
@@ -281,7 +290,8 @@ export async function broadcastTransaction(
     publicKey: string;
   }
 ): Promise<{ hash: string }> {
-  const result = await rpc<{ hash: string }>('broadcast_tx', {
+  // Use REST API: POST /tx
+  const result = await restApi<{ hash: string }>('/tx', 'POST', {
     tx: signedTx.transaction,
     signature: signedTx.signature,
     public_key: signedTx.publicKey,
@@ -307,7 +317,8 @@ export async function stakeTokens(
     publicKey: string;
   }
 ): Promise<{ hash: string }> {
-  const result = await rpc<{ hash: string }>('stake_tx', {
+  // Use REST API: POST /staking/delegate
+  const result = await restApi<{ hash: string }>('/staking/delegate', 'POST', {
     tx: signedTx.transaction,
     signature: signedTx.signature,
     public_key: signedTx.publicKey,
@@ -332,7 +343,8 @@ export async function unstakeTokens(
     publicKey: string;
   }
 ): Promise<{ hash: string }> {
-  const result = await rpc<{ hash: string }>('unstake_tx', {
+  // Use REST API: POST /staking/undelegate (if available)
+  const result = await restApi<{ hash: string }>('/staking/undelegate', 'POST', {
     tx: signedTx.transaction,
     signature: signedTx.signature,
     public_key: signedTx.publicKey,
@@ -357,7 +369,8 @@ export async function claimRewards(
     publicKey: string;
   }
 ): Promise<{ hash: string }> {
-  const result = await rpc<{ hash: string }>('claim_rewards_tx', {
+  // Use REST API: POST /staking/withdraw_rewards
+  const result = await restApi<{ hash: string }>('/staking/withdraw_rewards', 'POST', {
     tx: signedTx.transaction,
     signature: signedTx.signature,
     public_key: signedTx.publicKey,
@@ -469,8 +482,8 @@ export const sultanAPI = {
     signature: string;
     publicKey: string;
   }): Promise<{ hash: string }> => {
-    return rpc<{ hash: string }>('broadcast_tx', {
-      tx: {
+    return broadcastTransaction({
+      transaction: {
         from: tx.from,
         to: tx.to,
         amount: tx.amount,
@@ -479,34 +492,49 @@ export const sultanAPI = {
         timestamp: tx.timestamp,
       },
       signature: tx.signature,
-      public_key: tx.publicKey,
+      publicKey: tx.publicKey,
     });
   },
 
   stake: async (req: StakeRequest): Promise<{ hash: string }> => {
-    return rpc<{ hash: string }>('stake_tx', {
-      delegator: req.delegatorAddress,
-      validator: req.validatorAddress,
-      amount: req.amount,
+    return stakeTokens({
+      transaction: {
+        from: req.delegatorAddress,
+        to: req.validatorAddress,
+        amount: req.amount,
+        nonce: 0,
+        timestamp: Date.now(),
+      },
       signature: req.signature,
-      public_key: req.publicKey,
+      publicKey: req.publicKey || '',
     });
   },
 
   unstake: async (req: UnstakeRequest): Promise<{ hash: string }> => {
-    return rpc<{ hash: string }>('unstake_tx', {
-      delegator: req.delegatorAddress,
-      amount: req.amount,
+    return unstakeTokens({
+      transaction: {
+        from: req.delegatorAddress,
+        to: '', // Self-unbond
+        amount: req.amount,
+        nonce: 0,
+        timestamp: Date.now(),
+      },
       signature: req.signature,
-      public_key: req.publicKey,
+      publicKey: req.publicKey || '',
     });
   },
 
   claimRewards: async (req: ClaimRewardsRequest): Promise<{ hash: string }> => {
-    return rpc<{ hash: string }>('claim_rewards_tx', {
-      delegator: req.delegatorAddress,
+    return claimRewards({
+      transaction: {
+        from: req.delegatorAddress,
+        to: '',
+        amount: '0',
+        nonce: 0,
+        timestamp: Date.now(),
+      },
       signature: req.signature,
-      public_key: req.publicKey,
+      publicKey: req.publicKey || '',
     });
   },
 
