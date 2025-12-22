@@ -430,9 +430,12 @@ impl CrossShardTransaction {
 }
 
 /// Production-grade sharding coordinator
+/// 
+/// Uses interior mutability (RwLock) for config and shards to allow
+/// dynamic shard expansion without requiring exclusive access.
 pub struct ShardingCoordinator {
-    pub config: ShardConfig,
-    pub shards: Vec<Arc<Shard>>,
+    pub config: Arc<RwLock<ShardConfig>>,
+    pub shards: Arc<RwLock<Vec<Arc<Shard>>>>,
     pub cross_shard_queue: Arc<Mutex<VecDeque<CrossShardTransaction>>>,
     pub pending_commits: Arc<RwLock<HashMap<String, CrossShardTransaction>>>,
     pub total_processed: Arc<RwLock<u64>>,
@@ -453,7 +456,8 @@ impl ShardingCoordinator {
             warn!("Failed to create commit log directory: {}", e);
         }
         
-        let shards: Vec<Arc<Shard>> = (0..config.shard_count)
+        let shard_count = config.shard_count;
+        let shards: Vec<Arc<Shard>> = (0..shard_count)
             .map(|id| Arc::new(Shard::new(id)))
             .collect();
 
@@ -461,9 +465,9 @@ impl ShardingCoordinator {
             .map(|s| (s.id, true))
             .collect();
 
-        let mut coordinator = Self {
-            config,
-            shards,
+        let coordinator = Self {
+            config: Arc::new(RwLock::new(config)),
+            shards: Arc::new(RwLock::new(shards)),
             cross_shard_queue: Arc::new(Mutex::new(VecDeque::new())),
             pending_commits: Arc::new(RwLock::new(HashMap::new())),
             total_processed: Arc::new(RwLock::new(0)),
@@ -479,7 +483,7 @@ impl ShardingCoordinator {
     }
     
     /// Recover pending transactions after crash using write-ahead log
-    fn recover_from_crash(&mut self) {
+    fn recover_from_crash(&self) {
         let log_path = "/tmp/sultan-commit-log";
         if !Path::new(log_path).exists() {
             return;
@@ -536,21 +540,22 @@ impl ShardingCoordinator {
     }
 
     /// Classify transactions as same-shard or cross-shard
-    pub fn classify_transactions(&self, transactions: Vec<Transaction>) 
+    pub async fn classify_transactions(&self, transactions: Vec<Transaction>) 
         -> (HashMap<usize, Vec<Transaction>>, Vec<CrossShardTransaction>) 
     {
+        let config = self.config.read().await;
         let mut same_shard: HashMap<usize, Vec<Transaction>> = HashMap::new();
         let mut cross_shard = Vec::new();
 
         for tx in transactions {
-            let from_shard = Shard::calculate_shard_id(&tx.from, self.config.shard_count);
-            let to_shard = Shard::calculate_shard_id(&tx.to, self.config.shard_count);
+            let from_shard = Shard::calculate_shard_id(&tx.from, config.shard_count);
+            let to_shard = Shard::calculate_shard_id(&tx.to, config.shard_count);
 
             if from_shard == to_shard {
                 same_shard.entry(from_shard)
                     .or_insert_with(Vec::new)
                     .push(tx);
-            } else if self.config.cross_shard_enabled {
+            } else if config.cross_shard_enabled {
                 cross_shard.push(CrossShardTransaction::new(from_shard, to_shard, tx));
             } else {
                 warn!("Cross-shard transaction rejected (disabled): {} -> {}", tx.from, tx.to);
@@ -562,7 +567,7 @@ impl ShardingCoordinator {
 
     /// Process same-shard transactions in parallel
     pub async fn process_parallel(&self, transactions: Vec<Transaction>) -> Result<Vec<Transaction>> {
-        let (same_shard, cross_shard_txs) = self.classify_transactions(transactions);
+        let (same_shard, cross_shard_txs) = self.classify_transactions(transactions).await;
 
         // Queue cross-shard for two-phase commit
         if !cross_shard_txs.is_empty() {
@@ -574,9 +579,10 @@ impl ShardingCoordinator {
         }
 
         // Process same-shard in parallel
+        let shards = self.shards.read().await;
         let mut handles = Vec::new();
         for (shard_id, txs) in same_shard {
-            let shard = self.shards[shard_id].clone();
+            let shard = shards[shard_id].clone();
             
             let handle = tokio::spawn(async move {
                 match shard.process_transactions(txs).await {
@@ -590,6 +596,7 @@ impl ShardingCoordinator {
             });
             handles.push(handle);
         }
+        drop(shards); // Release read lock before awaiting
 
         // Collect results with error handling
         let mut all_processed = Vec::new();
@@ -597,7 +604,8 @@ impl ShardingCoordinator {
             match timeout(Duration::from_secs(60), handle).await {
                 Ok(Ok(Ok((shard_id, processed)))) => {
                     all_processed.extend(processed);
-                    self.shards[shard_id].mark_healthy().await;
+                    let shards = self.shards.read().await;
+                    shards[shard_id].mark_healthy().await;
                 }
                 Ok(Ok(Err(e))) => {
                     error!("Shard processing error: {}", e);
@@ -704,8 +712,9 @@ impl ShardingCoordinator {
     }
 
     async fn prepare_phase(&self, ctx: &mut CrossShardTransaction) -> Result<()> {
-        let from_shard = &self.shards[ctx.from_shard];
-        let to_shard = &self.shards[ctx.to_shard];
+        let shards = self.shards.read().await;
+        let from_shard = &shards[ctx.from_shard];
+        let to_shard = &shards[ctx.to_shard];
 
         // CRITICAL: Acquire distributed lock to prevent double-processing
         let tx_key = format!("{}:{}", ctx.transaction.from, ctx.transaction.nonce);
@@ -772,8 +781,9 @@ impl ShardingCoordinator {
     }
 
     async fn commit_phase(&self, ctx: &CrossShardTransaction) -> Result<()> {
-        let from_shard = &self.shards[ctx.from_shard];
-        let to_shard = &self.shards[ctx.to_shard];
+        let shards = self.shards.read().await;
+        let from_shard = &shards[ctx.from_shard];
+        let to_shard = &shards[ctx.to_shard];
 
         // Debit source shard (atomic operation)
         {
@@ -831,8 +841,9 @@ impl ShardingCoordinator {
             }
         };
 
-        let from_shard = &self.shards[ctx.from_shard];
-        let to_shard = &self.shards[ctx.to_shard];
+        let shards = self.shards.read().await;
+        let from_shard = &shards[ctx.from_shard];
+        let to_shard = &shards[ctx.to_shard];
 
         // CRITICAL: Check if source shard was debited
         let from_state = from_shard.state.read().await;
@@ -931,20 +942,21 @@ impl ShardingCoordinator {
         loop {
             tokio::time::sleep(SHARD_HEALTH_CHECK_INTERVAL).await;
             
+            let shards = self.shards.read().await;
             let mut unhealthy_count = 0;
-            for shard in &self.shards {
+            for shard in shards.iter() {
                 if !shard.is_healthy().await {
                     unhealthy_count += 1;
                 }
             }
 
             if unhealthy_count > 0 {
-                warn!("Unhealthy shards detected: {}/{}", unhealthy_count, self.shards.len());
+                warn!("Unhealthy shards detected: {}/{}", unhealthy_count, shards.len());
             }
 
             // Update health monitor
             let mut monitor = self.health_monitor.write().await;
-            for shard in &self.shards {
+            for shard in shards.iter() {
                 monitor.insert(shard.id, shard.is_healthy().await);
             }
         }
@@ -952,8 +964,10 @@ impl ShardingCoordinator {
 
     /// Initialize account in correct shard
     pub async fn init_account(&self, address: String, balance: u64) -> Result<()> {
-        let shard_id = Shard::calculate_shard_id(&address, self.config.shard_count);
-        let shard = &self.shards[shard_id];
+        let config = self.config.read().await;
+        let shards = self.shards.read().await;
+        let shard_id = Shard::calculate_shard_id(&address, config.shard_count);
+        let shard = &shards[shard_id];
         
         let mut state = shard.state.write().await;
         state.insert(address.clone(), Account { balance, nonce: 0 });
@@ -967,8 +981,10 @@ impl ShardingCoordinator {
 
     /// Get account balance
     pub async fn get_balance(&self, address: &str) -> u64 {
-        let shard_id = Shard::calculate_shard_id(address, self.config.shard_count);
-        let shard = &self.shards[shard_id];
+        let config = self.config.read().await;
+        let shards = self.shards.read().await;
+        let shard_id = Shard::calculate_shard_id(address, config.shard_count);
+        let shard = &shards[shard_id];
         
         let state = shard.state.read().await;
         state.get(address)
@@ -978,11 +994,13 @@ impl ShardingCoordinator {
 
     /// Get comprehensive statistics
     pub async fn get_stats(&self) -> ShardStats {
+        let config = self.config.read().await;
+        let shards = self.shards.read().await;
         let mut total_txs = 0;
         let mut healthy_shards = 0;
         let mut max_load = 0.0;
 
-        for shard in &self.shards {
+        for shard in shards.iter() {
             let count = *shard.processed_count.read().await;
             total_txs += count;
             
@@ -991,7 +1009,7 @@ impl ShardingCoordinator {
             }
             
             // Calculate load percentage
-            let load = count as f64 / self.config.tx_per_shard as f64;
+            let load = count as f64 / config.tx_per_shard as f64;
             if load > max_load {
                 max_load = load;
             }
@@ -1002,26 +1020,28 @@ impl ShardingCoordinator {
         let pending_cross_shard = queue.len();
         
         // Check if we should expand
-        let should_expand = max_load > self.config.auto_expand_threshold 
-            && self.config.shard_count < self.config.max_shards;
+        let should_expand = max_load > config.auto_expand_threshold 
+            && config.shard_count < config.max_shards;
 
         ShardStats {
-            shard_count: self.config.shard_count,
-            max_shards: self.config.max_shards,
+            shard_count: config.shard_count,
+            max_shards: config.max_shards,
             healthy_shards,
             total_transactions: total_txs,
             total_processed,
             pending_cross_shard,
-            estimated_tps: self.get_tps_capacity(),
+            estimated_tps: self.get_tps_capacity_internal(&config),
             current_load: max_load,
             should_expand,
         }
     }
     
     /// Expand shards dynamically when load exceeds threshold (idempotent)
-    pub async fn expand_shards(&mut self, additional_shards: usize) -> Result<()> {
-        let current_count = self.config.shard_count;
-        let new_count = (current_count + additional_shards).min(self.config.max_shards);
+    /// This method uses interior mutability and can be called through Arc<Self>
+    pub async fn expand_shards(&self, additional_shards: usize) -> Result<()> {
+        let mut config = self.config.write().await;
+        let current_count = config.shard_count;
+        let new_count = (current_count + additional_shards).min(config.max_shards);
         
         if new_count == current_count {
             // Idempotent: Already at target/max, just return Ok
@@ -1033,13 +1053,15 @@ impl ShardingCoordinator {
             current_count, new_count, new_count - current_count);
         
         // Step 1: Collect all account data from existing shards
+        let shards = self.shards.read().await;
         let mut all_accounts: HashMap<String, Account> = HashMap::new();
-        for shard in &self.shards {
+        for shard in shards.iter() {
             let state = shard.state.read().await;
             for (addr, acc) in state.iter() {
                 all_accounts.insert(addr.clone(), acc.clone());
             }
         }
+        drop(shards);
         
         info!("📦 Migrating {} accounts across {} shards", 
             all_accounts.len(), new_count);
@@ -1059,8 +1081,9 @@ impl ShardingCoordinator {
         }
         
         // Step 4: Atomically swap in new shards
-        self.shards = new_shards;
-        self.config.shard_count = new_count;
+        let mut shards_write = self.shards.write().await;
+        *shards_write = new_shards;
+        config.shard_count = new_count;
         
         // Step 5: Update health monitor
         let mut monitor = self.health_monitor.write().await;
@@ -1069,14 +1092,21 @@ impl ShardingCoordinator {
             monitor.insert(id, true);
         }
         
-        info!("✅ Shard expansion complete! New capacity: {} TPS", self.get_tps_capacity());
+        info!("✅ Shard expansion complete! New capacity: {} TPS", self.get_tps_capacity_internal(&config));
         
         Ok(())
     }
 
-    pub fn get_tps_capacity(&self) -> u64 {
-        let tx_per_block = self.config.shard_count as u64 * self.config.tx_per_shard as u64;
-        tx_per_block / 2 // 2-second blocks (8 shards * 8K tx = 64K tx/block / 2s = 32K TPS)
+    /// Get TPS capacity (async version)
+    pub async fn get_tps_capacity(&self) -> u64 {
+        let config = self.config.read().await;
+        self.get_tps_capacity_internal(&config)
+    }
+    
+    /// Get TPS capacity (internal, with borrowed config)
+    fn get_tps_capacity_internal(&self, config: &ShardConfig) -> u64 {
+        let tx_per_block = config.shard_count as u64 * config.tx_per_shard as u64;
+        tx_per_block / 2 // 2-second blocks
     }
 }
 

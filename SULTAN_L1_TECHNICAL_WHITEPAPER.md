@@ -2,10 +2,10 @@
 
 ## Technical Whitepaper
 
-**Version:** 2.0  
-**Date:** December 8, 2025  
+**Version:** 2.1  
+**Date:** December 22, 2025  
 **Status:** Production Mainnet Live  
-**Network:** Globally Distributed (15 Validators)
+**Network:** Globally Distributed (6 Validators across 6 regions)
 
 ---
 
@@ -19,17 +19,18 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 |---------------|-------|
 | **Block Time** | 2.00 seconds (verified) |
 | **Finality** | Immediate (single-block) |
-| **Active Shards** | 8 |
+| **Active Shards** | 16 |
 | **TPS Capacity** | 64,000 (base) → 64M (max) |
-| **Validators** | 15 (globally distributed) |
+| **Validators** | 6 (NYC, SFO, FRA, AMS, SGP, LON) |
 | **Consensus** | Custom Proof-of-Stake |
 | **Network Protocol** | libp2p |
 | **Cryptography** | Ed25519 + Dilithium3 (Post-Quantum) |
 | **Gas Fees** | $0 (zero-fee transactions) |
 | **Staking APY** | 13.33% |
 
-**RPC Endpoint:** `https://rpc.sltn.io`  
-**P2P Bootstrap:** `/dns4/rpc.sltn.io/tcp/26656`
+**RPC Endpoint:** `http://206.189.224.142:26657` (NYC Bootstrap)  
+**P2P Bootstrap:** `/ip4/206.189.224.142/tcp/26656`  
+**Binary:** 14MB (stripped, LTO-optimized)
 
 ---
 
@@ -74,7 +75,7 @@ We made a deliberate architectural decision to build Sultan as a **pure Rust imp
 - **50-105µs block creation** (vs 100-500ms for typical frameworks)
 - **Memory safety** without garbage collection pauses
 - **Deterministic performance** under high load
-- **Smaller binary size** (22MB production binary)
+- **Smaller binary size** (14MB production binary, stripped with LTO)
 - **Lower validator requirements** (1GB RAM minimum)
 
 ### 1.3 Core Innovations
