@@ -4,8 +4,8 @@
  * Connects to the Sultan L1 blockchain REST API.
  */
 
-// Production RPC endpoint - NYC Bootstrap validator
-const RPC_URL = 'http://206.189.224.142:26657';
+// Production RPC endpoint - NYC Bootstrap validator (HTTPS via nginx)
+const RPC_URL = 'https://rpc.sltn.io';
 
 export interface AccountBalance {
   address: string;

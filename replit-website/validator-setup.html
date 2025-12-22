@@ -447,7 +447,7 @@ chmod +x sultan-node
   --rpc-addr 0.0.0.0:8080 \
   --p2p-addr /ip4/0.0.0.0/tcp/26656 \
   --enable-p2p \
-  --bootstrap-peers /ip4/192.241.154.140/tcp/26656</pre>
+  --bootstrap-peers /ip4/206.189.224.142/tcp/26656</pre>
 
             <div class="tip-box">
                 <strong>💡 Tip:</strong> Choose a unique validator name like <code>validator_tokyo</code> or <code>mycompany_val1</code>
@@ -485,7 +485,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/root/sultan-node --validator --validator-address YOUR_VALIDATOR_NAME --validator-stake 10000 --enable-sharding --shard-count 8 --block-time 2 --rpc-addr 0.0.0.0:8080 --p2p-addr /ip4/0.0.0.0/tcp/26656 --enable-p2p --bootstrap-peers /ip4/192.241.154.140/tcp/26656
+ExecStart=/root/sultan-node --validator --validator-address YOUR_VALIDATOR_NAME --validator-stake 10000 --enable-sharding --shard-count 8 --block-time 2 --rpc-addr 0.0.0.0:8080 --p2p-addr /ip4/0.0.0.0/tcp/26656 --enable-p2p --bootstrap-peers /ip4/206.189.224.142/tcp/26656
 Restart=always
 RestartSec=3
 
