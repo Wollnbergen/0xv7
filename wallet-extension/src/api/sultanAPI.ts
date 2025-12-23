@@ -4,7 +4,7 @@
  * Connects to the Sultan L1 blockchain REST API.
  */
 
-// Production RPC endpoint - NYC Bootstrap validator (HTTPS via nginx)
+// Production RPC endpoint (HTTPS via nginx)
 const RPC_URL = 'https://rpc.sltn.io';
 
 export interface AccountBalance {
@@ -193,12 +193,11 @@ export async function getValidators(): Promise<Validator[]> {
     // If empty, return mock validators for the known network validators
     if (!result || result.length === 0) {
       return [
-        { address: 'validator-nyc', name: 'NYC Bootstrap', moniker: 'NYC Bootstrap', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-        { address: 'validator-sfo', name: 'SFO', moniker: 'SFO', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-        { address: 'validator-fra', name: 'FRA', moniker: 'FRA', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-        { address: 'validator-ams', name: 'AMS', moniker: 'AMS', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-        { address: 'validator-sgp', name: 'SGP', moniker: 'SGP', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-        { address: 'validator-lon', name: 'LON', moniker: 'LON', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'sultan1val01...abc', name: 'Validator Alpha', moniker: 'Validator Alpha', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'sultan1val02...def', name: 'Validator Beta', moniker: 'Validator Beta', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'sultan1val03...ghi', name: 'Validator Gamma', moniker: 'Validator Gamma', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'sultan1val04...jkl', name: 'Validator Delta', moniker: 'Validator Delta', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'sultan1val05...mno', name: 'Validator Epsilon', moniker: 'Validator Epsilon', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
       ];
     }
     
@@ -214,12 +213,11 @@ export async function getValidators(): Promise<Validator[]> {
   } catch {
     // Fallback to known validators
     return [
-      { address: 'validator-nyc', name: 'NYC Bootstrap', moniker: 'NYC Bootstrap', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-      { address: 'validator-sfo', name: 'SFO', moniker: 'SFO', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-      { address: 'validator-fra', name: 'FRA', moniker: 'FRA', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-      { address: 'validator-ams', name: 'AMS', moniker: 'AMS', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-      { address: 'validator-sgp', name: 'SGP', moniker: 'SGP', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
-      { address: 'validator-lon', name: 'LON', moniker: 'LON', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'sultan1val01...abc', name: 'Validator Alpha', moniker: 'Validator Alpha', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'sultan1val02...def', name: 'Validator Beta', moniker: 'Validator Beta', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'sultan1val03...ghi', name: 'Validator Gamma', moniker: 'Validator Gamma', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'sultan1val04...jkl', name: 'Validator Delta', moniker: 'Validator Delta', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'sultan1val05...mno', name: 'Validator Epsilon', moniker: 'Validator Epsilon', totalStaked: '1000000', commission: 0.05, uptime: 99.9, status: 'active' },
     ];
   }
 }
