@@ -112,6 +112,7 @@ export default function BecomeValidator() {
   const [success, setSuccess] = useState('');
   const [serverReady, setServerReady] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showBeginnerGuide, setShowBeginnerGuide] = useState(false);
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -227,6 +228,37 @@ export default function BecomeValidator() {
               <h2>Become a Sultan Validator</h2>
               <p className="hero-subtitle">Secure the network and earn ~13.33% APY (variable)</p>
             </div>
+
+            {/* Beginner-friendly explainer */}
+            <div className="beginner-guide-toggle" onClick={() => setShowBeginnerGuide(!showBeginnerGuide)}>
+              <span>🆕 New to this? Start here!</span>
+              <span className="toggle-arrow">{showBeginnerGuide ? '▲' : '▼'}</span>
+            </div>
+
+            {showBeginnerGuide && (
+              <div className="beginner-guide">
+                <div className="guide-item">
+                  <strong>What is a validator?</strong>
+                  <p>A validator is a computer that helps keep the Sultan network running. Think of it like being a helpful neighbor who verifies that transactions are legitimate. In return for helping, you earn rewards (~13.33% per year).</p>
+                </div>
+                <div className="guide-item">
+                  <strong>What is SSH?</strong>
+                  <p>SSH (Secure Shell) is a way to securely control a remote computer using text commands. It's like a secure phone call where you type instructions to the server.</p>
+                </div>
+                <div className="guide-item">
+                  <strong>What is a VPS/Server?</strong>
+                  <p>A VPS (Virtual Private Server) is a computer you rent in a data center. It runs 24/7 without you needing to keep your home computer on. Companies like DigitalOcean make this easy—you click a few buttons, and you have your own server!</p>
+                </div>
+                <div className="guide-item">
+                  <strong>Do I need to be a programmer?</strong>
+                  <p>No! You just need to copy-paste a few commands. If you can follow a recipe, you can do this. The whole setup takes about 5 minutes once you have your server.</p>
+                </div>
+                <div className="guide-item community">
+                  <strong>Still nervous?</strong>
+                  <p>Join our <a href="https://discord.gg/sultan" target="_blank" rel="noopener noreferrer">Discord</a> or <a href="https://t.me/sultanchain" target="_blank" rel="noopener noreferrer">Telegram</a>! Community members are happy to help beginners step-by-step.</p>
+                </div>
+              </div>
+            )}
 
             <div className="security-badge">
               <ShieldIcon />
