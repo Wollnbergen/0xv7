@@ -261,12 +261,13 @@ export async function getNetworkStatus(): Promise<NetworkStatus> {
       stakingAPY: result.validator_apy * 100, // Convert to percentage
     };
   } catch {
-    // Fallback values
+    // Fallback values - should match actual network state
+    console.warn('Failed to fetch network status, using fallback values');
     return {
       chainId: 'sultan-mainnet-1',
       blockHeight: 0,
       blockTime: 2,
-      validatorCount: 6,
+      validatorCount: 5, // Match actual network
       totalStaked: '0',
       stakingAPY: 13.33,
     };
