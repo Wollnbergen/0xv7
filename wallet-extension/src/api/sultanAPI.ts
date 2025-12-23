@@ -191,13 +191,14 @@ export async function getValidators(): Promise<Validator[]> {
     }>>('/staking/validators');
     
     // If empty, return mock validators for the known network validators
+    // Stakes are in base units (1 SLTN = 1,000,000 base units)
     if (!result || result.length === 0) {
       return [
-        { address: 'sultan1v9x7k...e3f2', name: 'Polaris Stake', moniker: 'Polaris Stake', totalStaked: '1250000', commission: 0.05, uptime: 99.8, status: 'active' },
-        { address: 'sultan1m4hp2...7a91', name: 'Titanium Node', moniker: 'Titanium Node', totalStaked: '980000', commission: 0.05, uptime: 99.9, status: 'active' },
-        { address: 'sultan1q8wnf...c4b6', name: 'CryptoForge', moniker: 'CryptoForge', totalStaked: '1100000', commission: 0.04, uptime: 99.7, status: 'active' },
-        { address: 'sultan1k3jem...5d28', name: 'BlockSentinel', moniker: 'BlockSentinel', totalStaked: '890000', commission: 0.05, uptime: 99.9, status: 'active' },
-        { address: 'sultan1z6rvt...8f4e', name: 'Nexus Labs', moniker: 'Nexus Labs', totalStaked: '1050000', commission: 0.03, uptime: 99.6, status: 'active' },
+        { address: 'sultan1v9x7k...e3f2', name: 'Polaris Stake', moniker: 'Polaris Stake', totalStaked: '45000000000', commission: 0.05, uptime: 99.8, status: 'active' },
+        { address: 'sultan1m4hp2...7a91', name: 'Titanium Node', moniker: 'Titanium Node', totalStaked: '32000000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'sultan1q8wnf...c4b6', name: 'CryptoForge', moniker: 'CryptoForge', totalStaked: '28500000000', commission: 0.04, uptime: 99.7, status: 'active' },
+        { address: 'sultan1k3jem...5d28', name: 'BlockSentinel', moniker: 'BlockSentinel', totalStaked: '19000000000', commission: 0.05, uptime: 99.9, status: 'active' },
+        { address: 'sultan1z6rvt...8f4e', name: 'Nexus Labs', moniker: 'Nexus Labs', totalStaked: '15500000000', commission: 0.03, uptime: 99.6, status: 'active' },
       ];
     }
     
@@ -212,12 +213,13 @@ export async function getValidators(): Promise<Validator[]> {
     }));
   } catch {
     // Fallback to known validators
+    // Stakes are in base units (1 SLTN = 1,000,000 base units)
     return [
-      { address: 'sultan1v9x7k...e3f2', name: 'Polaris Stake', moniker: 'Polaris Stake', totalStaked: '1250000', commission: 0.05, uptime: 99.8, status: 'active' },
-      { address: 'sultan1m4hp2...7a91', name: 'Titanium Node', moniker: 'Titanium Node', totalStaked: '980000', commission: 0.05, uptime: 99.9, status: 'active' },
-      { address: 'sultan1q8wnf...c4b6', name: 'CryptoForge', moniker: 'CryptoForge', totalStaked: '1100000', commission: 0.04, uptime: 99.7, status: 'active' },
-      { address: 'sultan1k3jem...5d28', name: 'BlockSentinel', moniker: 'BlockSentinel', totalStaked: '890000', commission: 0.05, uptime: 99.9, status: 'active' },
-      { address: 'sultan1z6rvt...8f4e', name: 'Nexus Labs', moniker: 'Nexus Labs', totalStaked: '1050000', commission: 0.03, uptime: 99.6, status: 'active' },
+      { address: 'sultan1v9x7k...e3f2', name: 'Polaris Stake', moniker: 'Polaris Stake', totalStaked: '45000000000', commission: 0.05, uptime: 99.8, status: 'active' },
+      { address: 'sultan1m4hp2...7a91', name: 'Titanium Node', moniker: 'Titanium Node', totalStaked: '32000000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'sultan1q8wnf...c4b6', name: 'CryptoForge', moniker: 'CryptoForge', totalStaked: '28500000000', commission: 0.04, uptime: 99.7, status: 'active' },
+      { address: 'sultan1k3jem...5d28', name: 'BlockSentinel', moniker: 'BlockSentinel', totalStaked: '19000000000', commission: 0.05, uptime: 99.9, status: 'active' },
+      { address: 'sultan1z6rvt...8f4e', name: 'Nexus Labs', moniker: 'Nexus Labs', totalStaked: '15500000000', commission: 0.03, uptime: 99.6, status: 'active' },
     ];
   }
 }
