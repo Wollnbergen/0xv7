@@ -1,0 +1,12 @@
+run = "npm run dev"
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+build = ["sh", "-c", "npm run build"]
+publicDir = "dist"
+
+[[ports]]
+localPort = 3000
+externalPort = 80
