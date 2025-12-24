@@ -40,7 +40,7 @@ impl ConsensusEngine {
             validators: HashMap::new(),
             current_proposer: None,
             round: 0,
-            min_stake: 10_000, // 10,000 SLTN minimum stake requirement
+            min_stake: 10_000_000_000_000, // 10,000 SLTN (with 9 decimals) - matches staking.rs
             total_stake: 0,
         }
     }
@@ -49,6 +49,11 @@ impl ConsensusEngine {
     pub fn add_validator(&mut self, address: String, stake: u64) -> Result<()> {
         if stake < self.min_stake {
             bail!("Stake {} below minimum {}", stake, self.min_stake);
+        }
+
+        // Check if validator already exists
+        if self.validators.contains_key(&address) {
+            bail!("Validator {} already exists in consensus", address);
         }
 
         let voting_power = self.calculate_voting_power(stake);
@@ -227,16 +232,20 @@ impl ConsensusEngine {
 mod tests {
     use super::*;
 
+    // 10,000 SLTN in base units (9 decimals)
+    const MIN_STAKE: u64 = 10_000_000_000_000;
+
     #[test]
     fn test_consensus_basic() {
         let mut consensus = ConsensusEngine::new();
         
-        assert!(consensus.add_validator("validator1".to_string(), 10000).is_ok());
-        assert!(consensus.add_validator("validator2".to_string(), 20000).is_ok());
-        assert!(consensus.add_validator("validator3".to_string(), 15000).is_ok());
+        // Use realistic stake amounts (10k, 20k, 15k SLTN in base units)
+        assert!(consensus.add_validator("validator1".to_string(), MIN_STAKE).is_ok());
+        assert!(consensus.add_validator("validator2".to_string(), MIN_STAKE * 2).is_ok());
+        assert!(consensus.add_validator("validator3".to_string(), MIN_STAKE + MIN_STAKE / 2).is_ok());
         
         assert_eq!(consensus.validator_count(), 3);
-        assert_eq!(consensus.total_stake, 45000);
+        assert_eq!(consensus.total_stake, MIN_STAKE + MIN_STAKE * 2 + MIN_STAKE + MIN_STAKE / 2);
         assert_eq!(consensus.required_signatures(), 3);
         
         let proposer = consensus.select_proposer();
@@ -246,9 +255,22 @@ mod tests {
     #[test]
     fn test_min_stake() {
         let mut consensus = ConsensusEngine::new();
-        // Should reject stake below 10,000 minimum
-        assert!(consensus.add_validator("low_stake".to_string(), 9999).is_err());
-        // Should accept stake at or above 10,000
-        assert!(consensus.add_validator("valid_stake".to_string(), 10000).is_ok());
+        // Should reject stake below 10,000 SLTN minimum
+        assert!(consensus.add_validator("low_stake".to_string(), MIN_STAKE - 1).is_err());
+        // Should accept stake at or above 10,000 SLTN
+        assert!(consensus.add_validator("valid_stake".to_string(), MIN_STAKE).is_ok());
+    }
+
+    #[test]
+    fn test_duplicate_validator_rejected() {
+        let mut consensus = ConsensusEngine::new();
+        // First add should succeed
+        assert!(consensus.add_validator("validator1".to_string(), MIN_STAKE).is_ok());
+        assert_eq!(consensus.total_stake, MIN_STAKE);
+        
+        // Duplicate add should fail and not double-count stake
+        assert!(consensus.add_validator("validator1".to_string(), MIN_STAKE).is_err());
+        assert_eq!(consensus.total_stake, MIN_STAKE); // Should still be MIN_STAKE, not 2x
+        assert_eq!(consensus.validator_count(), 1);
     }
 }
