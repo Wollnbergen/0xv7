@@ -1,9 +1,9 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 2.0  
-**Date:** December 2025  
-**Classification:** Internal Technical Reference
+**Version:** 3.0  
+**Date:** December 24, 2025  
+**Classification:** Public Technical Reference
 
 ---
 
@@ -31,8 +31,8 @@ Rust is a systems programming language known for:
 | Metric | Value | What It Means |
 |--------|-------|---------------|
 | Block Time | 2 seconds | New blocks every 2s (Ethereum: 12s) |
-| Active Validators | 9 | Geographically distributed nodes securing the network |
-| Blocks Produced | 45,000+ | Network has been running stably |
+| Active Validators | Dynamic | Anyone can join with 10,000 SLTN stake |
+| Active Shards | 16 | Horizontal scaling for throughput |
 | Transaction Fees | Zero (0) | Users never pay gas fees |
 | Validator APY | 13.33% | Annual return for staking |
 
@@ -52,6 +52,7 @@ Rust is a systems programming language known for:
 10. [Governance](#10-governance)
 11. [Security Architecture](#11-security-architecture)
 12. [Production File Reference](#12-production-file-reference)
+13. [Sultan Wallet (PWA)](#13-sultan-wallet-pwa)
 
 ---
 
@@ -1771,6 +1772,403 @@ Base URL: `https://rpc.sltn.io`
 
 ---
 
+## 13. Sultan Wallet (PWA)
+
+### 13.1 Overview
+
+The Sultan Wallet is a **non-custodial Progressive Web App (PWA)** that allows users to interact with the Sultan blockchain directly from any browser. It is designed with security as the primary concern - private keys never leave the user's device.
+
+**What is a PWA?**
+
+A Progressive Web App is a website that behaves like a native app:
+- **Installable** - Can be added to home screen on mobile/desktop
+- **Offline capable** - Works without internet (cached assets)
+- **No app store** - No Apple/Google approval needed
+- **Cross-platform** - Works on iOS, Android, Windows, Mac, Linux
+
+**Key Architecture Decision:**
+
+| Approach | Description | Sultan Choice |
+|----------|-------------|---------------|
+| **Custodial** | Keys stored on server | ❌ Never |
+| **Non-custodial with backend** | Keys on device, some logic on server | ❌ No |
+| **Fully client-side** | Everything runs in browser, talks directly to RPC | ✅ Yes |
+
+*Why fully client-side?* No server to hack, no custody liability, no regulatory burden. The wallet is just a frontend that talks to `rpc.sltn.io`.
+
+### 13.2 Technology Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Framework** | React 18 | UI components and state management |
+| **Language** | TypeScript 5.6 | Type-safe JavaScript |
+| **Build** | Vite 6 | Fast bundling and HMR |
+| **Crypto** | @noble/ed25519 | Ed25519 signatures (audited, pure JS) |
+| **Mnemonic** | @scure/bip39 | BIP-39 seed phrase generation (audited) |
+| **Addresses** | bech32 | Sultan address encoding (sultan1...) |
+| **Storage** | IndexedDB | Encrypted local storage |
+| **Testing** | Vitest + React Testing Library | 113 tests passing |
+
+**Why these libraries?**
+
+- `@noble/ed25519` and `@scure/bip39` are by the same author (Paul Miller) who wrote Ethereum's `noble-secp256k1`. They are audited, have zero dependencies, and are used by major wallets.
+- No backend dependencies means no attack surface beyond the user's browser.
+
+### 13.3 Wallet Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      SULTAN WALLET (PWA)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │   Screens   │  │ Components  │  │    Hooks    │              │
+│  │  - Welcome  │  │ - AddressQR │  │ - useWallet │              │
+│  │  - Create   │  │ - Mnemonic  │  │ - useBalance│              │
+│  │  - Import   │  │ - PinInput  │  │ - useTheme  │              │
+│  │  - Dashboard│  │ - TOTPSetup │  │             │              │
+│  │  - Send     │  └─────────────┘  └─────────────┘              │
+│  │  - Receive  │                                                 │
+│  │  - Stake    │  ┌─────────────────────────────────────────┐   │
+│  │  - NFTs     │  │              CORE LAYER                 │   │
+│  │  - Settings │  │  ┌─────────┐ ┌─────────┐ ┌──────────┐   │   │
+│  └─────────────┘  │  │ wallet  │ │security │ │ storage  │   │   │
+│                   │  │ .ts     │ │ .ts     │ │ .ts      │   │   │
+│                   │  └────┬────┘ └────┬────┘ └────┬─────┘   │   │
+│                   └───────┼───────────┼───────────┼─────────┘   │
+├───────────────────────────┼───────────┼───────────┼─────────────┤
+│                           ▼           ▼           ▼             │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                    BROWSER APIs                          │    │
+│  │   IndexedDB │ SubtleCrypto │ Service Worker │ Storage    │    │
+│  └─────────────────────────────────────────────────────────┘    │
+├─────────────────────────────────────────────────────────────────┤
+│                           HTTPS                                  │
+│                             ▼                                    │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                  rpc.sltn.io                             │    │
+│  │   /status │ /balance │ /transfer │ /validators │ /stake  │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 13.4 Cryptographic Flow
+
+**Wallet Creation:**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  1. Generate 256 bits of entropy (crypto.getRandomValues)    │
+│                           ▼                                   │
+│  2. Encode as 24-word BIP-39 mnemonic                        │
+│     "abandon ability able about above absent absorb..."      │
+│                           ▼                                   │
+│  3. Derive Ed25519 seed from mnemonic                        │
+│     PBKDF2(mnemonic + "mnemonic" + password, 2048 rounds)    │
+│                           ▼                                   │
+│  4. Generate Ed25519 keypair from seed                       │
+│     Private key: 32 bytes                                    │
+│     Public key: 32 bytes                                     │
+│                           ▼                                   │
+│  5. Encode public key as Bech32 address                      │
+│     sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7lmqqqxw             │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Transaction Signing:**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  1. Construct transaction object                              │
+│     { from, to, amount, memo, nonce, timestamp }             │
+│                           ▼                                   │
+│  2. Serialize to canonical JSON                               │
+│                           ▼                                   │
+│  3. Hash with SHA-512 (as per Ed25519 spec)                  │
+│                           ▼                                   │
+│  4. Sign hash with private key                               │
+│     signature = Ed25519.sign(hash, privateKey)               │
+│                           ▼                                   │
+│  5. Submit to RPC: { tx, signature, publicKey }              │
+│                           ▼                                   │
+│  6. Node verifies signature and includes in block            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 13.5 Security Model
+
+**The Principle:** Keys never leave the device.
+
+| Threat | Mitigation |
+|--------|------------|
+| **Server compromise** | No server - fully client-side |
+| **Key extraction** | Keys encrypted in IndexedDB with user PIN |
+| **Memory dump** | Keys only decrypted momentarily for signing |
+| **XSS attack** | Content Security Policy, no eval(), strict input validation |
+| **MITM attack** | HTTPS only, RPC endpoint pinning |
+| **Clipboard sniffing** | Clear clipboard after 30 seconds |
+| **Shoulder surfing** | PIN required, seed phrase hidden by default |
+| **Phishing** | No external links to sensitive actions |
+
+**Address Validation:**
+
+The wallet enforces **Sultan-only addresses** in the Send screen:
+
+```typescript
+// From security.ts
+export function validateSultanOnlyAddress(address: string): ValidationResult {
+  if (!address || typeof address !== 'string') {
+    return { valid: false, error: 'Address is required' };
+  }
+  
+  const trimmed = address.trim().toLowerCase();
+  
+  // Sultan addresses: sultan1 prefix + 38 chars = 45 total
+  if (!trimmed.startsWith('sultan1')) {
+    return { 
+      valid: false, 
+      error: 'Only Sultan addresses (sultan1...) are accepted' 
+    };
+  }
+  
+  if (trimmed.length !== 45) {
+    return { valid: false, error: 'Invalid Sultan address length' };
+  }
+  
+  // Bech32 character set validation
+  const bech32Chars = /^[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$/;
+  const addressPart = trimmed.slice(7); // After "sultan1"
+  
+  if (!bech32Chars.test(addressPart)) {
+    return { valid: false, error: 'Invalid characters in address' };
+  }
+  
+  return { valid: true };
+}
+```
+
+**Why Sultan-only?**
+
+The wallet is designed for the Sultan chain. Multi-chain addresses (0x..., bc1..., cosmos1...) are **not accepted** in the Send screen. Cross-chain transactions will be handled in a future Bridge UI, which is a separate flow with explicit warnings about bridging risks.
+
+### 13.6 Screen Flow
+
+```
+┌─────────┐     ┌──────────────┐     ┌───────────┐
+│ Welcome │────▶│ Create Wallet│────▶│ Dashboard │
+└─────────┘     │ (24 words)   │     └─────┬─────┘
+     │          └──────────────┘           │
+     │                                     ├──▶ Send
+     ▼                                     ├──▶ Receive
+┌──────────────┐                           ├──▶ Stake
+│ Import Wallet│──────────────────────────▶├──▶ NFTs
+│ (enter seed) │                           ├──▶ Governance
+└──────────────┘                           ├──▶ Activity
+                                           ├──▶ Become Validator
+                                           └──▶ Settings
+```
+
+**Screen Descriptions:**
+
+| Screen | Purpose | Key Features |
+|--------|---------|--------------|
+| **Welcome** | First-time landing | Sultan branding, Create/Import options |
+| **Create Wallet** | Generate new wallet | 24-word seed display, confirmation quiz |
+| **Import Wallet** | Restore from seed | Paste or type 12/24 words |
+| **Unlock** | PIN entry | Required after app restart |
+| **Dashboard** | Main view | Balance, quick actions, DEX link |
+| **Send** | Transfer SLTN | Sultan-only address validation |
+| **Receive** | Show address | QR code, copy button |
+| **Stake** | Delegate to validators | Validator list, APY display (13.33%) |
+| **NFTs** | Native NFT gallery | Grid/list view, transfer support |
+| **Governance** | Vote on proposals | Active proposals, voting history |
+| **Activity** | Transaction history | Sent/received list |
+| **Become Validator** | Register as validator | Stake 10,000 SLTN, moniker, etc. |
+| **Settings** | App preferences | Theme, security, export seed |
+
+### 13.7 File Structure
+
+```
+PWA/
+├── index.html                    # HTML shell (minimal)
+├── package.json                  # Dependencies
+├── vite.config.ts               # Build configuration
+├── vitest.config.ts             # Test configuration
+│
+├── public/                       # Static assets
+│   ├── pwa-192x192.svg          # PWA icon (small)
+│   ├── pwa-512x512.svg          # PWA icon (large)
+│   └── sultan-logo-*.png        # Branding
+│
+├── src/
+│   ├── main.tsx                  # React entry point
+│   ├── App.tsx                   # Router (react-router-dom)
+│   ├── index.css                 # 🎨 DESIGN SYSTEM
+│   │
+│   ├── api/
+│   │   └── sultanAPI.ts          # RPC client
+│   │
+│   ├── core/                     # Wallet primitives
+│   │   ├── wallet.ts             # Key generation, signing
+│   │   ├── security.ts           # Address validation
+│   │   ├── storage.ts            # IndexedDB wrapper
+│   │   └── totp.ts               # 2FA (optional)
+│   │
+│   ├── components/               # Reusable UI
+│   │   ├── AddressQR.tsx         # QR code display
+│   │   ├── MnemonicDisplay.tsx   # Seed phrase UI
+│   │   └── PinInput.tsx          # PIN entry
+│   │
+│   ├── screens/                  # App screens
+│   │   ├── Welcome.tsx / .css
+│   │   ├── CreateWallet.tsx / .css
+│   │   ├── Dashboard.tsx / .css
+│   │   ├── Send.tsx / .css
+│   │   ├── Stake.tsx / .css
+│   │   ├── NFTs.tsx / .css
+│   │   └── [... other screens]
+│   │
+│   └── hooks/                    # React hooks
+│       ├── useWallet.tsx         # Wallet context
+│       ├── useBalance.ts         # Balance fetching
+│       └── useTheme.tsx          # Dark/light mode
+│
+└── audit/                        # Security documentation
+    ├── THREAT_MODEL.md
+    ├── DEPENDENCIES.md
+    └── CHECKLIST.md
+```
+
+### 13.8 Design System
+
+All styling is controlled via CSS variables in `src/index.css`. This allows the entire app appearance to be changed by editing one file.
+
+```css
+:root {
+  /* Primary Colors */
+  --color-primary: #6366f1;           /* Indigo - main brand */
+  --color-primary-hover: #4f46e5;     /* Darker on hover */
+  --color-secondary: #22c55e;         /* Green - success/stake */
+  
+  /* Background */
+  --color-bg-primary: #0a0a0f;        /* Deep dark */
+  --color-bg-secondary: #1a1a2e;      /* Card backgrounds */
+  --color-bg-tertiary: #16213e;       /* Elevated elements */
+  
+  /* Text */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #6b7280;
+  
+  /* Semantic */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+  
+  /* Effects */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.3);
+}
+```
+
+**To rebrand:** Change the `--color-*` variables. The entire app updates automatically.
+
+### 13.9 RPC Integration
+
+The wallet communicates with the Sultan node via REST API:
+
+```typescript
+// From sultanAPI.ts
+const RPC_BASE = 'https://rpc.sltn.io';
+
+export async function getBalance(address: string): Promise<string> {
+  const res = await fetch(`${RPC_BASE}/balance/${address}`);
+  const data = await res.json();
+  return data.balance || '0';
+}
+
+export async function submitTransaction(tx: SignedTransaction): Promise<TxResult> {
+  const res = await fetch(`${RPC_BASE}/transfer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tx),
+  });
+  return res.json();
+}
+
+export async function getValidators(): Promise<Validator[]> {
+  const res = await fetch(`${RPC_BASE}/validators`);
+  const data = await res.json();
+  return data.validators || [];
+}
+
+export async function stake(delegation: StakeRequest): Promise<TxResult> {
+  const res = await fetch(`${RPC_BASE}/stake`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(delegation),
+  });
+  return res.json();
+}
+```
+
+### 13.10 Testing
+
+The wallet has 113 tests covering critical paths:
+
+| Test File | Count | Coverage |
+|-----------|-------|----------|
+| `wallet.test.ts` | 12 | Key generation, signing, derivation |
+| `security.test.ts` | 15 | Address validation, auth |
+| `storage.secure.test.ts` | 8 | Encrypted storage |
+| `multichain.test.ts` | 27 | Address format validation |
+| `nfts.test.tsx` | 7 | NFT gallery UI |
+| Component tests | 44 | Screen rendering, interactions |
+
+**Running tests:**
+
+```bash
+npm test              # Run all tests
+npm run test:coverage # With coverage report
+```
+
+### 13.11 Deployment
+
+**Repository:** `github.com/Wollnbergen/PWA`
+
+**Build:**
+```bash
+npm install
+npm run build        # Outputs to dist/
+```
+
+**Deployment options:**
+- **Replit** - Clone, `npm install`, `npm run dev`
+- **Vercel** - Connect repo, auto-deploys
+- **Netlify** - Same as Vercel
+- **Self-hosted** - Serve `dist/` folder via nginx
+
+**PWA Requirements:**
+- HTTPS (required for service worker)
+- `manifest.json` in public folder
+- Service worker for offline caching
+
+---
+
 ## Appendix A: Comprehensive Glossary
 
 | Term | Definition | Why It Matters |
@@ -1864,7 +2262,7 @@ Base URL: `https://rpc.sltn.io`
 │  Transaction Fees:    ZERO - Always, Forever                    │
 │  Block Time:          2 seconds                                 │
 │  Finality:            Instant (single block)                    │
-│  Launch TPS:          64,000 (8 shards × 8K each)              │
+│  Launch TPS:          64,000 (16 shards × 4K each)              │
 │  Max TPS:             64 million (8,000 shards)                 │
 │  Validator APY:       13.33% (capped)                           │
 │  Minimum Stake:       10,000 SLTN                               │
@@ -1873,20 +2271,60 @@ Base URL: `https://rpc.sltn.io`
 │  Storage:             RocksDB                                   │
 │  Networking:          libp2p (Gossipsub + Kademlia)             │
 │  Language:            Rust (100% native, not a fork)            │
+│  Binary Size:         14MB (stripped, LTO-optimized)            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **The Elevator Pitch:**
 
-> "Sultan is a Layer 1 blockchain with zero transaction fees, built in Rust from scratch. We use validator inflation instead of gas fees, so users never pay. We launch with 8 shards at 64,000 TPS and can scale to 64 million TPS. The network is live with 9 validators and 45,000+ blocks produced."
+> "Sultan is a Layer 1 blockchain with zero transaction fees, built in Rust from scratch. We use validator inflation instead of gas fees, so users never pay. We launch with 16 shards at 64,000 TPS and can scale to 64 million TPS. The network is live with 6 validators across 6 global regions."
 
 **The 30-Second Technical:**
 
-> "We're a native Rust L1, not a Cosmos or Ethereum fork. Zero fees work through 4% fixed inflation distributed to stakers at up to 13.33% APY. Sharding gives us horizontal scaling - 8 shards at launch, expandable to 8,000. Cross-shard transactions use two-phase commit with Merkle proofs for atomicity. Ed25519 for signatures, RocksDB for storage, libp2p for networking. All battle-tested components, novel zero-fee economics."
+> "We're a native Rust L1, not a Cosmos or Ethereum fork. Zero fees work through 4% fixed inflation distributed to stakers at up to 13.33% APY. Sharding gives us horizontal scaling - 16 shards at launch, expandable to 8,000. Cross-shard transactions use two-phase commit with Merkle proofs for atomicity. Ed25519 for signatures, RocksDB for storage, libp2p for networking. All battle-tested components, novel zero-fee economics."
+
+---
+
+## Appendix D: Final Production Binary
+
+**Build Date:** December 22, 2025  
+**BuildID:** `8c15d859ff9eeca274102d30084a0a0c8b3fe6ad`
+
+**Binary Specifications:**
+| Property | Value |
+|----------|-------|
+| Size | 14MB |
+| Format | ELF 64-bit x86-64 |
+| Optimization | `opt-level = 3` |
+| LTO | Full ("fat") |
+| Codegen Units | 1 |
+| Panic | Abort |
+| Symbols | Stripped |
+
+**Release Profile (Cargo.toml):**
+```toml
+[profile.release]
+opt-level = 3           # Maximum optimization
+lto = "fat"             # Full Link-Time Optimization
+codegen-units = 1       # Single codegen unit
+panic = "abort"         # No unwinding
+strip = true            # Remove symbols
+overflow-checks = false # Performance
+```
+
+**Validator Deployment:**
+
+Validators are decentralized and permissionless. Anyone can become a validator by staking 10,000+ SLTN through the Sultan Wallet or by running their own node.
+
+**Network Endpoints:**
+| Service | URL |
+|---------|-----|
+| RPC | https://rpc.sltn.io |
+| Wallet | https://wallet.sltn.io |
 
 ---
 
 **Document Maintainer:** Sultan Core Team  
-**Last Updated:** December 13, 2025  
-**Version:** 2.0
+**Last Updated:** December 24, 2025  
+**Version:** 3.0
 

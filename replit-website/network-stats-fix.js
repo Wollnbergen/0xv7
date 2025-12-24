@@ -46,10 +46,10 @@
             validatorsEl.textContent = data.validator_count + ' / 11';
         }
 
-        // TPS Capacity - calculate from shard_count (8 shards × 8000 TPS each)
+        // TPS Capacity - calculate from shard_count (16 shards × 4000 TPS each = 64K)
         const tpsEl = document.getElementById('tps-capacity');
         if (tpsEl && data.shard_count) {
-            const tps = data.shard_count * 8000; // 8K TPS per shard
+            const tps = data.shard_count * 4000; // 4K TPS per shard
             tpsEl.textContent = tps >= 1000 ? (tps / 1000) + 'K' : tps;
         }
 

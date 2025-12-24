@@ -245,7 +245,7 @@ impl GovernanceManager {
         // === Require discussion link for non-emergency proposals ===
         if proposal_type != ProposalType::EmergencyAction {
             if telegram_discussion_url.is_none() && discord_discussion_url.is_none() {
-                bail!("Proposals require a Telegram or Discord discussion link. Create a discussion in our community first: https://t.me/SultanChain");
+                bail!("Proposals require a Discord or Telegram discussion link. Create a discussion in our community first: https://discord.com/channels/1375878827460395142/1453111965428875537");
             }
         }
 

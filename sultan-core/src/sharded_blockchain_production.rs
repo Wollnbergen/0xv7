@@ -108,7 +108,13 @@ impl ShardedBlockchainProduction {
         drop(blocks);
 
         // Get state root from shard 0 (or aggregate all shards)
-        let state_root = hex::encode(self.coordinator.shards[0].get_state_root().await);
+        let shards = self.coordinator.shards.read().await;
+        let state_root = if shards.is_empty() {
+            String::from("empty")
+        } else {
+            hex::encode(shards[0].get_state_root().await)
+        };
+        drop(shards);
 
         let block = Block {
             index,
@@ -199,17 +205,24 @@ impl ShardedBlockchainProduction {
     }
 
     /// Get total TPS capacity
-    pub fn get_tps_capacity(&self) -> u64 {
-        self.coordinator.get_tps_capacity()
+    pub async fn get_tps_capacity(&self) -> u64 {
+        self.coordinator.get_tps_capacity().await
     }
 
     /// Get shard health status
     pub async fn get_shard_health(&self) -> Vec<(usize, bool)> {
+        let shards = self.coordinator.shards.read().await;
         let mut health = Vec::new();
-        for shard in &self.coordinator.shards {
+        for shard in shards.iter() {
             health.push((shard.id, shard.is_healthy().await));
         }
         health
+    }
+    
+    /// Expand shards dynamically when load exceeds threshold
+    /// Delegates to the coordinator which uses interior mutability
+    pub async fn expand_shards(&self, additional_shards: usize) -> anyhow::Result<()> {
+        self.coordinator.expand_shards(additional_shards).await
     }
 }
 
@@ -295,7 +308,7 @@ mod tests {
         };
 
         let blockchain = ShardedBlockchainProduction::new(config);
-        let capacity = blockchain.get_tps_capacity();
+        let capacity = blockchain.get_tps_capacity().await;
         
         // 1024 shards * 8000 tx/shard / 2 sec blocks = 4,096,000 TPS
         assert_eq!(capacity, 4_096_000);

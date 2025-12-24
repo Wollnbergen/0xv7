@@ -85,6 +85,7 @@ pub struct P2PNetwork {
     known_validators: Arc<RwLock<HashSet<String>>>,
     message_tx: Option<mpsc::UnboundedSender<NetworkMessage>>,
     message_rx: Option<mpsc::UnboundedReceiver<NetworkMessage>>,
+    broadcast_tx: Option<mpsc::UnboundedSender<(String, Vec<u8>)>>, // (topic, data)
     is_running: Arc<RwLock<bool>>,
     listen_addr: Option<Multiaddr>,
     bootstrap_peers: Vec<Multiaddr>,
@@ -99,6 +100,7 @@ impl P2PNetwork {
         info!("🔐 Node PeerId: {}", peer_id);
         
         let (message_tx, message_rx) = mpsc::unbounded_channel();
+        let (broadcast_tx, _broadcast_rx) = mpsc::unbounded_channel();
         
         Ok(P2PNetwork {
             local_key,
@@ -107,6 +109,7 @@ impl P2PNetwork {
             known_validators: Arc::new(RwLock::new(HashSet::new())),
             message_tx: Some(message_tx),
             message_rx: Some(message_rx),
+            broadcast_tx: Some(broadcast_tx),
             is_running: Arc::new(RwLock::new(false)),
             listen_addr: None,
             bootstrap_peers: Vec::new(),
@@ -119,6 +122,7 @@ impl P2PNetwork {
         info!("🔐 Node PeerId: {}", peer_id);
         
         let (message_tx, message_rx) = mpsc::unbounded_channel();
+        let (broadcast_tx, _broadcast_rx) = mpsc::unbounded_channel();
         
         Ok(P2PNetwork {
             local_key: keypair,
@@ -127,6 +131,7 @@ impl P2PNetwork {
             known_validators: Arc::new(RwLock::new(HashSet::new())),
             message_tx: Some(message_tx),
             message_rx: Some(message_rx),
+            broadcast_tx: Some(broadcast_tx),
             is_running: Arc::new(RwLock::new(false)),
             listen_addr: None,
             bootstrap_peers: Vec::new(),
@@ -234,8 +239,13 @@ impl P2PNetwork {
 
         // Clone Arc references for the event loop
         let connected_peers = self.connected_peers.clone();
+        let known_validators = self.known_validators.clone();
         let is_running = self.is_running.clone();
         let message_tx = self.message_tx.clone();
+        
+        // Create broadcast channel - receiver for event loop, sender stays in self
+        let (broadcast_tx, mut broadcast_rx) = mpsc::unbounded_channel::<(String, Vec<u8>)>();
+        self.broadcast_tx = Some(broadcast_tx);
 
         // Spawn the swarm event loop
         tokio::spawn(async move {
@@ -245,36 +255,55 @@ impl P2PNetwork {
                     break;
                 }
 
-                match swarm.select_next_some().await {
-                    SwarmEvent::NewListenAddr { address, .. } => {
-                        info!("📡 Listening on {}", address);
-                    }
-                    SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                        info!("🤝 Connected to peer: {}", peer_id);
-                        connected_peers.write().await.insert(peer_id);
-                    }
-                    SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                        info!("👋 Disconnected from peer: {}", peer_id);
-                        connected_peers.write().await.remove(&peer_id);
-                    }
-                    SwarmEvent::Behaviour(event) => {
-                        match event {
-                            SultanBehaviourEvent::Gossipsub(gossipsub::Event::Message { message, .. }) => {
-                                // Parse and forward message
-                                if let Ok(network_msg) = bincode::deserialize::<NetworkMessage>(&message.data) {
-                                    debug!("📨 Received message: {:?}", network_msg);
-                                    if let Some(tx) = &message_tx {
-                                        let _ = tx.send(network_msg);
-                                    }
-                                }
-                            }
-                            SultanBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, .. }) => {
-                                debug!("📋 Kademlia routing updated for peer: {}", peer);
-                            }
-                            _ => {}
+                tokio::select! {
+                    // Handle broadcast requests
+                    Some((topic, data)) = broadcast_rx.recv() => {
+                        // Publish to gossipsub
+                        let topic_obj = IdentTopic::new(&topic);
+                        match swarm.behaviour_mut().gossipsub.publish(topic_obj, data) {
+                            Ok(_) => info!("📡 Published message to gossipsub topic: {}", topic),
+                            Err(e) => warn!("Failed to publish to gossipsub: {}", e),
                         }
                     }
-                    _ => {}
+                    // Handle swarm events
+                    event = swarm.select_next_some() => match event {
+                        SwarmEvent::NewListenAddr { address, .. } => {
+                            info!("📡 Listening on {}", address);
+                        }
+                        SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                            info!("🤝 Connected to peer: {}", peer_id);
+                            connected_peers.write().await.insert(peer_id);
+                        }
+                        SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                            info!("👋 Disconnected from peer: {}", peer_id);
+                            connected_peers.write().await.remove(&peer_id);
+                        }
+                        SwarmEvent::Behaviour(event) => {
+                            match event {
+                                SultanBehaviourEvent::Gossipsub(gossipsub::Event::Message { message, .. }) => {
+                                    // Parse and forward message
+                                    if let Ok(network_msg) = bincode::deserialize::<NetworkMessage>(&message.data) {
+                                        debug!("📨 Received message: {:?}", network_msg);
+                                        
+                                        // Handle validator announcements - register them
+                                        if let NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id } = network_msg {
+                                            info!("🗳️ Validator announced: {} (stake: {}, peer: {})", address, stake, peer_id);
+                                            known_validators.write().await.insert(address.clone());
+                                        }
+                                        
+                                        if let Some(tx) = &message_tx {
+                                            let _ = tx.send(network_msg);
+                                        }
+                                    }
+                                }
+                                SultanBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, .. }) => {
+                                    debug!("📋 Kademlia routing updated for peer: {}", peer);
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
         });
@@ -338,10 +367,18 @@ impl P2PNetwork {
     /// Internal: broadcast message to a topic
     async fn broadcast_message(&self, topic: &str, msg: NetworkMessage) -> Result<()> {
         let data = bincode::serialize(&msg)?;
-        debug!("📢 Broadcasting to {}: {} bytes", topic, data.len());
         
-        // The actual publishing happens through the swarm
-        // For now, we send through the channel and let the integration handle it
+        // Send to broadcast channel for gossipsub publishing
+        if let Some(tx) = &self.broadcast_tx {
+            info!("📢 Broadcasting to {} via gossipsub: {} bytes", topic, data.len());
+            if let Err(e) = tx.send((topic.to_string(), data)) {
+                warn!("Failed to send to broadcast channel: {}", e);
+            }
+        } else {
+            warn!("⚠️ broadcast_tx is None - cannot publish to gossipsub");
+        }
+        
+        // Also send to local message channel for processing
         if let Some(tx) = &self.message_tx {
             tx.send(msg)?;
         }

@@ -20,7 +20,7 @@ Sultan is a **sovereign Layer 1 blockchain** built entirely in Rust from first p
 
 **Sultan is:**
 - ✅ 100% custom Rust implementation
-- ✅ Native sharding (8 shards live, scaling to 8,000)
+- ✅ Native sharding (16 shards at launch, auto-scaling to 8,000+)
 - ✅ Zero gas fees by design
 - ✅ 2-second block finality
 - ✅ Ed25519 + Dilithium3 (post-quantum) cryptography

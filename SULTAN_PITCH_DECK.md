@@ -116,7 +116,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 - Built from scratch, not framework-dependent
 - 50-105µs block creation (500-1000x faster than typical)
 - Memory-safe without garbage collection pauses
-- 22MB optimized binary vs 500MB+ framework deployments
+- 14MB optimized binary vs 500MB+ framework deployments
 
 ---
 
@@ -190,7 +190,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 | Metric | Sultan (Native Rust) | Typical Framework |
 |--------|---------------------|-------------------|
 | Block Creation | 50-105µs | 100-500ms |
-| Binary Size | 22MB | 500MB+ |
+| Binary Size | 14MB | 500MB+ |
 | Minimum RAM | 1GB | 8-16GB |
 | GC Pauses | None | Frequent |
 | Startup Time | <1 second | 30-60 seconds |
@@ -351,7 +351,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 | **Name** | Sultan Token |
 | **Symbol** | SLTN |
 | **Genesis Supply** | 500,000,000 |
-| **Decimals** | 8 |
+| **Decimals** | 9 |
 | **Type** | Native L1 Token |
 
 ---

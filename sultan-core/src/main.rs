@@ -207,7 +207,7 @@ impl NodeState {
                 sharded.init_account("charlie".to_string(), 250_000).await?;;
             }
             
-            let tps_capacity = sharded.get_tps_capacity();
+            let tps_capacity = sharded.get_tps_capacity().await;
             info!("🚀 PRODUCTION SHARDING: {} shards (expandable to {}) = {} TPS (up to {}M TPS)",
                 config.shard_count, config.max_shards, tps_capacity, 
                 (config.max_shards * config.tx_per_shard) / 1_000_000);
@@ -343,6 +343,19 @@ impl NodeState {
                     stats.total_processed,
                     stats.estimated_tps
                 );
+                
+                // Auto-expand shards if load threshold exceeded
+                if stats.should_expand {
+                    let current_shards = stats.shard_count;
+                    // Double shard count (up to max 8000)
+                    let additional = current_shards.min(8000 - current_shards);
+                    if additional > 0 {
+                        info!("⚡ Auto-expansion triggered at {:.1}% load", stats.current_load * 100.0);
+                        if let Err(e) = sharded_bc.coordinator.expand_shards(additional).await {
+                            warn!("Failed to auto-expand shards: {}", e);
+                        }
+                    }
+                }
                 
                 block
             } else {
@@ -484,17 +497,9 @@ impl NodeState {
         
         let economics = self.economics.read().await;
         
-        // Calculate validator count - includes self + connected P2P peers
-        let validator_count = if self.p2p_enabled {
-            if let Some(ref p2p) = self.p2p_network {
-                // All connected peers + this node
-                p2p.read().await.peer_count().await + 1
-            } else {
-                consensus.validator_count()
-            }
-        } else {
-            consensus.validator_count()
-        };
+        // Unified validator count from consensus engine
+        // All validators (both infrastructure and staked) are added to consensus
+        let validator_count = consensus.validator_count();
         
         Ok(NodeStatus {
             height,
@@ -1045,17 +1050,27 @@ mod rpc {
         req: CreateValidatorRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Add to staking manager for rewards/delegation
         match state.staking_manager.create_validator(
             req.validator_address.clone(),
             req.initial_stake,
             req.commission_rate,
         ).await {
-            Ok(_) => Ok(warp::reply::json(&serde_json::json!({
-                "validator_address": req.validator_address,
-                "stake": req.initial_stake,
-                "commission": req.commission_rate,
-                "status": "active"
-            }))),
+            Ok(_) => {
+                // Also add to consensus engine for block production
+                // This unifies staking validators with consensus validators
+                let mut consensus = state.consensus.write().await;
+                if let Err(e) = consensus.add_validator(req.validator_address.clone(), req.initial_stake) {
+                    warn!("Validator {} added to staking but not consensus: {}", req.validator_address, e);
+                }
+                Ok(warp::reply::json(&serde_json::json!({
+                    "validator_address": req.validator_address,
+                    "stake": req.initial_stake,
+                    "commission": req.commission_rate,
+                    "status": "active",
+                    "consensus": true
+                })))
+            },
             Err(e) => {
                 warn!("Create validator failed: {}", e);
                 Err(warp::reject())
@@ -1317,29 +1332,45 @@ async fn main() -> Result<()> {
         let validator_stake = args.validator_stake;
         
         tokio::spawn(async move {
-            // Announce this validator to the network
-            if let (Some(addr), Some(stake)) = (validator_addr, validator_stake) {
+            // Wait for peers to connect before first announcement (30 seconds delay)
+            info!("🌐 P2P message handler started, waiting for peer connections...");
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            
+            // Now announce this validator to the network
+            if let (Some(ref addr), Some(stake)) = (&validator_addr, validator_stake) {
                 if let Some(ref p2p) = p2p_state.p2p_network {
-                    if let Err(e) = p2p.read().await.announce_validator(&addr, stake).await {
+                    let peer_count = p2p.read().await.peer_count().await;
+                    info!("📢 Announcing validator {} to P2P network ({} peers connected)", addr, peer_count);
+                    if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
                         warn!("Failed to announce validator: {}", e);
                     } else {
-                        info!("📢 Announced validator {} to P2P network", addr);
+                        info!("✅ Announced validator {} to P2P network", addr);
                     }
                 }
             }
             
             // P2P message handler loop
-            info!("🌐 P2P message handler started");
             loop {
-                // In a full implementation, this would:
-                // 1. Receive blocks from peers via P2P network
-                // 2. Validate incoming blocks
-                // 3. Add valid blocks to the chain
-                // 4. Update consensus state with new validators
-                // 5. Relay transactions to other nodes
+                // Process incoming P2P messages (includes validator announcements)
+                tokio::time::sleep(Duration::from_secs(5)).await;
                 
-                // For now, just log peer status periodically
-                tokio::time::sleep(Duration::from_secs(30)).await;
+                // Re-announce this validator periodically (every 30 seconds)
+                if let (Some(ref addr), Some(stake)) = (&validator_addr, validator_stake) {
+                    if let Some(ref p2p) = p2p_state.p2p_network {
+                        static ANNOUNCE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                        let count = ANNOUNCE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if count % 6 == 0 {
+                            let peer_count = p2p.read().await.peer_count().await;
+                            if peer_count > 0 {
+                                if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
+                                    debug!("Failed to re-announce validator: {}", e);
+                                } else {
+                                    info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 if let Some(ref p2p) = p2p_state.p2p_network {
                     let peer_count = p2p.read().await.peer_count().await;

@@ -312,18 +312,18 @@ mod tests {
             "Transfer Test".to_string(),
             "TT".to_string(),
             6,
-            1000,
+            1_000_000,
             None,
             None,
             None,
         ).await.unwrap();
         
         // Transfer tokens
-        factory.transfer(&denom, "sultan1alice", "sultan1bob", 300).await.unwrap();
+        factory.transfer(&denom, "sultan1alice", "sultan1bob", 300_000).await.unwrap();
         
         // Verify balances
-        assert_eq!(factory.get_balance(&denom, "sultan1alice").await, 700);
-        assert_eq!(factory.get_balance(&denom, "sultan1bob").await, 300);
+        assert_eq!(factory.get_balance(&denom, "sultan1alice").await, 700_000);
+        assert_eq!(factory.get_balance(&denom, "sultan1bob").await, 300_000);
     }
     
     #[tokio::test]
@@ -335,19 +335,19 @@ mod tests {
             "Burn Test".to_string(),
             "BT".to_string(),
             6,
-            1000,
+            1_000_000,
             None,
             None,
             None,
         ).await.unwrap();
         
         // Burn tokens
-        factory.burn(&denom, "sultan1alice", 300).await.unwrap();
+        factory.burn(&denom, "sultan1alice", 300_000).await.unwrap();
         
         // Verify balance
-        assert_eq!(factory.get_balance(&denom, "sultan1alice").await, 700);
+        assert_eq!(factory.get_balance(&denom, "sultan1alice").await, 700_000);
         
         // Verify total supply decreased
-        assert_eq!(factory.get_total_supply(&denom).await, 700);
+        assert_eq!(factory.get_total_supply(&denom).await, 700_000);
     }
 }

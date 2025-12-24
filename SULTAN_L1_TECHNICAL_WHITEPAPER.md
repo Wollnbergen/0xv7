@@ -2,10 +2,10 @@
 
 ## Technical Whitepaper
 
-**Version:** 2.0  
-**Date:** December 8, 2025  
+**Version:** 3.0  
+**Date:** December 24, 2025  
 **Status:** Production Mainnet Live  
-**Network:** Globally Distributed (15 Validators)
+**Network:** Globally Distributed, Fully Decentralized
 
 ---
 
@@ -19,9 +19,9 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 |---------------|-------|
 | **Block Time** | 2.00 seconds (verified) |
 | **Finality** | Immediate (single-block) |
-| **Active Shards** | 8 |
+| **Active Shards** | 16 |
 | **TPS Capacity** | 64,000 (base) → 64M (max) |
-| **Validators** | 15 (globally distributed) |
+| **Validators** | Dynamic (anyone can join with 10,000 SLTN stake) |
 | **Consensus** | Custom Proof-of-Stake |
 | **Network Protocol** | libp2p |
 | **Cryptography** | Ed25519 + Dilithium3 (Post-Quantum) |
@@ -29,7 +29,8 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Staking APY** | 13.33% |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
-**P2P Bootstrap:** `/dns4/rpc.sltn.io/tcp/26656`
+**P2P Bootstrap:** See [Validator Guide](VALIDATOR_GUIDE.md) for bootstrap peers  
+**Binary:** 14MB (stripped, LTO-optimized)
 
 ---
 
@@ -74,14 +75,14 @@ We made a deliberate architectural decision to build Sultan as a **pure Rust imp
 - **50-105µs block creation** (vs 100-500ms for typical frameworks)
 - **Memory safety** without garbage collection pauses
 - **Deterministic performance** under high load
-- **Smaller binary size** (22MB production binary)
+- **Smaller binary size** (14MB production binary, stripped with LTO)
 - **Lower validator requirements** (1GB RAM minimum)
 
 ### 1.3 Core Innovations
 
 1. **Native Rust Blockchain Engine** - Built from first principles, not framework-dependent
 2. **libp2p Networking** - Battle-tested P2P with Kademlia DHT and GossipSub
-3. **Dynamic Sharding** - Horizontal scaling from 8 to 8,000 shards
+3. **Dynamic Sharding** - Horizontal scaling from 16 to 8,000+ shards
 4. **Zero Gas Fees** - Sustainable economics through inflation-based validator rewards
 5. **Post-Quantum Security** - Dilithium3 signatures for future-proof protection
 6. **Instant Finality** - No confirmation wait times, single-block settlement
@@ -706,6 +707,19 @@ Sultan is designed for multi-chain interoperability through purpose-built bridge
 - Unbonding period: 21 days
 
 ### 10.2 Setup Process
+
+**Option 1: Sultan Wallet (Recommended)**
+
+The easiest way to become a validator is through the Sultan Wallet PWA at [wallet.sltn.io](https://wallet.sltn.io):
+
+1. Connect your wallet with 10,000+ SLTN
+2. Navigate to Validators → Become a Validator
+3. Enter your validator name and stake amount
+4. Sign the transaction
+
+Your validator is immediately active in consensus!
+
+**Option 2: Run Your Own Node**
 
 ```bash
 # 1. Download latest release

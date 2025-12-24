@@ -5,6 +5,8 @@
       <stop offset="100%" style="stop-color:#00e5cc;stop-opacity:1" />
     </linearGradient>
   </defs>
-  <circle cx="256" cy="256" r="240" fill="url(#sultanGradient)"/>
-  <text x="256" y="320" text-anchor="middle" font-size="260" font-weight="bold" fill="#000000" font-family="Arial, sans-serif">S</text>
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#0a0a0f"/>
+  <!-- Sultan Crown Logo -->
+  <path d="M76 360 L76 200 L156 280 L256 120 L356 280 L436 200 L436 360 L256 440 Z" fill="none" stroke="url(#sultanGradient)" stroke-width="28" stroke-linejoin="miter"/>
 </svg>

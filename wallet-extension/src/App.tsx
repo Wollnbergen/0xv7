@@ -10,9 +10,11 @@ import Dashboard from './screens/Dashboard';
 import Send from './screens/Send';
 import Receive from './screens/Receive';
 import Stake from './screens/Stake';
+import BecomeValidator from './screens/BecomeValidator';
 import Settings from './screens/Settings';
 import Activity from './screens/Activity';
 import Governance from './screens/Governance';
+import NFTs from './screens/NFTs';
 
 function App() {
   const { isInitialized, isLocked, isLoading } = useWallet();
@@ -63,6 +65,10 @@ function App() {
         element={isInitialized && !isLocked ? <Stake /> : <Navigate to="/" replace />} 
       />
       <Route 
+        path="/become-validator" 
+        element={isInitialized && !isLocked ? <BecomeValidator /> : <Navigate to="/" replace />} 
+      />
+      <Route 
         path="/settings" 
         element={isInitialized && !isLocked ? <Settings /> : <Navigate to="/" replace />} 
       />
@@ -73,6 +79,10 @@ function App() {
       <Route 
         path="/governance" 
         element={isInitialized && !isLocked ? <Governance /> : <Navigate to="/" replace />} 
+      />
+      <Route 
+        path="/nfts" 
+        element={isInitialized && !isLocked ? <NFTs /> : <Navigate to="/" replace />} 
       />
       
       {/* Fallback */}

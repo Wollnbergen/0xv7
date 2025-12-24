@@ -99,7 +99,7 @@ pub async fn swap(
 | Minimum Validator Stake | 10,000 SLTN |
 | Validator APY | ~13.33% |
 | Gas Fees | Zero (subsidized by inflation) |
-| Shards | 8 at launch (expandable to 8000) |
+| Shards | 16 at launch (expandable to 8000) |
 | Consensus | Proof of Stake |
 
 ---
@@ -119,8 +119,8 @@ The `_archive/` folder contains legacy/experimental code:
 
 ### Production
 - **RPC:** https://rpc.sltn.io
-- **Validators:** 9 active
-- **Block Height:** 45,000+
+- **Wallet:** https://wallet.sltn.io
+- **Validators:** Dynamic (anyone can join with 10,000 SLTN)
 
 ### Development
 ```bash

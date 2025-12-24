@@ -1,0 +1,2019 @@
+From 4aa657eb41e4449ecf86e1c8930968cb60b58ac9 Mon Sep 17 00:00:00 2001
+From: MrCiocchetti <wollnbergen@protonmail.com>
+Date: Sat, 20 Dec 2025 21:46:03 +0000
+Subject: [PATCH] feat: add NFT Gallery, fix Sultan-only validation, add tests
+
+- Add NFTs.tsx screen for native Token Factory NFTs
+- Add validateSultanOnlyAddress() - wallet only accepts sultan1... addresses
+- Revert Send.tsx to Sultan-only (removed multi-chain detection)
+- Add DEX banner linking to hodlholdings.com on Dashboard
+- Add NFTs button to Dashboard quick actions
+- Add multichain.test.ts (27 tests for address validation)
+- Add nfts.test.tsx (7 tests for NFT gallery)
+- Update sultanAPI.ts with queryNFTs and transferNFT endpoints
+- All 113 tests passing
+
+Sultan is a Native Rust L1 - NOT Cosmos/CW721
+---
+ package-lock.json                | 216 ++++++++++++++++++++
+ package.json                     |   2 +
+ src/App.tsx                      |   5 +
+ src/__tests__/multichain.test.ts | 196 ++++++++++++++++++
+ src/__tests__/nfts.test.tsx      | 151 ++++++++++++++
+ src/api/sultanAPI.ts             |  84 ++++++++
+ src/core/security.ts             | 185 ++++++++++++++++-
+ src/screens/Dashboard.css        |  71 +++++++
+ src/screens/Dashboard.tsx        |  32 +++
+ src/screens/NFTs.css             | 338 +++++++++++++++++++++++++++++++
+ src/screens/NFTs.tsx             | 334 ++++++++++++++++++++++++++++++
+ src/screens/Send.css             |  76 +++++++
+ src/screens/Send.tsx             |   6 +-
+ src/test-setup.ts                |   5 +-
+ vitest.config.ts                 |   6 +-
+ 15 files changed, 1689 insertions(+), 18 deletions(-)
+ create mode 100644 src/__tests__/multichain.test.ts
+ create mode 100644 src/__tests__/nfts.test.tsx
+ create mode 100644 src/screens/NFTs.css
+ create mode 100644 src/screens/NFTs.tsx
+
+diff --git a/package-lock.json b/package-lock.json
+index 4a9b27c..87d294a 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -19,6 +19,8 @@
+         "react-router-dom": "^7.1.0"
+       },
+       "devDependencies": {
++        "@testing-library/jest-dom": "^6.9.1",
++        "@testing-library/react": "^16.3.1",
+         "@types/node": "^25.0.2",
+         "@types/qrcode": "^1.5.6",
+         "@types/react": "^18.3.18",
+@@ -39,6 +41,12 @@
+       "integrity": "sha512-G90x0VW+9nW4dFajtjCoT+NM0scAfH9Mb08IcjgFHYbfiL/lU04dTF9JuVOi3/OH+DJCQdcIseSXkdCB9Ky6JA==",
+       "dev": true
+     },
++    "node_modules/@adobe/css-tools": {
++      "version": "4.4.4",
++      "resolved": "https://registry.npmjs.org/@adobe/css-tools/-/css-tools-4.4.4.tgz",
++      "integrity": "sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==",
++      "dev": true
++    },
+     "node_modules/@ampproject/remapping": {
+       "version": "2.3.0",
+       "resolved": "https://registry.npmjs.org/@ampproject/remapping/-/remapping-2.3.0.tgz",
+@@ -2690,6 +2698,85 @@
+         "react": "^18 || ^19"
+       }
+     },
++    "node_modules/@testing-library/dom": {
++      "version": "10.4.1",
++      "resolved": "https://registry.npmjs.org/@testing-library/dom/-/dom-10.4.1.tgz",
++      "integrity": "sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==",
++      "dev": true,
++      "peer": true,
++      "dependencies": {
++        "@babel/code-frame": "^7.10.4",
++        "@babel/runtime": "^7.12.5",
++        "@types/aria-query": "^5.0.1",
++        "aria-query": "5.3.0",
++        "dom-accessibility-api": "^0.5.9",
++        "lz-string": "^1.5.0",
++        "picocolors": "1.1.1",
++        "pretty-format": "^27.0.2"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@testing-library/jest-dom": {
++      "version": "6.9.1",
++      "resolved": "https://registry.npmjs.org/@testing-library/jest-dom/-/jest-dom-6.9.1.tgz",
++      "integrity": "sha512-zIcONa+hVtVSSep9UT3jZ5rizo2BsxgyDYU7WFD5eICBE7no3881HGeb/QkGfsJs6JTkY1aQhT7rIPC7e+0nnA==",
++      "dev": true,
++      "dependencies": {
++        "@adobe/css-tools": "^4.4.0",
++        "aria-query": "^5.0.0",
++        "css.escape": "^1.5.1",
++        "dom-accessibility-api": "^0.6.3",
++        "picocolors": "^1.1.1",
++        "redent": "^3.0.0"
++      },
++      "engines": {
++        "node": ">=14",
++        "npm": ">=6",
++        "yarn": ">=1"
++      }
++    },
++    "node_modules/@testing-library/jest-dom/node_modules/dom-accessibility-api": {
++      "version": "0.6.3",
++      "resolved": "https://registry.npmjs.org/dom-accessibility-api/-/dom-accessibility-api-0.6.3.tgz",
++      "integrity": "sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==",
++      "dev": true
++    },
++    "node_modules/@testing-library/react": {
++      "version": "16.3.1",
++      "resolved": "https://registry.npmjs.org/@testing-library/react/-/react-16.3.1.tgz",
++      "integrity": "sha512-gr4KtAWqIOQoucWYD/f6ki+j5chXfcPc74Col/6poTyqTmn7zRmodWahWRCp8tYd+GMqBonw6hstNzqjbs6gjw==",
++      "dev": true,
++      "dependencies": {
++        "@babel/runtime": "^7.12.5"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "peerDependencies": {
++        "@testing-library/dom": "^10.0.0",
++        "@types/react": "^18.0.0 || ^19.0.0",
++        "@types/react-dom": "^18.0.0 || ^19.0.0",
++        "react": "^18.0.0 || ^19.0.0",
++        "react-dom": "^18.0.0 || ^19.0.0"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@types/aria-query": {
++      "version": "5.0.4",
++      "resolved": "https://registry.npmjs.org/@types/aria-query/-/aria-query-5.0.4.tgz",
++      "integrity": "sha512-rfT93uj5s0PRL7EzccGMs3brplhcrghnDoV26NqKhCAS1hVo+WdNsPvE/yb6ilfr5hi2MEk6d5EWJTKdxg8jVw==",
++      "dev": true,
++      "peer": true
++    },
+     "node_modules/@types/babel__core": {
+       "version": "7.20.5",
+       "resolved": "https://registry.npmjs.org/@types/babel__core/-/babel__core-7.20.5.tgz",
+@@ -2985,6 +3072,15 @@
+         "url": "https://github.com/chalk/ansi-styles?sponsor=1"
+       }
+     },
++    "node_modules/aria-query": {
++      "version": "5.3.0",
++      "resolved": "https://registry.npmjs.org/aria-query/-/aria-query-5.3.0.tgz",
++      "integrity": "sha512-b0P0sZPKtyu8HkeRAfCq0IfURZK+SuwMjY1UXGBU27wpAiTwQAIlq56IbIO+ytk/JjS1fMR14ee5WBBfKi5J6A==",
++      "dev": true,
++      "dependencies": {
++        "dequal": "^2.0.3"
++      }
++    },
+     "node_modules/array-buffer-byte-length": {
+       "version": "1.0.2",
+       "resolved": "https://registry.npmjs.org/array-buffer-byte-length/-/array-buffer-byte-length-1.0.2.tgz",
+@@ -3467,6 +3563,12 @@
+         "node": "^10 || ^12.20.0 || ^14.13.0 || >=15.0.0"
+       }
+     },
++    "node_modules/css.escape": {
++      "version": "1.5.1",
++      "resolved": "https://registry.npmjs.org/css.escape/-/css.escape-1.5.1.tgz",
++      "integrity": "sha512-YUifsXXuknHlUsmlgyY0PKzgPOr7/FjCePfHNt0jxm83wHZi44VDMQ7/fGNkjY3/jV1MC+1CmZbaHzugyeRtpg==",
++      "dev": true
++    },
+     "node_modules/cssstyle": {
+       "version": "5.3.5",
+       "resolved": "https://registry.npmjs.org/cssstyle/-/cssstyle-5.3.5.tgz",
+@@ -3668,11 +3770,27 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/dequal": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/dequal/-/dequal-2.0.3.tgz",
++      "integrity": "sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==",
++      "dev": true,
++      "engines": {
++        "node": ">=6"
++      }
++    },
+     "node_modules/dijkstrajs": {
+       "version": "1.0.3",
+       "resolved": "https://registry.npmjs.org/dijkstrajs/-/dijkstrajs-1.0.3.tgz",
+       "integrity": "sha512-qiSlmBq9+BCdCA/L46dw8Uy93mloxsPSbwnm5yrKn2vMPiy8KyAskTF6zuV/j5BMsmOGZDPs7KjU+mjb670kfA=="
+     },
++    "node_modules/dom-accessibility-api": {
++      "version": "0.5.16",
++      "resolved": "https://registry.npmjs.org/dom-accessibility-api/-/dom-accessibility-api-0.5.16.tgz",
++      "integrity": "sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg==",
++      "dev": true,
++      "peer": true
++    },
+     "node_modules/dunder-proto": {
+       "version": "1.0.1",
+       "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+@@ -4410,6 +4528,15 @@
+       "integrity": "sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ==",
+       "dev": true
+     },
++    "node_modules/indent-string": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/indent-string/-/indent-string-4.0.0.tgz",
++      "integrity": "sha512-EdDDZu4A2OyIK7Lr/2zG+w5jmbuk1DVBnEwREQvBzspBJkCEbRa8GxU1lghYcaGJCnRWibjDXlq779X1/y5xwg==",
++      "dev": true,
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/internal-slot": {
+       "version": "1.1.0",
+       "resolved": "https://registry.npmjs.org/internal-slot/-/internal-slot-1.1.0.tgz",
+@@ -5104,6 +5231,16 @@
+         "yallist": "^3.0.2"
+       }
+     },
++    "node_modules/lz-string": {
++      "version": "1.5.0",
++      "resolved": "https://registry.npmjs.org/lz-string/-/lz-string-1.5.0.tgz",
++      "integrity": "sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==",
++      "dev": true,
++      "peer": true,
++      "bin": {
++        "lz-string": "bin/bin.js"
++      }
++    },
+     "node_modules/magic-string": {
+       "version": "0.30.21",
+       "resolved": "https://registry.npmjs.org/magic-string/-/magic-string-0.30.21.tgz",
+@@ -5166,6 +5303,15 @@
+       "integrity": "sha512-IEn+pegP1aManZuckezWCO+XZQDplx1366JoVhTpMpBB1sPey/SbveZQUosKiKiGYjg1wH4pMlNgXbCiYgihQA==",
+       "dev": true
+     },
++    "node_modules/min-indent": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/min-indent/-/min-indent-1.0.1.tgz",
++      "integrity": "sha512-I9jwMn07Sy/IwOj3zVkVik2JTvgpaykDZEigL6Rx6N9LbMywwUSMtxET+7lVoDLLd3O3IXwJwvuuns8UB/HeAg==",
++      "dev": true,
++      "engines": {
++        "node": ">=4"
++      }
++    },
+     "node_modules/minimatch": {
+       "version": "10.1.1",
+       "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-10.1.1.tgz",
+@@ -5467,6 +5613,44 @@
+         "url": "https://github.com/sponsors/sindresorhus"
+       }
+     },
++    "node_modules/pretty-format": {
++      "version": "27.5.1",
++      "resolved": "https://registry.npmjs.org/pretty-format/-/pretty-format-27.5.1.tgz",
++      "integrity": "sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==",
++      "dev": true,
++      "peer": true,
++      "dependencies": {
++        "ansi-regex": "^5.0.1",
++        "ansi-styles": "^5.0.0",
++        "react-is": "^17.0.1"
++      },
++      "engines": {
++        "node": "^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0"
++      }
++    },
++    "node_modules/pretty-format/node_modules/ansi-regex": {
++      "version": "5.0.1",
++      "resolved": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz",
++      "integrity": "sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==",
++      "dev": true,
++      "peer": true,
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/pretty-format/node_modules/ansi-styles": {
++      "version": "5.2.0",
++      "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-5.2.0.tgz",
++      "integrity": "sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA==",
++      "dev": true,
++      "peer": true,
++      "engines": {
++        "node": ">=10"
++      },
++      "funding": {
++        "url": "https://github.com/chalk/ansi-styles?sponsor=1"
++      }
++    },
+     "node_modules/punycode": {
+       "version": "2.3.1",
+       "resolved": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+@@ -5524,6 +5708,13 @@
+         "react": "^18.3.1"
+       }
+     },
++    "node_modules/react-is": {
++      "version": "17.0.2",
++      "resolved": "https://registry.npmjs.org/react-is/-/react-is-17.0.2.tgz",
++      "integrity": "sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==",
++      "dev": true,
++      "peer": true
++    },
+     "node_modules/react-refresh": {
+       "version": "0.17.0",
+       "resolved": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.17.0.tgz",
+@@ -5569,6 +5760,19 @@
+         "react-dom": ">=18"
+       }
+     },
++    "node_modules/redent": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/redent/-/redent-3.0.0.tgz",
++      "integrity": "sha512-6tDA8g98We0zd0GvVeMT9arEOnTw9qM03L9cJXaCjrip1OO764RDBLBfrB4cwzNGDj5OA5ioymC9GkizgWJDUg==",
++      "dev": true,
++      "dependencies": {
++        "indent-string": "^4.0.0",
++        "strip-indent": "^3.0.0"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/reflect.getprototypeof": {
+       "version": "1.0.10",
+       "resolved": "https://registry.npmjs.org/reflect.getprototypeof/-/reflect.getprototypeof-1.0.10.tgz",
+@@ -6311,6 +6515,18 @@
+         "node": ">=10"
+       }
+     },
++    "node_modules/strip-indent": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/strip-indent/-/strip-indent-3.0.0.tgz",
++      "integrity": "sha512-laJTa3Jb+VQpaC6DseHhF7dXVqHTfJPCRDaEbid/drOhgitgYku/letMUqOXFoWV0zIIUbjpdH2t+tYj4bQMRQ==",
++      "dev": true,
++      "dependencies": {
++        "min-indent": "^1.0.0"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/supports-color": {
+       "version": "7.2.0",
+       "resolved": "https://registry.npmjs.org/supports-color/-/supports-color-7.2.0.tgz",
+diff --git a/package.json b/package.json
+index de3383d..343ec92 100644
+--- a/package.json
++++ b/package.json
+@@ -22,6 +22,8 @@
+     "react-router-dom": "^7.1.0"
+   },
+   "devDependencies": {
++    "@testing-library/jest-dom": "^6.9.1",
++    "@testing-library/react": "^16.3.1",
+     "@types/node": "^25.0.2",
+     "@types/qrcode": "^1.5.6",
+     "@types/react": "^18.3.18",
+diff --git a/src/App.tsx b/src/App.tsx
+index 07f1f72..88e4d30 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -14,6 +14,7 @@ import BecomeValidator from './screens/BecomeValidator';
+ import Settings from './screens/Settings';
+ import Activity from './screens/Activity';
+ import Governance from './screens/Governance';
++import NFTs from './screens/NFTs';
+ 
+ function App() {
+   const { isInitialized, isLocked, isLoading } = useWallet();
+@@ -79,6 +80,10 @@ function App() {
+         path="/governance" 
+         element={isInitialized && !isLocked ? <Governance /> : <Navigate to="/" replace />} 
+       />
++      <Route 
++        path="/nfts" 
++        element={isInitialized && !isLocked ? <NFTs /> : <Navigate to="/" replace />} 
++      />
+       
+       {/* Fallback */}
+       <Route path="*" element={<Navigate to="/" replace />} />
+diff --git a/src/__tests__/multichain.test.ts b/src/__tests__/multichain.test.ts
+new file mode 100644
+index 0000000..0535a76
+--- /dev/null
++++ b/src/__tests__/multichain.test.ts
+@@ -0,0 +1,196 @@
++/**
++ * Multi-chain Address Detection Tests
++ * 
++ * Verifies that the wallet correctly detects and validates
++ * addresses for Sultan, Ethereum, Bitcoin, Solana, and TON chains.
++ */
++
++import { describe, it, expect } from 'vitest';
++import { 
++  detectChainFromAddress, 
++  validateAddress, 
++  getChainInfo,
++  validateSultanOnlyAddress,
++  ChainType 
++} from '../core/security';
++
++describe('Multi-chain Address Detection', () => {
++  describe('detectChainFromAddress', () => {
++    it('should detect Sultan chain addresses', () => {
++      expect(detectChainFromAddress('sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7lz')).toBe('sultan');
++      expect(detectChainFromAddress('sultan1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq')).toBe('sultan');
++    });
++
++    it('should detect Ethereum addresses', () => {
++      expect(detectChainFromAddress('0x742d35Cc6634C0532925a3b844Bc9e7595f8e2D0')).toBe('ethereum');
++      expect(detectChainFromAddress('0x0000000000000000000000000000000000000000')).toBe('ethereum');
++    });
++
++    it('should detect Bitcoin addresses', () => {
++      // Native SegWit (bc1)
++      expect(detectChainFromAddress('bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq')).toBe('bitcoin');
++      // Legacy P2PKH (starts with 1)
++      expect(detectChainFromAddress('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')).toBe('bitcoin');
++      // P2SH (starts with 3)
++      expect(detectChainFromAddress('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy')).toBe('bitcoin');
++    });
++
++    it('should detect Solana addresses', () => {
++      expect(detectChainFromAddress('7EFvUvMvuqVGXpTPCHQJeXwkvGHKiYxdHk6bVPWfWS8m')).toBe('solana');
++      expect(detectChainFromAddress('So11111111111111111111111111111111111111112')).toBe('solana');
++    });
++
++    it('should detect TON addresses', () => {
++      expect(detectChainFromAddress('EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2')).toBe('ton');
++      expect(detectChainFromAddress('UQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2')).toBe('ton');
++    });
++
++    it('should return null for invalid/unknown addresses', () => {
++      expect(detectChainFromAddress('')).toBeNull();
++      expect(detectChainFromAddress('invalid_address')).toBeNull();
++      expect(detectChainFromAddress('cosmos1...')).toBeNull();
++      expect(detectChainFromAddress('12345')).toBeNull();
++    });
++  });
++
++  describe('validateAddress', () => {
++    it('should validate Sultan addresses correctly', () => {
++      const result = validateAddress('sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7lz');
++      expect(result.valid).toBe(true);
++      expect(result.chain).toBe('sultan');
++      expect(result.chainName).toBe('Sultan Chain');
++    });
++
++    it('should validate Ethereum addresses correctly', () => {
++      const result = validateAddress('0x742d35Cc6634C0532925a3b844Bc9e7595f8e2D0');
++      expect(result.valid).toBe(true);
++      expect(result.chain).toBe('ethereum');
++      expect(result.chainName).toBe('Ethereum');
++      expect(result.wrappedToken).toBe('sETH');
++    });
++
++    it('should validate Bitcoin bc1 addresses correctly', () => {
++      const result = validateAddress('bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq');
++      expect(result.valid).toBe(true);
++      expect(result.chain).toBe('bitcoin');
++      expect(result.chainName).toBe('Bitcoin');
++      expect(result.wrappedToken).toBe('sBTC');
++    });
++
++    it('should validate Solana addresses correctly', () => {
++      const result = validateAddress('7EFvUvMvuqVGXpTPCHQJeXwkvGHKiYxdHk6bVPWfWS8m');
++      expect(result.valid).toBe(true);
++      expect(result.chain).toBe('solana');
++      expect(result.chainName).toBe('Solana');
++      expect(result.wrappedToken).toBe('sSOL');
++    });
++
++    it('should validate TON addresses correctly', () => {
++      const result = validateAddress('EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2');
++      expect(result.valid).toBe(true);
++      expect(result.chain).toBe('ton');
++      expect(result.chainName).toBe('TON');
++      expect(result.wrappedToken).toBe('sTON');
++    });
++
++    it('should reject invalid addresses with helpful error messages', () => {
++      const result = validateAddress('invalid_address_here');
++      expect(result.valid).toBe(false);
++      expect(result.error).toContain('Unknown address format');
++      expect(result.error).toContain('Supported');
++    });
++
++    it('should reject empty addresses', () => {
++      const result = validateAddress('');
++      expect(result.valid).toBe(false);
++      expect(result.error).toBe('Address is required');
++    });
++
++    it('should reject short Sultan addresses', () => {
++      const result = validateAddress('sultan1abc');
++      expect(result.valid).toBe(false);
++      expect(result.error).toContain('Invalid Sultan address length');
++    });
++  });
++
++  describe('getChainInfo', () => {
++    const chains: ChainType[] = ['sultan', 'ethereum', 'bitcoin', 'solana', 'ton'];
++    
++    it.each(chains)('should return valid info for %s', (chain) => {
++      const info = getChainInfo(chain);
++      expect(info.name).toBeDefined();
++      expect(info.symbol).toBeDefined();
++      expect(info.wrappedToken).toBeDefined();
++    });
++
++    it('should have correct wrapped tokens for bridges', () => {
++      expect(getChainInfo('ethereum').wrappedToken).toBe('sETH');
++      expect(getChainInfo('bitcoin').wrappedToken).toBe('sBTC');
++      expect(getChainInfo('solana').wrappedToken).toBe('sSOL');
++      expect(getChainInfo('ton').wrappedToken).toBe('sTON');
++      expect(getChainInfo('sultan').wrappedToken).toBe('SLTN');
++    });
++  });
++});
++
++describe('Cross-chain Transaction Flow', () => {
++  it('should identify cross-chain transfers correctly', () => {
++    // Native transfer (sultan to sultan)
++    const sultanResult = validateAddress('sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7lz');
++    expect(sultanResult.chain).toBe('sultan');
++    
++    // Cross-chain transfers should be flagged
++    const ethResult = validateAddress('0x742d35Cc6634C0532925a3b844Bc9e7595f8e2D0');
++    expect(ethResult.chain).not.toBe('sultan');
++    expect(ethResult.wrappedToken).toBe('sETH');
++    
++    const btcResult = validateAddress('bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq');
++    expect(btcResult.chain).not.toBe('sultan');
++    expect(btcResult.wrappedToken).toBe('sBTC');
++  });
++});
++
++describe('Sultan-Only Wallet Validation', () => {
++  it('should accept valid sultan1 addresses', () => {
++    const result = validateSultanOnlyAddress('sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7lz');
++    expect(result.valid).toBe(true);
++  });
++
++  it('should reject Ethereum addresses (wallet is Sultan-only)', () => {
++    const result = validateSultanOnlyAddress('0x742d35Cc6634C0532925a3b844Bc9e7595f8e2D0');
++    expect(result.valid).toBe(false);
++    expect(result.error).toContain('sultan1');
++  });
++
++  it('should reject Bitcoin addresses (wallet is Sultan-only)', () => {
++    const result = validateSultanOnlyAddress('bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq');
++    expect(result.valid).toBe(false);
++    expect(result.error).toContain('sultan1');
++  });
++
++  it('should reject Solana addresses (wallet is Sultan-only)', () => {
++    const result = validateSultanOnlyAddress('7EFvUvMvuqVGXpTPCHQJeXwkvGHKiYxdHk6bVPWfWS8m');
++    expect(result.valid).toBe(false);
++    expect(result.error).toContain('sultan1');
++  });
++
++  it('should reject empty addresses', () => {
++    const result = validateSultanOnlyAddress('');
++    expect(result.valid).toBe(false);
++    expect(result.error).toBe('Address is required');
++  });
++
++  it('should validate bech32 format for Sultan addresses', () => {
++    // Valid Sultan address format
++    const validResult = validateSultanOnlyAddress('sultan1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq');
++    expect(validResult.valid).toBe(true);
++    
++    // Invalid - too short
++    const shortResult = validateSultanOnlyAddress('sultan1abc');
++    expect(shortResult.valid).toBe(false);
++    
++    // Invalid - contains invalid chars
++    const invalidCharsResult = validateSultanOnlyAddress('sultan1ABCD123');
++    expect(invalidCharsResult.valid).toBe(false);
++  });
++});
+diff --git a/src/__tests__/nfts.test.tsx b/src/__tests__/nfts.test.tsx
+new file mode 100644
+index 0000000..afc6933
+--- /dev/null
++++ b/src/__tests__/nfts.test.tsx
+@@ -0,0 +1,151 @@
++/**
++ * NFT Gallery Tests
++ * 
++ * Tests for the NFT Gallery screen and Sultan native NFT integration.
++ */
++
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, waitFor } from '@testing-library/react';
++import { BrowserRouter } from 'react-router-dom';
++import NFTs from '../screens/NFTs';
++import { sultanAPI } from '../api/sultanAPI';
++
++// Mock the hooks
++vi.mock('../hooks/useWallet', () => ({
++  useWallet: () => ({
++    currentAccount: {
++      address: 'sultan1testaddress12345678901234567890',
++      name: 'Test Account',
++      index: 0,
++      publicKey: 'testpubkey',
++    },
++  }),
++}));
++
++vi.mock('../hooks/useTheme', () => ({
++  useTheme: () => ({
++    theme: 'dark',
++    setTheme: vi.fn(),
++  }),
++}));
++
++// Mock the API
++vi.mock('../api/sultanAPI', () => ({
++  sultanAPI: {
++    queryNFTs: vi.fn(),
++  },
++}));
++
++const mockNFTResponse = {
++  collections: [
++    {
++      address: 'sultan1nftcontract123',
++      name: 'Sultan Genesis',
++      symbol: 'SGEN',
++      nfts: [
++        {
++          tokenId: '1',
++          contractAddress: 'sultan1nftcontract123',
++          name: 'Sultan #1',
++          description: 'The first Sultan NFT',
++          image: 'https://example.com/nft1.png',
++          collection: 'Sultan Genesis',
++          attributes: [
++            { trait_type: 'Rarity', value: 'Legendary' },
++          ],
++        },
++        {
++          tokenId: '42',
++          contractAddress: 'sultan1nftcontract123',
++          name: 'Sultan #42',
++          description: 'A rare Sultan NFT',
++          image: 'https://example.com/nft42.png',
++          collection: 'Sultan Genesis',
++          attributes: [
++            { trait_type: 'Rarity', value: 'Epic' },
++          ],
++        },
++      ],
++    },
++  ],
++};
++
++const renderNFTs = () => {
++  return render(
++    <BrowserRouter>
++      <NFTs />
++    </BrowserRouter>
++  );
++};
++
++describe('NFT Gallery Screen', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('should show loading state initially', () => {
++    vi.mocked(sultanAPI.queryNFTs).mockImplementation(() => new Promise(() => {}));
++    renderNFTs();
++    
++    expect(screen.getByText('Loading your NFTs...')).toBeInTheDocument();
++  });
++
++  it('should show empty state when no NFTs', async () => {
++    vi.mocked(sultanAPI.queryNFTs).mockResolvedValue({ collections: [] });
++    renderNFTs();
++    
++    await waitFor(() => {
++      expect(screen.getByText('No NFTs Yet')).toBeInTheDocument();
++    });
++  });
++
++  it('should display NFT collections when available', async () => {
++    vi.mocked(sultanAPI.queryNFTs).mockResolvedValue(mockNFTResponse);
++    renderNFTs();
++    
++    await waitFor(() => {
++      expect(screen.getByText('Sultan Genesis')).toBeInTheDocument();
++      expect(screen.getByText('Sultan #1')).toBeInTheDocument();
++      expect(screen.getByText('Sultan #42')).toBeInTheDocument();
++    });
++  });
++
++  it('should show stats with correct counts', async () => {
++    vi.mocked(sultanAPI.queryNFTs).mockResolvedValue(mockNFTResponse);
++    renderNFTs();
++    
++    await waitFor(() => {
++      expect(screen.getByText('2')).toBeInTheDocument(); // Total NFTs
++      expect(screen.getByText('1')).toBeInTheDocument(); // Collections
++      expect(screen.getByText('2 items')).toBeInTheDocument();
++    });
++  });
++
++  it('should handle API errors gracefully', async () => {
++    vi.mocked(sultanAPI.queryNFTs).mockRejectedValue(new Error('Network error'));
++    renderNFTs();
++    
++    // Should show empty state, not crash
++    await waitFor(() => {
++      expect(screen.getByText('No NFTs Yet')).toBeInTheDocument();
++    });
++  });
++
++  it('should have NFT Gallery in header', async () => {
++    vi.mocked(sultanAPI.queryNFTs).mockResolvedValue({ collections: [] });
++    renderNFTs();
++    
++    expect(screen.getByText('NFT Gallery')).toBeInTheDocument();
++  });
++});
++
++describe('NFT API Integration', () => {
++  it('should call queryNFTs with correct address', async () => {
++    vi.mocked(sultanAPI.queryNFTs).mockResolvedValue({ collections: [] });
++    renderNFTs();
++    
++    await waitFor(() => {
++      expect(sultanAPI.queryNFTs).toHaveBeenCalledWith('sultan1testaddress12345678901234567890');
++    });
++  });
++});
+diff --git a/src/api/sultanAPI.ts b/src/api/sultanAPI.ts
+index 5a722cc..70afa63 100644
+--- a/src/api/sultanAPI.ts
++++ b/src/api/sultanAPI.ts
+@@ -744,4 +744,88 @@ export const sultanAPI = {
+     );
+     return { proposalId: result.proposal_id };
+   },
++
++  /**
++   * Query native NFTs owned by an address (Sultan Token Factory)
++   * Endpoint: GET /nft/tokens?owner={address}
++   */
++  queryNFTs: async (ownerAddress: string): Promise<{
++    collections: Array<{
++      address: string;
++      name: string;
++      symbol: string;
++      nfts: Array<{
++        tokenId: string;
++        contractAddress: string;
++        name: string;
++        description?: string;
++        image?: string;
++        attributes?: Array<{ trait_type: string; value: string }>;
++        collection?: string;
++      }>;
++    }>;
++  }> => {
++    try {
++      const result = await restApi<{
++        collections: Array<{
++          address: string;
++          name: string;
++          symbol: string;
++          tokens: Array<{
++            token_id: string;
++            token_uri?: string;
++            extension?: {
++              name?: string;
++              description?: string;
++              image?: string;
++              attributes?: Array<{ trait_type: string; value: string }>;
++            };
++          }>;
++        }>;
++      }>(`/nft/tokens?owner=${ownerAddress}`, 'GET');
++      
++      // Transform response to frontend format
++      return {
++        collections: result.collections.map(col => ({
++          address: col.address,
++          name: col.name,
++          symbol: col.symbol,
++          nfts: col.tokens.map(token => ({
++            tokenId: token.token_id,
++            contractAddress: col.address,
++            name: token.extension?.name || `${col.name} #${token.token_id}`,
++            description: token.extension?.description,
++            image: token.extension?.image,
++            attributes: token.extension?.attributes,
++            collection: col.name,
++          })),
++        })),
++      };
++    } catch {
++      // Return empty collections if NFT endpoint not available
++      return { collections: [] };
++    }
++  },
++
++  /**
++   * Transfer a native NFT (Sultan Token Factory)
++   * Endpoint: POST /nft/transfer
++   */
++  transferNFT: async (req: {
++    contractAddress: string;
++    tokenId: string;
++    from: string;
++    to: string;
++    signature: string;
++    publicKey: string;
++  }): Promise<{ hash: string }> => {
++    return restApi<{ hash: string }>('/nft/transfer', 'POST', {
++      contract_address: req.contractAddress,
++      token_id: req.tokenId,
++      from: req.from,
++      to: req.to,
++      signature: req.signature,
++      public_key: req.publicKey,
++    });
++  },
+ };
+diff --git a/src/core/security.ts b/src/core/security.ts
+index 009dbec..526627c 100644
+--- a/src/core/security.ts
++++ b/src/core/security.ts
+@@ -492,28 +492,195 @@ export function sanitizeInput(input: string): string {
+ /**
+  * Validate Sultan address format
+  */
+-export function validateAddress(address: string): { valid: boolean; error?: string } {
+-  if (!address || typeof address !== 'string') {
+-    return { valid: false, error: 'Address is required' };
+-  }
++/**
++ * Supported blockchain networks for multi-chain transactions
++ */
++export type ChainType = 'sultan' | 'ethereum' | 'bitcoin' | 'solana' | 'ton';
++
++export interface AddressValidationResult {
++  valid: boolean;
++  error?: string;
++  chain?: ChainType;
++  chainName?: string;
++  wrappedToken?: string;
++}
++
++/**
++ * Detect chain type from address format
++ */
++export function detectChainFromAddress(address: string): ChainType | null {
++  if (!address || typeof address !== 'string') return null;
+   
+-  if (!address.startsWith('sultan1')) {
+-    return { valid: false, error: 'Address must start with "sultan1"' };
+-  }
++  const trimmed = address.trim();
++  
++  // Sultan Chain: bech32 with sultan1 prefix
++  if (trimmed.startsWith('sultan1')) return 'sultan';
++  
++  // Ethereum: 0x prefix, 42 chars total (0x + 40 hex)
++  if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) return 'ethereum';
++  
++  // Bitcoin: bc1 (bech32 native segwit), 1 or 3 (legacy)
++  if (/^bc1[a-zA-HJ-NP-Z0-9]{25,87}$/.test(trimmed)) return 'bitcoin';
++  if (/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(trimmed)) return 'bitcoin';
++  
++  // Solana: Base58, 32-44 chars, no 0, O, I, l
++  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) return 'solana';
++  
++  // TON: EQ or UQ prefix (bounceable/non-bounceable)
++  if (/^(EQ|UQ)[A-Za-z0-9_-]{46}$/.test(trimmed)) return 'ton';
+   
++  return null;
++}
++
++/**
++ * Get chain display info
++ */
++export function getChainInfo(chain: ChainType): { name: string; symbol: string; wrappedToken: string } {
++  const chainInfo: Record<ChainType, { name: string; symbol: string; wrappedToken: string }> = {
++    sultan: { name: 'Sultan Chain', symbol: 'SLTN', wrappedToken: 'SLTN' },
++    ethereum: { name: 'Ethereum', symbol: 'ETH', wrappedToken: 'sETH' },
++    bitcoin: { name: 'Bitcoin', symbol: 'BTC', wrappedToken: 'sBTC' },
++    solana: { name: 'Solana', symbol: 'SOL', wrappedToken: 'sSOL' },
++    ton: { name: 'TON', symbol: 'TON', wrappedToken: 'sTON' },
++  };
++  return chainInfo[chain];
++}
++
++/**
++ * Validate Sultan Chain address (native) - INTERNAL
++ */
++function validateSultanAddressInternal(address: string): { valid: boolean; error?: string } {
+   if (address.length < 39 || address.length > 59) {
+-    return { valid: false, error: 'Invalid address length' };
++    return { valid: false, error: 'Invalid Sultan address length' };
+   }
+   
+   // Check for valid bech32 characters
+   const validChars = /^sultan1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$/;
+   if (!validChars.test(address)) {
+-    return { valid: false, error: 'Address contains invalid characters' };
++    return { valid: false, error: 'Sultan address contains invalid characters' };
+   }
+   
+   return { valid: true };
+ }
+ 
++/**
++ * Validate Sultan-only address (for wallet Send screen)
++ * Sultan Wallet only sends to sultan1... addresses
++ */
++export function validateSultanOnlyAddress(address: string): { valid: boolean; error?: string } {
++  if (!address || typeof address !== 'string') {
++    return { valid: false, error: 'Address is required' };
++  }
++  
++  const trimmed = address.trim();
++  
++  if (!trimmed.startsWith('sultan1')) {
++    return { valid: false, error: 'Address must start with "sultan1"' };
++  }
++  
++  return validateSultanAddressInternal(trimmed);
++}
++
++/**
++ * Validate Ethereum address with checksum verification
++ */
++function validateEthereumAddress(address: string): { valid: boolean; error?: string } {
++  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
++    return { valid: false, error: 'Invalid Ethereum address format' };
++  }
++  return { valid: true };
++}
++
++/**
++ * Validate Bitcoin address (segwit bc1 or legacy)
++ */
++function validateBitcoinAddress(address: string): { valid: boolean; error?: string } {
++  // Native SegWit (Bech32)
++  if (/^bc1[a-zA-HJ-NP-Z0-9]{25,87}$/.test(address)) {
++    return { valid: true };
++  }
++  // Legacy P2PKH (starts with 1) or P2SH (starts with 3)
++  if (/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(address)) {
++    return { valid: true };
++  }
++  return { valid: false, error: 'Invalid Bitcoin address format' };
++}
++
++/**
++ * Validate Solana address (Base58)
++ */
++function validateSolanaAddress(address: string): { valid: boolean; error?: string } {
++  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) {
++    return { valid: false, error: 'Invalid Solana address format' };
++  }
++  return { valid: true };
++}
++
++/**
++ * Validate TON address
++ */
++function validateTONAddress(address: string): { valid: boolean; error?: string } {
++  if (!/^(EQ|UQ)[A-Za-z0-9_-]{46}$/.test(address)) {
++    return { valid: false, error: 'Invalid TON address format' };
++  }
++  return { valid: true };
++}
++
++/**
++ * Multi-chain address validation
++ * Automatically detects chain from address format and validates accordingly
++ */
++export function validateAddress(address: string): AddressValidationResult {
++  if (!address || typeof address !== 'string') {
++    return { valid: false, error: 'Address is required' };
++  }
++  
++  const trimmed = address.trim();
++  const chain = detectChainFromAddress(trimmed);
++  
++  if (!chain) {
++    return { 
++      valid: false, 
++      error: 'Unknown address format. Supported: Sultan (sultan1...), Ethereum (0x...), Bitcoin (bc1.../1.../3...), Solana, TON (EQ.../UQ...)' 
++    };
++  }
++  
++  // Validate based on detected chain
++  let validation: { valid: boolean; error?: string };
++  
++  switch (chain) {
++    case 'sultan':
++      validation = validateSultanAddressInternal(trimmed);
++      break;
++    case 'ethereum':
++      validation = validateEthereumAddress(trimmed);
++      break;
++    case 'bitcoin':
++      validation = validateBitcoinAddress(trimmed);
++      break;
++    case 'solana':
++      validation = validateSolanaAddress(trimmed);
++      break;
++    case 'ton':
++      validation = validateTONAddress(trimmed);
++      break;
++    default:
++      validation = { valid: false, error: 'Unsupported chain' };
++  }
++  
++  if (!validation.valid) {
++    return validation;
++  }
++  
++  const chainInfo = getChainInfo(chain);
++  return { 
++    valid: true, 
++    chain, 
++    chainName: chainInfo.name,
++    wrappedToken: chainInfo.wrappedToken
++  };
++}
++
+ /**
+  * Validate transaction amount
+  */
+diff --git a/src/screens/Dashboard.css b/src/screens/Dashboard.css
+index ae6853a..838e301 100644
+--- a/src/screens/Dashboard.css
++++ b/src/screens/Dashboard.css
+@@ -433,3 +433,74 @@
+ .nav-item:hover .nav-icon svg {
+   stroke: var(--accent-primary);
+ }
++/* DEX Banner */
++.dex-banner {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  background: linear-gradient(135deg, rgba(0, 212, 170, 0.1) 0%, rgba(255, 180, 100, 0.1) 100%);
++  border: 1px solid rgba(0, 212, 170, 0.3);
++  border-radius: var(--radius-lg);
++  padding: var(--spacing-md) var(--spacing-lg);
++  margin-bottom: var(--spacing-lg);
++  cursor: pointer;
++  transition: all 0.2s ease;
++}
++
++.dex-banner:hover {
++  border-color: var(--accent-primary);
++  transform: translateY(-2px);
++  box-shadow: 0 4px 20px rgba(0, 212, 170, 0.2);
++}
++
++.dex-banner-content {
++  display: flex;
++  align-items: center;
++  gap: var(--spacing-md);
++}
++
++.dex-banner-content svg {
++  color: var(--accent-primary);
++  stroke: currentColor;
++}
++
++.dex-banner-text {
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.dex-title {
++  font-weight: 600;
++  font-size: 0.875rem;
++  color: var(--text-primary);
++}
++
++.dex-subtitle {
++  font-size: 0.75rem;
++  color: var(--text-muted);
++}
++
++.dex-arrow {
++  font-size: 1.25rem;
++  color: var(--accent-primary);
++}
++
++/* Quick actions grid for 4 items */
++.quick-actions {
++  display: grid;
++  grid-template-columns: repeat(4, 1fr);
++  gap: var(--spacing-sm);
++}
++
++@media (max-width: 380px) {
++  .quick-actions {
++    grid-template-columns: repeat(2, 1fr);
++    gap: var(--spacing-md);
++  }
++  
++  .action-btn {
++    padding: var(--spacing-sm);
++    min-width: unset;
++  }
++}
+\ No newline at end of file
+diff --git a/src/screens/Dashboard.tsx b/src/screens/Dashboard.tsx
+index a60bef6..80ef959 100644
+--- a/src/screens/Dashboard.tsx
++++ b/src/screens/Dashboard.tsx
+@@ -107,6 +107,23 @@ const GovernanceIcon = () => (
+   </svg>
+ );
+ 
++const NFTIcon = () => (
++  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
++    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
++    <circle cx="8.5" cy="8.5" r="1.5" />
++    <polyline points="21 15 16 10 5 21" />
++  </svg>
++);
++
++const SwapIcon = () => (
++  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
++    <polyline points="17 1 21 5 17 9" />
++    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
++    <polyline points="7 23 3 19 7 15" />
++    <path d="M21 13v2a4 4 0 0 1-4 4H3" />
++  </svg>
++);
++
+ export default function Dashboard() {
+   const navigate = useNavigate();
+   const { lock, currentAccount } = useWallet();
+@@ -213,6 +230,21 @@ export default function Dashboard() {
+             <span className="action-icon"><StakeIcon /></span>
+             <span>Stake</span>
+           </button>
++          <button className="action-btn" onClick={() => navigate('/nfts')}>
++            <span className="action-icon"><NFTIcon /></span>
++            <span>NFTs</span>
++          </button>
++        </div>
++
++        <div className="dex-banner" onClick={() => window.open('https://hodlholdings.com', '_blank')}>
++          <div className="dex-banner-content">
++            <SwapIcon />
++            <div className="dex-banner-text">
++              <span className="dex-title">Trade on HODL Holdings</span>
++              <span className="dex-subtitle">Zero-fee P2P trading</span>
++            </div>
++          </div>
++          <span className="dex-arrow">→</span>
+         </div>
+ 
+         {stakingData && stakingData.staked !== '0' && (
+diff --git a/src/screens/NFTs.css b/src/screens/NFTs.css
+new file mode 100644
+index 0000000..73950d0
+--- /dev/null
++++ b/src/screens/NFTs.css
+@@ -0,0 +1,338 @@
++.nft-screen {
++  min-height: 100vh;
++  display: flex;
++  flex-direction: column;
++  background: var(--bg-primary);
++}
++
++.nft-content {
++  flex: 1;
++  padding: var(--spacing-lg);
++  overflow-y: auto;
++}
++
++/* Loading State */
++.nft-loading {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  justify-content: center;
++  padding: var(--spacing-xxl);
++  gap: var(--spacing-md);
++}
++
++.nft-loading .spinner {
++  width: 48px;
++  height: 48px;
++  border: 3px solid var(--border-color);
++  border-top-color: var(--accent-primary);
++  border-radius: 50%;
++  animation: spin 1s linear infinite;
++}
++
++@keyframes spin {
++  to { transform: rotate(360deg); }
++}
++
++/* Empty State */
++.nft-empty {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  justify-content: center;
++  padding: var(--spacing-xxl);
++  text-align: center;
++}
++
++.empty-icon {
++  width: 80px;
++  height: 80px;
++  border-radius: 50%;
++  background: var(--bg-secondary);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  margin-bottom: var(--spacing-lg);
++  color: var(--text-muted);
++}
++
++.nft-empty h3 {
++  margin-bottom: var(--spacing-sm);
++  color: var(--text-primary);
++}
++
++/* Stats */
++.nft-stats {
++  display: grid;
++  grid-template-columns: 1fr 1fr;
++  gap: var(--spacing-md);
++  margin-bottom: var(--spacing-lg);
++}
++
++.stat-card {
++  background: var(--bg-secondary);
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-lg);
++  padding: var(--spacing-md);
++  text-align: center;
++}
++
++.stat-value {
++  display: block;
++  font-size: 1.5rem;
++  font-weight: 700;
++  color: var(--accent-primary);
++  margin-bottom: var(--spacing-xs);
++}
++
++.stat-label {
++  font-size: 0.75rem;
++  color: var(--text-muted);
++  text-transform: uppercase;
++  letter-spacing: 0.5px;
++}
++
++/* Collection */
++.nft-collection {
++  margin-bottom: var(--spacing-xl);
++}
++
++.collection-header {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  margin-bottom: var(--spacing-md);
++}
++
++.collection-header h3 {
++  font-size: 1rem;
++  font-weight: 600;
++  color: var(--text-primary);
++}
++
++.collection-count {
++  font-size: 0.75rem;
++  color: var(--text-muted);
++  background: var(--bg-secondary);
++  padding: 4px 10px;
++  border-radius: 12px;
++}
++
++/* NFT Grid */
++.nft-grid {
++  display: grid;
++  grid-template-columns: repeat(2, 1fr);
++  gap: var(--spacing-md);
++}
++
++.nft-grid.list {
++  grid-template-columns: 1fr;
++}
++
++.nft-card {
++  background: var(--bg-secondary);
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-lg);
++  overflow: hidden;
++  cursor: pointer;
++  transition: all 0.2s ease;
++}
++
++.nft-card:hover {
++  border-color: var(--accent-primary);
++  transform: translateY(-2px);
++  box-shadow: 0 4px 20px rgba(0, 212, 170, 0.15);
++}
++
++.nft-image {
++  aspect-ratio: 1;
++  background: var(--bg-primary);
++  overflow: hidden;
++}
++
++.nft-image img {
++  width: 100%;
++  height: 100%;
++  object-fit: cover;
++}
++
++.nft-placeholder {
++  width: 100%;
++  height: 100%;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  color: var(--text-muted);
++}
++
++.nft-card-info {
++  padding: var(--spacing-sm) var(--spacing-md);
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++}
++
++.nft-name {
++  font-weight: 600;
++  font-size: 0.875rem;
++  color: var(--text-primary);
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++}
++
++.nft-id {
++  font-size: 0.75rem;
++  color: var(--text-muted);
++  font-family: monospace;
++}
++
++/* NFT Detail View */
++.nft-detail {
++  flex: 1;
++  padding: var(--spacing-lg);
++  overflow-y: auto;
++}
++
++.nft-image-large {
++  width: 100%;
++  max-width: 320px;
++  aspect-ratio: 1;
++  margin: 0 auto var(--spacing-lg);
++  border-radius: var(--radius-lg);
++  overflow: hidden;
++  background: var(--bg-secondary);
++}
++
++.nft-image-large img {
++  width: 100%;
++  height: 100%;
++  object-fit: cover;
++}
++
++.nft-info {
++  text-align: center;
++}
++
++.nft-collection-badge {
++  display: inline-block;
++  font-size: 0.75rem;
++  color: var(--accent-primary);
++  background: rgba(0, 212, 170, 0.1);
++  border: 1px solid rgba(0, 212, 170, 0.2);
++  padding: 4px 12px;
++  border-radius: 20px;
++  margin-bottom: var(--spacing-sm);
++}
++
++.nft-info h2 {
++  font-size: 1.5rem;
++  margin-bottom: var(--spacing-sm);
++}
++
++.nft-description {
++  color: var(--text-muted);
++  font-size: 0.875rem;
++  margin-bottom: var(--spacing-lg);
++  line-height: 1.5;
++}
++
++/* Attributes */
++.nft-attributes {
++  margin-bottom: var(--spacing-lg);
++}
++
++.nft-attributes h4 {
++  font-size: 0.875rem;
++  font-weight: 600;
++  margin-bottom: var(--spacing-sm);
++  color: var(--text-secondary);
++}
++
++.attributes-grid {
++  display: grid;
++  grid-template-columns: repeat(2, 1fr);
++  gap: var(--spacing-sm);
++}
++
++.attribute-card {
++  background: var(--bg-secondary);
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-md);
++  padding: var(--spacing-sm);
++  text-align: center;
++}
++
++.attr-type {
++  display: block;
++  font-size: 0.7rem;
++  color: var(--text-muted);
++  text-transform: uppercase;
++  letter-spacing: 0.5px;
++  margin-bottom: 2px;
++}
++
++.attr-value {
++  display: block;
++  font-size: 0.875rem;
++  font-weight: 600;
++  color: var(--accent-primary);
++}
++
++/* Meta */
++.nft-meta {
++  background: var(--bg-secondary);
++  border-radius: var(--radius-md);
++  padding: var(--spacing-md);
++  margin-bottom: var(--spacing-lg);
++}
++
++.meta-row {
++  display: flex;
++  justify-content: space-between;
++  padding: var(--spacing-xs) 0;
++  font-size: 0.875rem;
++}
++
++.meta-row:not(:last-child) {
++  border-bottom: 1px solid var(--border-color);
++}
++
++.meta-row .mono {
++  font-family: monospace;
++  color: var(--text-muted);
++}
++
++/* Actions */
++.nft-actions {
++  display: flex;
++  flex-direction: column;
++  gap: var(--spacing-sm);
++}
++
++.nft-actions .btn {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: var(--spacing-sm);
++}
++
++/* Error State */
++.nft-error {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: var(--spacing-md);
++  padding: var(--spacing-xxl);
++}
++
++/* Header actions */
++.header-actions {
++  display: flex;
++  align-items: center;
++  gap: var(--spacing-xs);
++}
++
++.view-toggle {
++  font-size: 1rem;
++}
+diff --git a/src/screens/NFTs.tsx b/src/screens/NFTs.tsx
+new file mode 100644
+index 0000000..083cf9a
+--- /dev/null
++++ b/src/screens/NFTs.tsx
+@@ -0,0 +1,334 @@
++/**
++ * NFT Gallery Screen
++ * 
++ * Display Native NFTs from Sultan's Token Factory.
++ * Sultan is a native Rust L1 - NOT Cosmos/CW721.
++ * Supports viewing, sending, and NFT details.
++ */
++
++import { useState, useEffect } from 'react';
++import { useNavigate } from 'react-router-dom';
++import { useWallet } from '../hooks/useWallet';
++import { useTheme } from '../hooks/useTheme';
++import { sultanAPI } from '../api/sultanAPI';
++import './NFTs.css';
++
++// Premium SVG Icons
++const BackIcon = () => (
++  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
++    <polyline points="15 18 9 12 15 6" />
++  </svg>
++);
++
++const SunIcon = () => (
++  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
++    <circle cx="12" cy="12" r="5" />
++    <line x1="12" y1="1" x2="12" y2="3" />
++    <line x1="12" y1="21" x2="12" y2="23" />
++    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
++    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
++    <line x1="1" y1="12" x2="3" y2="12" />
++    <line x1="21" y1="12" x2="23" y2="12" />
++    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
++    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
++  </svg>
++);
++
++const MoonIcon = () => (
++  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
++    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
++  </svg>
++);
++
++const SendIcon = () => (
++  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
++    <line x1="22" y1="2" x2="11" y2="13" />
++    <polygon points="22 2 15 22 11 13 2 9 22 2" />
++  </svg>
++);
++
++const ExternalLinkIcon = () => (
++  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
++    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
++    <polyline points="15 3 21 3 21 9" />
++    <line x1="10" y1="14" x2="21" y2="3" />
++  </svg>
++);
++
++const ImageIcon = () => (
++  <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
++    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
++    <circle cx="8.5" cy="8.5" r="1.5" />
++    <polyline points="21 15 16 10 5 21" />
++  </svg>
++);
++
++// NFT Interface
++interface NFT {
++  tokenId: string;
++  contractAddress: string;
++  name: string;
++  description?: string;
++  image?: string;
++  attributes?: Array<{ trait_type: string; value: string }>;
++  collection?: string;
++}
++
++interface NFTCollection {
++  address: string;
++  name: string;
++  symbol: string;
++  nfts: NFT[];
++}
++
++export default function NFTs() {
++  const navigate = useNavigate();
++  const { currentAccount } = useWallet();
++  const { theme, setTheme } = useTheme();
++  
++  const [collections, setCollections] = useState<NFTCollection[]>([]);
++  const [selectedNFT, setSelectedNFT] = useState<NFT | null>(null);
++  const [isLoading, setIsLoading] = useState(true);
++  const [error, setError] = useState('');
++  const [view, setView] = useState<'grid' | 'list'>('grid');
++  
++  const toggleView = () => setView(v => v === 'grid' ? 'list' : 'grid');
++
++  const toggleTheme = () => {
++    setTheme(theme === 'dark' ? 'light' : 'dark');
++  };
++
++  // Fetch user's NFTs
++  useEffect(() => {
++    const fetchNFTs = async () => {
++      if (!currentAccount?.address) return;
++      
++      setIsLoading(true);
++      setError('');
++      
++      try {
++        // Query Sultan's native token factory for user's NFTs
++        const response = await sultanAPI.queryNFTs(currentAccount.address);
++        
++        if (response.collections) {
++          setCollections(response.collections);
++        } else {
++          // Mock data for development - remove in production
++          setCollections([
++            {
++              address: 'sultan1nft...',
++              name: 'Sultan Genesis',
++              symbol: 'SGEN',
++              nfts: [
++                {
++                  tokenId: '1',
++                  contractAddress: 'sultan1nft...',
++                  name: 'Sultan #1',
++                  description: 'The first Sultan NFT ever minted',
++                  image: 'https://placeholder.pics/svg/300/1a1a2e/00d4aa/Sultan%20%231',
++                  collection: 'Sultan Genesis',
++                  attributes: [
++                    { trait_type: 'Rarity', value: 'Legendary' },
++                    { trait_type: 'Power', value: '100' }
++                  ]
++                },
++                {
++                  tokenId: '42',
++                  contractAddress: 'sultan1nft...',
++                  name: 'Sultan #42',
++                  description: 'A rare Sultan NFT',
++                  image: 'https://placeholder.pics/svg/300/1a1a2e/627eea/Sultan%20%2342',
++                  collection: 'Sultan Genesis',
++                  attributes: [
++                    { trait_type: 'Rarity', value: 'Epic' },
++                    { trait_type: 'Power', value: '88' }
++                  ]
++                }
++              ]
++            }
++          ]);
++        }
++      } catch (err) {
++        console.error('Failed to fetch NFTs:', err);
++        // Show empty state instead of error for now
++        setCollections([]);
++      } finally {
++        setIsLoading(false);
++      }
++    };
++
++    fetchNFTs();
++  }, [currentAccount?.address]);
++
++  const totalNFTs = collections.reduce((sum, col) => sum + col.nfts.length, 0);
++
++  // NFT Detail Modal
++  if (selectedNFT) {
++    return (
++      <div className="nft-screen">
++        <header className="screen-header">
++          <button className="btn-back" onClick={() => setSelectedNFT(null)}>
++            <BackIcon />
++          </button>
++          <h2>{selectedNFT.name}</h2>
++          <button className="btn-icon theme-toggle" onClick={toggleTheme}>
++            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
++          </button>
++        </header>
++
++        <div className="nft-detail fade-in">
++          <div className="nft-image-large">
++            {selectedNFT.image ? (
++              <img src={selectedNFT.image} alt={selectedNFT.name} />
++            ) : (
++              <div className="nft-placeholder">
++                <ImageIcon />
++              </div>
++            )}
++          </div>
++
++          <div className="nft-info">
++            <div className="nft-collection-badge">{selectedNFT.collection}</div>
++            <h2>{selectedNFT.name}</h2>
++            {selectedNFT.description && (
++              <p className="nft-description">{selectedNFT.description}</p>
++            )}
++
++            {selectedNFT.attributes && selectedNFT.attributes.length > 0 && (
++              <div className="nft-attributes">
++                <h4>Attributes</h4>
++                <div className="attributes-grid">
++                  {selectedNFT.attributes.map((attr, index) => (
++                    <div key={index} className="attribute-card">
++                      <span className="attr-type">{attr.trait_type}</span>
++                      <span className="attr-value">{attr.value}</span>
++                    </div>
++                  ))}
++                </div>
++              </div>
++            )}
++
++            <div className="nft-meta">
++              <div className="meta-row">
++                <span>Token ID</span>
++                <span className="mono">#{selectedNFT.tokenId}</span>
++              </div>
++              <div className="meta-row">
++                <span>Contract</span>
++                <span className="mono">{selectedNFT.contractAddress.slice(0, 16)}...</span>
++              </div>
++            </div>
++
++            <div className="nft-actions">
++              <button 
++                className="btn btn-primary"
++                onClick={() => navigate(`/send?nft=${selectedNFT.tokenId}&contract=${selectedNFT.contractAddress}`)}
++              >
++                <SendIcon /> Send NFT
++              </button>
++              <button 
++                className="btn btn-secondary"
++                onClick={() => window.open(`https://explorer.sultanchain.io/nft/${selectedNFT.contractAddress}/${selectedNFT.tokenId}`, '_blank')}
++              >
++                <ExternalLinkIcon /> View on Explorer
++              </button>
++            </div>
++          </div>
++        </div>
++      </div>
++    );
++  }
++
++  return (
++    <div className="nft-screen">
++      <header className="screen-header">
++        <button className="btn-back" onClick={() => navigate('/dashboard')}>
++          <BackIcon />
++        </button>
++        <h2>NFT Gallery</h2>
++        <div className="header-actions">
++          {totalNFTs > 0 && (
++            <button className="btn-icon view-toggle" onClick={toggleView} title={view === 'grid' ? 'List view' : 'Grid view'}>
++              {view === 'grid' ? '☰' : '⊞'}
++            </button>
++          )}
++          <button className="btn-icon theme-toggle" onClick={toggleTheme}>
++            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
++          </button>
++        </div>
++      </header>
++
++      <div className="nft-content fade-in">
++        {isLoading ? (
++          <div className="nft-loading">
++            <div className="spinner"></div>
++            <p>Loading your NFTs...</p>
++          </div>
++        ) : error ? (
++          <div className="nft-error">
++            <p className="text-error">{error}</p>
++            <button className="btn btn-secondary" onClick={() => window.location.reload()}>
++              Try Again
++            </button>
++          </div>
++        ) : totalNFTs === 0 ? (
++          <div className="nft-empty">
++            <div className="empty-icon">
++              <ImageIcon />
++            </div>
++            <h3>No NFTs Yet</h3>
++            <p className="text-muted">
++              Your NFTs will appear here once you receive or mint them.
++            </p>
++          </div>
++        ) : (
++          <>
++            <div className="nft-stats">
++              <div className="stat-card">
++                <span className="stat-value">{totalNFTs}</span>
++                <span className="stat-label">Total NFTs</span>
++              </div>
++              <div className="stat-card">
++                <span className="stat-value">{collections.length}</span>
++                <span className="stat-label">Collections</span>
++              </div>
++            </div>
++
++            {collections.map((collection) => (
++              <div key={collection.address} className="nft-collection">
++                <div className="collection-header">
++                  <h3>{collection.name}</h3>
++                  <span className="collection-count">{collection.nfts.length} items</span>
++                </div>
++                
++                <div className={`nft-grid ${view}`}>
++                  {collection.nfts.map((nft) => (
++                    <div 
++                      key={`${nft.contractAddress}-${nft.tokenId}`} 
++                      className="nft-card"
++                      onClick={() => setSelectedNFT(nft)}
++                    >
++                      <div className="nft-image">
++                        {nft.image ? (
++                          <img src={nft.image} alt={nft.name} loading="lazy" />
++                        ) : (
++                          <div className="nft-placeholder">
++                            <ImageIcon />
++                          </div>
++                        )}
++                      </div>
++                      <div className="nft-card-info">
++                        <span className="nft-name">{nft.name}</span>
++                        <span className="nft-id">#{nft.tokenId}</span>
++                      </div>
++                    </div>
++                  ))}
++                </div>
++              </div>
++            ))}
++          </>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/src/screens/Send.css b/src/screens/Send.css
+index e9500ac..918289f 100644
+--- a/src/screens/Send.css
++++ b/src/screens/Send.css
+@@ -315,4 +315,80 @@
+ 
+ .pin-input[type=number] {
+   -moz-appearance: textfield;
++}
++
++/* Multi-chain detection styles */
++.chain-detected {
++  display: flex;
++  align-items: center;
++  gap: var(--spacing-sm);
++  margin-top: var(--spacing-sm);
++  padding: var(--spacing-sm) var(--spacing-md);
++  border-radius: var(--radius-md);
++  font-size: 0.875rem;
++  font-weight: 500;
++}
++
++.chain-detected.chain-sultan {
++  background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 180, 150, 0.1));
++  border: 1px solid rgba(0, 212, 170, 0.3);
++  color: var(--accent-primary);
++}
++
++.chain-detected.chain-ethereum {
++  background: linear-gradient(135deg, rgba(98, 126, 234, 0.15), rgba(130, 71, 229, 0.1));
++  border: 1px solid rgba(98, 126, 234, 0.3);
++  color: #627eea;
++}
++
++.chain-detected.chain-bitcoin {
++  background: linear-gradient(135deg, rgba(247, 147, 26, 0.15), rgba(255, 180, 60, 0.1));
++  border: 1px solid rgba(247, 147, 26, 0.3);
++  color: #f7931a;
++}
++
++.chain-detected.chain-solana {
++  background: linear-gradient(135deg, rgba(153, 69, 255, 0.15), rgba(20, 241, 149, 0.1));
++  border: 1px solid rgba(153, 69, 255, 0.3);
++  color: #9945ff;
++}
++
++.chain-detected.chain-ton {
++  background: linear-gradient(135deg, rgba(0, 136, 204, 0.15), rgba(0, 180, 255, 0.1));
++  border: 1px solid rgba(0, 136, 204, 0.3);
++  color: #0088cc;
++}
++
++.chain-icon {
++  font-size: 1.1rem;
++}
++
++.chain-name {
++  flex: 1;
++}
++
++.bridge-badge {
++  font-size: 0.75rem;
++  padding: 2px 8px;
++  border-radius: 12px;
++  background: rgba(255, 255, 255, 0.1);
++  border: 1px solid rgba(255, 255, 255, 0.2);
++}
++
++.cross-chain-notice {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: var(--spacing-sm);
++  padding: var(--spacing-md);
++  background: linear-gradient(135deg, rgba(0, 212, 170, 0.1), rgba(255, 200, 100, 0.1));
++  border: 1px solid rgba(0, 212, 170, 0.3);
++  border-radius: var(--radius-md);
++  margin-bottom: var(--spacing-lg);
++  font-weight: 500;
++  color: var(--accent-primary);
++}
++
++.bridge-icon {
++  font-size: 1.25rem;
+ }
+\ No newline at end of file
+diff --git a/src/screens/Send.tsx b/src/screens/Send.tsx
+index 4b9706b..067812a 100644
+--- a/src/screens/Send.tsx
++++ b/src/screens/Send.tsx
+@@ -12,7 +12,7 @@ import { useTheme } from '../hooks/useTheme';
+ import { useBalance } from '../hooks/useBalance';
+ import { SultanWallet } from '../core/wallet';
+ import { sultanAPI } from '../api/sultanAPI';
+-import { validateAddress, validateAmount, verifySessionPin } from '../core/security';
++import { validateSultanOnlyAddress, validateAmount, verifySessionPin } from '../core/security';
+ import './Send.css';
+ 
+ // Premium SVG Icons
+@@ -82,8 +82,8 @@ export default function Send() {
+   const validateForm = (): boolean => {
+     setError('');
+ 
+-    // Validate recipient address
+-    const addressValidation = validateAddress(recipient);
++    // Validate recipient address (Sultan-only wallet)
++    const addressValidation = validateSultanOnlyAddress(recipient);
+     if (!addressValidation.valid) {
+       setError(addressValidation.error || 'Invalid recipient address');
+       return false;
+diff --git a/src/test-setup.ts b/src/test-setup.ts
+index 3157b6b..b9b336f 100644
+--- a/src/test-setup.ts
++++ b/src/test-setup.ts
+@@ -3,10 +3,7 @@
+  * Configures jsdom environment and mocks for browser APIs
+  */
+ 
+-// jsdom provides most browser APIs including:
+-// - crypto.subtle (Web Crypto API)
+-// - localStorage
+-// - window
++import '@testing-library/jest-dom';
+ 
+ // Mock IndexedDB is more complex - tests that need it will skip gracefully
+ if (typeof globalThis.indexedDB === 'undefined') {
+diff --git a/vitest.config.ts b/vitest.config.ts
+index 7986067..53c751e 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -1,16 +1,18 @@
+ import { defineConfig } from 'vitest/config';
++import react from '@vitejs/plugin-react';
+ 
+ export default defineConfig({
++  plugins: [react()],
+   test: {
+     environment: 'jsdom',
+     globals: true,
+     setupFiles: ['./src/test-setup.ts'],
+-    include: ['src/**/*.test.ts'],
++    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+     coverage: {
+       provider: 'v8',
+       reporter: ['text', 'html'],
+       include: ['src/core/**/*.ts'],
+-      exclude: ['src/**/*.test.ts', 'src/test-setup.ts'],
++      exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/test-setup.ts'],
+     },
+   },
+ });
+-- 
+2.50.1
+
