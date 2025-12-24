@@ -1,27 +1,23 @@
 #!/usr/bin/env bash
 #
-# Sultan L1 Genesis Restart Script v1.1.0
-# Deploys new binary with fixed 4% inflation to all validators
+# Sultan L1 Genesis Restart Script v2.0.0
+# Final production launch with unified validator system
 #
 set -euo pipefail
 
 # ============================================================================
-# CONFIGURATION - EDIT THESE
+# CONFIGURATION - PRODUCTION LAUNCH DEC 24, 2025
 # ============================================================================
 
 # Your validator servers (SSH user@host)
 VALIDATORS=(
-    # DigitalOcean (6 validators)
-    "root@192.241.154.140"  # NYC - Bootstrap node
-    "root@143.198.67.237"   # SFO
-    "root@188.166.102.7"    # AMS
-    "root@159.65.88.145"    # LON
-    "root@159.65.113.160"   # FRA
-    "root@188.166.218.123"  # SGP
-    # Hetzner (3 validators)
-    "root@116.203.92.158"   # NBG
-    "root@77.42.35.238"     # HEL
-    "root@49.13.26.15"      # FSN
+    # DigitalOcean (6 validators) - All active
+    "root@206.189.224.142"  # NYC - Bootstrap node (rpc.sltn.io)
+    "root@24.144.94.23"     # SFO
+    "root@46.101.122.13"    # FRA
+    "root@142.93.238.33"    # AMS
+    "root@143.198.205.21"   # SGP
+    "root@134.122.96.36"    # LON
 )
 
 # Bootstrap node (first validator - others connect to this)
@@ -38,17 +34,10 @@ SERVICE_NAME="sultan"
 
 # Genesis accounts (address:balance in base units, 9 decimals)
 # 1 SLTN = 1,000,000,000 base units
-# Total supply: 500,000,000 SLTN
-# NOTE: Live network genesis was 70M. Full 500M requires governance upgrade.
+# Total supply: 500,000,000 SLTN = 500,000,000,000,000,000 base units
 #
-# Distribution:
-#   Ecosystem Fund:     40% (200M) - Protocol development, grants
-#   Growth & Marketing: 20% (100M) - User acquisition, partnerships
-#   Strategic Reserve:  15% ( 75M) - Market stability, emergencies
-#   Fundraising:        12% ( 60M) - Investor allocation
-#   Team:                8% ( 40M) - Core contributors (vested)
-#   Liquidity:           5% ( 25M) - DEX pools, market making
-GENESIS_ACCOUNTS="sultan1ecosystemfund:200000000000000000,sultan1growth:100000000000000000,sultan1strategic:75000000000000000,sultan1fundraising:60000000000000000,sultan1team:40000000000000000,sultan1liquidity:25000000000000000"
+# Single treasury address - will be distributed post-genesis via transactions
+GENESIS_ACCOUNTS="sultan19mzzrah6h27draqc5tkh49yj623qwuz5f5t64c:500000000000000000"
 
 # SSH key to use
 SSH_KEY="$HOME/.ssh/sultan_do"
@@ -132,7 +121,7 @@ start_bootstrap_validator() {
             --validator-stake 10000 \\
             --enable-p2p \\
             --enable-sharding \\
-            --shard-count 8 \\
+            --shard-count 16 \
             --p2p-addr /ip4/0.0.0.0/tcp/26656 \\
             --rpc-addr 0.0.0.0:26657 \\
             --genesis '$GENESIS_ACCOUNTS' \\
@@ -168,7 +157,7 @@ start_other_validators() {
                 --enable-p2p \\
                 --bootstrap-peers /dns4/$BOOTSTRAP_DNS/tcp/26656 \\
                 --enable-sharding \\
-                --shard-count 8 \\
+                --shard-count 16 \
                 --rpc-addr 0.0.0.0:26657 \\
                 > /var/log/sultan.log 2>&1 &
             
