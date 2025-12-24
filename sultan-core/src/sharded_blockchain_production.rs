@@ -308,7 +308,7 @@ mod tests {
         };
 
         let blockchain = ShardedBlockchainProduction::new(config);
-        let capacity = blockchain.get_tps_capacity();
+        let capacity = blockchain.get_tps_capacity().await;
         
         // 1024 shards * 8000 tx/shard / 2 sec blocks = 4,096,000 TPS
         assert_eq!(capacity, 4_096_000);
