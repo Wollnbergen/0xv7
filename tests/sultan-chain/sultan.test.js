@@ -28,14 +28,9 @@ describe('Sultan Chain - Core Features', () => {
   });
   
   describe('Staking Rewards', () => {
-    test('should provide 13.33% APY', () => {
+    test('should provide ~13.33% APY', () => {
       const apy = 13.33;
-      expect(apy).toBe(13.33);
-    });
-    
-    test('should provide 18.66% mobile APY', () => {
-      const mobileAPY = 18.66;
-      expect(mobileAPY).toBe(18.66);
+      expect(apy).toBeCloseTo(13.33, 2);
     });
   });
   
@@ -46,8 +41,8 @@ describe('Sultan Chain - Core Features', () => {
     });
     
     test('should enforce minimum validator stake', () => {
-      const minStake = 5000; // SLTN
-      expect(minStake).toBe(5000);
+      const minStake = 10000; // 10,000 SLTN
+      expect(minStake).toBe(10000);
     });
   });
   

@@ -17,8 +17,8 @@ impl StakingPool {
     }
     
     pub fn stake(&mut self, validator: String, amount: u128) -> Result<(), String> {
-        if amount < 5000 {
-            return Err("Minimum stake is 5000 SLTN".to_string());
+        if amount < 10000 {
+            return Err("Minimum stake is 10,000 SLTN".to_string());
         }
         
         *self.validators.entry(validator).or_insert(0) += amount;

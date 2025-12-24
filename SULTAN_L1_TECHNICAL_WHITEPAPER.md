@@ -82,7 +82,7 @@ We made a deliberate architectural decision to build Sultan as a **pure Rust imp
 
 1. **Native Rust Blockchain Engine** - Built from first principles, not framework-dependent
 2. **libp2p Networking** - Battle-tested P2P with Kademlia DHT and GossipSub
-3. **Dynamic Sharding** - Horizontal scaling from 8 to 8,000 shards
+3. **Dynamic Sharding** - Horizontal scaling from 16 to 8,000+ shards
 4. **Zero Gas Fees** - Sustainable economics through inflation-based validator rewards
 5. **Post-Quantum Security** - Dilithium3 signatures for future-proof protection
 6. **Instant Finality** - No confirmation wait times, single-block settlement

@@ -97,7 +97,7 @@ ExecStart=/opt/sultan/sultan-node \\
   --validator-stake 100000 \\
   --enable-p2p \\
   --enable-sharding \\
-  --shard-count 8 \\
+  --shard-count 16 \\
   --block-time 2 \\
   --rpc-addr 0.0.0.0:26657 \\
   --p2p-addr /ip4/0.0.0.0/tcp/26656 \\

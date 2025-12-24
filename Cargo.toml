@@ -3,7 +3,6 @@ members = [
     "sultan-core",
     "sultan-cosmos-bridge",
     "sultan-interop",
-    "sultan_mainnet",
 ]
 exclude = [
     "contracts",

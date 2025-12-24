@@ -2,7 +2,7 @@
 //!
 //! Features:
 //! - Instant wallet creation in Telegram
-//! - One-tap staking (5000 SLTN minimum)
+//! - One-tap staking (10,000 SLTN minimum)
 //! - Gas-free transactions
 //! - Real-time balance/rewards tracking
 //! - Push notifications for validator events
@@ -17,7 +17,7 @@ use reqwest::Client;
 
 const BOT_TOKEN: &str = env!("TELEGRAM_BOT_TOKEN");
 const API_ENDPOINT: &str = "https://api.sultan.finance";
-const MIN_STAKE: u64 = 5_000_000_000_000; // 5,000 SLTN
+const MIN_STAKE: u64 = 10_000_000_000_000; // 10,000 SLTN
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UserWallet {
@@ -250,15 +250,15 @@ async fn stake_menu(
         let message = format!(
             "⚡ *One-Tap Staking*\n\n\
             Available: *{:.2} SLTN*\n\
-            Minimum: *5,000 SLTN*\n\
-            APY: *13.33%*\n\n\
+            Minimum: *10,000 SLTN*\n\
+            APY: *~13.33%*\n\n\
             Choose amount to stake:",
             wallet.balance as f64 / 1_000_000_000_000.0
         );
 
         let keyboard = make_keyboard(&[
-            vec![("5,000 SLTN", "stake_5000")],
             vec![("10,000 SLTN", "stake_10000")],
+            vec![("25,000 SLTN", "stake_25000")],
             vec![("50,000 SLTN", "stake_50000")],
             vec![("🔓 Unstake All", "unstake"), ("« Back", "start")],
         ]);

@@ -351,7 +351,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 | **Name** | Sultan Token |
 | **Symbol** | SLTN |
 | **Genesis Supply** | 500,000,000 |
-| **Decimals** | 8 |
+| **Decimals** | 9 |
 | **Type** | Native L1 Token |
 
 ---
