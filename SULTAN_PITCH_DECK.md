@@ -212,10 +212,10 @@ Sultan L1 is **live on mainnet** with verified metrics:
 | **Block Time** | 2.00 seconds | ✅ Verified |
 | **Block Creation** | 50-105µs | ✅ Measured |
 | **Finality** | 2 seconds (1 block) | ✅ Guaranteed |
-| **Active Shards** | 8 | ✅ Live |
+| **Active Shards** | 16 | ✅ Live |
 | **Base TPS** | 64,000 | ✅ Capacity |
 | **Max TPS** | 64,000,000 | 🔄 With expansion |
-| **Validators** | 15 | ✅ Globally distributed |
+| **Validators** | 9 | ✅ Globally distributed |
 | **Uptime** | 99.9%+ | ✅ Since launch |
 
 ---
@@ -273,7 +273,7 @@ Sultan achieves **linear scalability** through state sharding:
 | **Phase 2** | 256 | 1,024,000 | Q4 2026 |
 | **Phase 3** | 1,024 | 4,096,000 | Q2 2027 |
 | **Phase 4** | 4,096 | 16,384,000 | Q4 2027 |
-| **Maximum** | 16,000 | **64,000,000** | 2028+ |
+| **Maximum** | 8,000 | **64,000,000** | 2028+ |
 
 ---
 
@@ -301,7 +301,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
    ┌────▼────┐          ┌────▼────┐          ┌────▼────┐
    │ Hetzner │          │   NYC   │          │   SFO   │
    │ Germany │          │  (USA)  │          │  (USA)  │
-   │(11 nodes)│         │         │          │         │
+   │(3 nodes) │         │         │          │         │
    └─────────┘          └─────────┘          └─────────┘
                              │
         ┌────────────────────┼────────────────────┐
@@ -545,7 +545,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 
 | Metric | Current | 3 Mo | 6 Mo | 12 Mo |
 |--------|---------|------|------|-------|
-| **Validators** | 15 | 25 | 50 | 100+ |
+| **Validators** | 9 | 25 | 50 | 100+ |
 | **Daily Txs** | 1K | 100K | 1M | 10M |
 | **Active Wallets** | 100 | 10K | 100K | 500K |
 | **TVL** | $100K | $10M | $100M | $500M |
@@ -562,7 +562,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 
 **Q4 2025 ✅ Complete**
 - [x] Mainnet launch
-- [x] 15 global validators
+- [x] 9 global validators
 - [x] P2P networking (libp2p)
 - [x] RPC infrastructure
 - [x] SLTN Wallet v1.0
