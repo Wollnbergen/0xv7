@@ -497,17 +497,9 @@ impl NodeState {
         
         let economics = self.economics.read().await;
         
-        // Calculate validator count - includes self + connected P2P peers
-        let validator_count = if self.p2p_enabled {
-            if let Some(ref p2p) = self.p2p_network {
-                // All connected peers + this node
-                p2p.read().await.peer_count().await + 1
-            } else {
-                consensus.validator_count()
-            }
-        } else {
-            consensus.validator_count()
-        };
+        // Unified validator count from consensus engine
+        // All validators (both infrastructure and staked) are added to consensus
+        let validator_count = consensus.validator_count();
         
         Ok(NodeStatus {
             height,
@@ -1058,17 +1050,27 @@ mod rpc {
         req: CreateValidatorRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Add to staking manager for rewards/delegation
         match state.staking_manager.create_validator(
             req.validator_address.clone(),
             req.initial_stake,
             req.commission_rate,
         ).await {
-            Ok(_) => Ok(warp::reply::json(&serde_json::json!({
-                "validator_address": req.validator_address,
-                "stake": req.initial_stake,
-                "commission": req.commission_rate,
-                "status": "active"
-            }))),
+            Ok(_) => {
+                // Also add to consensus engine for block production
+                // This unifies staking validators with consensus validators
+                let mut consensus = state.consensus.write().await;
+                if let Err(e) = consensus.add_validator(req.validator_address.clone(), req.initial_stake) {
+                    warn!("Validator {} added to staking but not consensus: {}", req.validator_address, e);
+                }
+                Ok(warp::reply::json(&serde_json::json!({
+                    "validator_address": req.validator_address,
+                    "stake": req.initial_stake,
+                    "commission": req.commission_rate,
+                    "status": "active",
+                    "consensus": true
+                })))
+            },
             Err(e) => {
                 warn!("Create validator failed: {}", e);
                 Err(warp::reject())
