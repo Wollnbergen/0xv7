@@ -643,12 +643,25 @@ pub struct StakingStatistics {
 mod tests {
     use super::*;
 
+    // Minimum stake is 10,000 SLTN (10_000_000_000_000 with 9 decimals)
+    const MIN_STAKE: u64 = 10_000_000_000_000;
+
     #[tokio::test]
     async fn test_create_validator() {
         let staking = StakingManager::new(0.08);
+        
+        // Should fail with stake below minimum
+        let result = staking.create_validator(
+            "low_stake".to_string(),
+            MIN_STAKE - 1,
+            0.10,
+        ).await;
+        assert!(result.is_err());
+        
+        // Should succeed with minimum stake
         let result = staking.create_validator(
             "validator1".to_string(),
-            5_000_000_000_000,
+            MIN_STAKE,
             0.10,
         ).await;
         assert!(result.is_ok());
@@ -657,22 +670,74 @@ mod tests {
     #[tokio::test]
     async fn test_delegate() {
         let staking = StakingManager::new(0.08);
-        staking.create_validator("validator1".to_string(), 5_000_000_000_000, 0.10).await.unwrap();
+        staking.create_validator("validator1".to_string(), MIN_STAKE, 0.10).await.unwrap();
         
         let result = staking.delegate(
             "delegator1".to_string(),
             "validator1".to_string(),
-            1_000_000_000_000,
+            1_000_000_000_000, // 1,000 SLTN delegation
         ).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_reward_distribution() {
-        let staking = StakingManager::new(0.08);
-        staking.create_validator("validator1".to_string(), 5_000_000_000_000, 0.10).await.unwrap();
+        let staking = StakingManager::new(0.08); // 8% inflation
+        staking.create_validator("validator1".to_string(), MIN_STAKE, 0.10).await.unwrap();
         
         let distribution = staking.distribute_block_rewards(1).await.unwrap();
         assert!(distribution.total_rewards > 0);
+        
+        // Verify validator received rewards
+        assert!(distribution.validator_rewards.contains_key("validator1"));
+        let validator_reward = distribution.validator_rewards.get("validator1").unwrap();
+        assert!(*validator_reward > 0);
+    }
+
+    #[tokio::test]
+    async fn test_apy_calculation() {
+        // Test that 13.33% APY is correctly applied
+        let staking = StakingManager::new(BASE_APY); // Use the 13.33% APY
+        staking.create_validator("validator1".to_string(), MIN_STAKE, 0.0).await.unwrap(); // 0% commission
+        
+        // Simulate a full year of blocks
+        let mut total_rewards: u64 = 0;
+        for height in 1..=BLOCKS_PER_YEAR {
+            if height % 1_000_000 == 0 {
+                // Sample every 1M blocks to speed up test
+                let distribution = staking.distribute_block_rewards(height).await.unwrap();
+                total_rewards += distribution.total_rewards * 1_000_000;
+            }
+        }
+        
+        // After one year, rewards should be approximately 13.33% of stake
+        // Expected: MIN_STAKE * 0.1333 = 1,333,000,000,000 (1,333 SLTN)
+        let expected_annual_reward = (MIN_STAKE as f64 * BASE_APY) as u64;
+        
+        // Allow 5% tolerance due to rounding
+        let lower_bound = (expected_annual_reward as f64 * 0.95) as u64;
+        let upper_bound = (expected_annual_reward as f64 * 1.05) as u64;
+        
+        assert!(
+            total_rewards >= lower_bound && total_rewards <= upper_bound,
+            "Expected ~{} rewards, got {} (APY: {:.2}%)",
+            expected_annual_reward,
+            total_rewards,
+            (total_rewards as f64 / MIN_STAKE as f64) * 100.0
+        );
+    }
+
+    #[tokio::test]
+    async fn test_statistics_include_apy() {
+        let staking = StakingManager::new(BASE_APY);
+        staking.create_validator("validator1".to_string(), MIN_STAKE, 0.10).await.unwrap();
+        
+        let stats = staking.get_statistics().await;
+        
+        // Verify APY is reported correctly
+        assert!((stats.current_apy - BASE_APY).abs() < 0.0001, 
+            "Expected APY {}, got {}", BASE_APY, stats.current_apy);
+        assert_eq!(stats.total_validators, 1);
+        assert_eq!(stats.total_staked, MIN_STAKE);
     }
 }
