@@ -1,9 +1,9 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 2.1  
-**Date:** December 22, 2025  
-**Classification:** Internal Technical Reference
+**Version:** 3.0  
+**Date:** December 24, 2025  
+**Classification:** Public Technical Reference
 
 ---
 
@@ -31,7 +31,7 @@ Rust is a systems programming language known for:
 | Metric | Value | What It Means |
 |--------|-------|---------------|
 | Block Time | 2 seconds | New blocks every 2s (Ethereum: 12s) |
-| Active Validators | 6 | Geographically distributed (NYC, SFO, FRA, AMS, SGP, LON) |
+| Active Validators | Dynamic | Anyone can join with 10,000 SLTN stake |
 | Active Shards | 16 | Horizontal scaling for throughput |
 | Transaction Fees | Zero (0) | Users never pay gas fees |
 | Validator APY | 13.33% | Annual return for staking |
@@ -2313,18 +2313,18 @@ overflow-checks = false # Performance
 ```
 
 **Validator Deployment:**
-| Region | IP Address | Port |
-|--------|-----------|------|
-| NYC (Bootstrap) | 206.189.224.142 | 26657 |
-| SFO | 24.144.94.23 | 26657 |
-| FRA | 46.101.122.13 | 26657 |
-| AMS | 142.93.238.33 | 26657 |
-| SGP | 143.198.205.21 | 26657 |
-| LON | 134.122.96.36 | 26657 |
+
+Validators are decentralized and permissionless. Anyone can become a validator by staking 10,000+ SLTN through the Sultan Wallet or by running their own node.
+
+**Network Endpoints:**
+| Service | URL |
+|---------|-----|
+| RPC | https://rpc.sltn.io |
+| Wallet | https://wallet.sltn.io |
 
 ---
 
 **Document Maintainer:** Sultan Core Team  
-**Last Updated:** December 22, 2025  
-**Version:** 2.1
+**Last Updated:** December 24, 2025  
+**Version:** 3.0
 

@@ -3,9 +3,9 @@
 ## 🌐 Network Status: LIVE
 
 **Mainnet RPC:** https://rpc.sltn.io  
-**Block Height:** 45,000+  
-**Validators:** 9 active  
-**Block Time:** ~2 seconds
+**Block Time:** ~2 seconds  
+**Validators:** Dynamic (join with 10,000 SLTN stake)  
+**Shards:** 16 active
 
 ---
 

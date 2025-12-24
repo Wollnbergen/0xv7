@@ -10,7 +10,27 @@ Validators are the backbone of the Sultan blockchain. They:
 - Earn rewards for keeping the network secure
 - Can receive delegated stake from other users
 
-## Requirements
+**All validators are equal** - every validator runs consensus and earns APY proportional to their stake. There's no distinction between "infrastructure" and "staking" validators.
+
+## Two Ways to Become a Validator
+
+### Option 1: Sultan Wallet (Recommended)
+
+The easiest way to become a validator is through the Sultan Wallet PWA:
+
+1. **Get 10,000+ SLTN** in your wallet
+2. **Open Sultan Wallet** at [wallet.sltn.io](https://wallet.sltn.io)
+3. **Navigate to Validators** → **Become a Validator**
+4. **Enter your validator name** and stake amount
+5. **Sign the transaction** with your wallet
+
+Your validator is immediately active in the network!
+
+### Option 2: Run Your Own Node
+
+For full decentralization, run your own node infrastructure.
+
+#### Requirements
 
 ### Hardware
 | Component | Minimum | Recommended |
@@ -255,7 +275,7 @@ A: Yes, each validator needs a unique name and separate server.
 A: You stop earning rewards while offline. Currently no slashing penalties.
 
 **Q: How do I increase my stake?**  
-A: Restart your node with a higher `--validator-stake` value.
+A: Use the Sultan Wallet to delegate additional stake to your validator.
 
 **Q: Where are my rewards sent?**  
 A: Rewards accumulate in your validator account automatically.
@@ -271,8 +291,8 @@ A: No, APY is variable based on network conditions. 13.33% is an estimate.
 | Block Time | 2 seconds |
 | TPS Capacity | 64,000 (16 shards × 4,000 TPS) |
 | Shard Count | 16 |
-| Bootstrap Node | 206.189.224.142:26656 |
 | RPC Endpoint | https://rpc.sltn.io |
+| Wallet | https://wallet.sltn.io |
 
 ## Support
 

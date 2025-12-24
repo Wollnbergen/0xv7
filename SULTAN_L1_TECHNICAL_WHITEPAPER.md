@@ -2,10 +2,10 @@
 
 ## Technical Whitepaper
 
-**Version:** 2.1  
-**Date:** December 22, 2025  
+**Version:** 3.0  
+**Date:** December 24, 2025  
 **Status:** Production Mainnet Live  
-**Network:** Globally Distributed (6 Validators across 6 regions)
+**Network:** Globally Distributed, Fully Decentralized
 
 ---
 
@@ -21,15 +21,15 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Finality** | Immediate (single-block) |
 | **Active Shards** | 16 |
 | **TPS Capacity** | 64,000 (base) → 64M (max) |
-| **Validators** | 6 (NYC, SFO, FRA, AMS, SGP, LON) |
+| **Validators** | Dynamic (anyone can join with 10,000 SLTN stake) |
 | **Consensus** | Custom Proof-of-Stake |
 | **Network Protocol** | libp2p |
 | **Cryptography** | Ed25519 + Dilithium3 (Post-Quantum) |
 | **Gas Fees** | $0 (zero-fee transactions) |
 | **Staking APY** | 13.33% |
 
-**RPC Endpoint:** `http://206.189.224.142:26657` (NYC Bootstrap)  
-**P2P Bootstrap:** `/ip4/206.189.224.142/tcp/26656`  
+**RPC Endpoint:** `https://rpc.sltn.io`  
+**P2P Bootstrap:** See [Validator Guide](VALIDATOR_GUIDE.md) for bootstrap peers  
 **Binary:** 14MB (stripped, LTO-optimized)
 
 ---
@@ -707,6 +707,19 @@ Sultan is designed for multi-chain interoperability through purpose-built bridge
 - Unbonding period: 21 days
 
 ### 10.2 Setup Process
+
+**Option 1: Sultan Wallet (Recommended)**
+
+The easiest way to become a validator is through the Sultan Wallet PWA at [wallet.sltn.io](https://wallet.sltn.io):
+
+1. Connect your wallet with 10,000+ SLTN
+2. Navigate to Validators → Become a Validator
+3. Enter your validator name and stake amount
+4. Sign the transaction
+
+Your validator is immediately active in consensus!
+
+**Option 2: Run Your Own Node**
 
 ```bash
 # 1. Download latest release

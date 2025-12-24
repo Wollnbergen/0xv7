@@ -8,7 +8,23 @@ set -e
 BOOTSTRAP_IP="5.161.225.96"  # rpc.sltn.io - Hetzner
 BOOTSTRAP_PEER="/ip4/${BOOTSTRAP_IP}/tcp/26656"
 
-# All validator IPs
+# All validator IPs with anonymized names
+# Using generic regional identifiers instead of provider names
+declare -A VALIDATORS=(
+    # Hetzner validators
+    ["5.161.225.96"]="validator-alpha"      # Bootstrap/RPC
+    ["49.13.26.15"]="validator-bravo"
+    ["116.203.92.158"]="validator-charlie"
+    # DigitalOcean validators  
+    ["159.65.88.145"]="validator-delta"
+    ["188.166.218.123"]="validator-echo"
+    ["188.166.102.7"]="validator-foxtrot"
+    ["159.65.113.160"]="validator-golf"
+    ["143.198.67.237"]="validator-hotel"
+    ["192.241.154.140"]="validator-india"
+)
+
+# Legacy arrays for backwards compatibility
 DO_VALIDATORS=(
     "159.65.88.145"
     "188.166.218.123"
@@ -152,7 +168,7 @@ case $choice in
         echo ""
         echo "=== Deploying Bootstrap (${BOOTSTRAP_IP}) ==="
         upload_binary "$BOOTSTRAP_IP" "-o StrictHostKeyChecking=no"
-        create_systemd_service "$BOOTSTRAP_IP" "validator-bootstrap" "true" "-o StrictHostKeyChecking=no"
+        create_systemd_service "$BOOTSTRAP_IP" "${VALIDATORS[$BOOTSTRAP_IP]}" "true" "-o StrictHostKeyChecking=no"
         
         # Wait for bootstrap to start
         echo "⏳ Waiting 10s for bootstrap to initialize..."
@@ -160,40 +176,32 @@ case $choice in
         
         echo ""
         echo "=== Deploying Hetzner Validators ==="
-        idx=1
         for ip in "${HZ_VALIDATORS[@]}"; do
             upload_binary "$ip" "-o StrictHostKeyChecking=no"
-            create_systemd_service "$ip" "validator-hz-${idx}" "false" "-o StrictHostKeyChecking=no"
-            ((idx++))
+            create_systemd_service "$ip" "${VALIDATORS[$ip]}" "false" "-o StrictHostKeyChecking=no"
         done
         
         echo ""
         echo "=== Deploying DigitalOcean Validators ==="
-        idx=1
         for ip in "${DO_VALIDATORS[@]}"; do
             upload_binary "$ip" "-i $DO_SSH_KEY -o StrictHostKeyChecking=no"
-            create_systemd_service "$ip" "validator-do-${idx}" "false" "-i $DO_SSH_KEY -o StrictHostKeyChecking=no"
-            ((idx++))
+            create_systemd_service "$ip" "${VALIDATORS[$ip]}" "false" "-i $DO_SSH_KEY -o StrictHostKeyChecking=no"
         done
         ;;
     2)
         upload_binary "$BOOTSTRAP_IP" "-o StrictHostKeyChecking=no"
-        create_systemd_service "$BOOTSTRAP_IP" "validator-bootstrap" "true" "-o StrictHostKeyChecking=no"
+        create_systemd_service "$BOOTSTRAP_IP" "${VALIDATORS[$BOOTSTRAP_IP]}" "true" "-o StrictHostKeyChecking=no"
         ;;
     3)
-        idx=1
         for ip in "${DO_VALIDATORS[@]}"; do
             upload_binary "$ip" "-i $DO_SSH_KEY -o StrictHostKeyChecking=no"
-            create_systemd_service "$ip" "validator-do-${idx}" "false" "-i $DO_SSH_KEY -o StrictHostKeyChecking=no"
-            ((idx++))
+            create_systemd_service "$ip" "${VALIDATORS[$ip]}" "false" "-i $DO_SSH_KEY -o StrictHostKeyChecking=no"
         done
         ;;
     4)
-        idx=1
         for ip in "${HZ_VALIDATORS[@]}"; do
             upload_binary "$ip" "-o StrictHostKeyChecking=no"
-            create_systemd_service "$ip" "validator-hz-${idx}" "false" "-o StrictHostKeyChecking=no"
-            ((idx++))
+            create_systemd_service "$ip" "${VALIDATORS[$ip]}" "false" "-o StrictHostKeyChecking=no"
         done
         ;;
     5)
