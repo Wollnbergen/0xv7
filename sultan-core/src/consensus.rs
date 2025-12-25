@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use anyhow::{Result, bail};
-use tracing::{info, warn};
+use tracing::{info, warn, debug};
 use sha2::{Sha256, Digest};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -190,6 +190,58 @@ impl ConsensusEngine {
             result[0], result[1], result[2], result[3],
             result[4], result[5], result[6], result[7],
         ])
+    }
+
+    /// Calculate deterministic seed based on block height (for synchronized proposer selection)
+    fn calculate_height_seed(&self, height: u64) -> u64 {
+        let data = format!("sultan_proposer_{}_{}", height, self.total_stake);
+        let mut hasher = Sha256::new();
+        hasher.update(data.as_bytes());
+        let result = hasher.finalize();
+        
+        u64::from_le_bytes([
+            result[0], result[1], result[2], result[3],
+            result[4], result[5], result[6], result[7],
+        ])
+    }
+
+    /// Select proposer for a specific block height (synchronized across network)
+    /// This ensures all validators agree on who should propose each block
+    pub fn select_proposer_for_height(&self, height: u64) -> Option<String> {
+        let mut active_validators: Vec<_> = self.validators
+            .iter()
+            .filter(|(_, v)| v.is_active)
+            .collect();
+
+        if active_validators.is_empty() {
+            warn!("No active validators");
+            return None;
+        }
+
+        // Sort validators deterministically by address for consistent ordering
+        active_validators.sort_by(|a, b| a.0.cmp(b.0));
+
+        let seed = self.calculate_height_seed(height);
+        let total_power: u64 = active_validators.iter().map(|(_, v)| v.voting_power).sum();
+        
+        if total_power == 0 {
+            warn!("Total voting power is zero");
+            return None;
+        }
+
+        let target = seed % total_power;
+        let mut cumulative = 0u64;
+
+        for (address, validator) in &active_validators {
+            cumulative += validator.voting_power;
+            if cumulative > target {
+                debug!("Height {}: Proposer determined: {}", height, address);
+                return Some((*address).clone());
+            }
+        }
+
+        // Fallback - shouldn't happen with correct math
+        Some(active_validators[0].0.clone())
     }
 
     /// Get validator by address

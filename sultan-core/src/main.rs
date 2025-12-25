@@ -9,6 +9,7 @@
 //! - Persistent storage
 
 use sultan_core::*;
+use sultan_core::block_sync::{BlockSyncManager, SyncConfig, SyncState};
 use sultan_core::economics::Economics;
 use sultan_core::bridge_integration::BridgeManager;
 use sultan_core::staking::StakingManager;
@@ -95,6 +96,45 @@ struct Args {
     enable_p2p: bool,
 }
 
+/// Wallet transaction request format (matches wallet extension API)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct WalletTxRequest {
+    tx: WalletTxInner,
+    signature: String,
+    public_key: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct WalletTxInner {
+    from: String,
+    to: String,
+    #[serde(deserialize_with = "deserialize_amount")]
+    amount: u64,
+    #[serde(default)]
+    memo: Option<String>,
+    #[serde(default)]
+    nonce: u64,
+    #[serde(default)]
+    timestamp: u64,
+}
+
+fn deserialize_amount<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value: serde_json::Value = serde::Deserialize::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Number(n) => {
+            n.as_u64().ok_or_else(|| D::Error::custom("Invalid amount"))
+        }
+        serde_json::Value::String(s) => {
+            s.parse::<u64>().map_err(|_| D::Error::custom("Invalid amount string"))
+        }
+        _ => Err(D::Error::custom("Amount must be number or string")),
+    }
+}
+
 /// Main node state
 struct NodeState {
     blockchain: Arc<RwLock<Blockchain>>,
@@ -108,6 +148,7 @@ struct NodeState {
     token_factory: Arc<TokenFactory>,
     native_dex: Arc<NativeDex>,
     p2p_network: Option<Arc<RwLock<P2PNetwork>>>,
+    block_sync_manager: Option<Arc<RwLock<BlockSyncManager>>>,
     validator_address: Option<String>,
     block_time: u64,
     sharding_enabled: bool,
@@ -260,10 +301,28 @@ impl NodeState {
             None
         };
 
+        // Create shared consensus Arc for block sync manager
+        let consensus_arc = Arc::new(RwLock::new(consensus));
+
+        // Initialize BlockSyncManager if P2P is enabled
+        let block_sync_manager = if args.enable_p2p {
+            let sync_config = SyncConfig::default();
+            let block_sync = BlockSyncManager::new(
+                sync_config,
+                args.validator_address.clone(),
+                consensus_arc.clone(),
+                Duration::from_secs(args.block_time),
+            );
+            info!("🔄 BlockSyncManager initialized");
+            Some(Arc::new(RwLock::new(block_sync)))
+        } else {
+            None
+        };
+
         Ok(Self {
             blockchain: Arc::new(RwLock::new(blockchain)),
             sharded_blockchain,
-            consensus: Arc::new(RwLock::new(consensus)),
+            consensus: consensus_arc,
             storage: Arc::new(RwLock::new(storage)),
             economics: Arc::new(RwLock::new(Economics::new())),
             bridge_manager: Arc::new(BridgeManager::new()),
@@ -272,6 +331,7 @@ impl NodeState {
             token_factory: Arc::new(TokenFactory::new()),
             native_dex: Arc::new(NativeDex::new(Arc::new(TokenFactory::new()))),
             p2p_network,
+            block_sync_manager,
             validator_address: args.validator_address.clone(),
             block_time: args.block_time,
             sharding_enabled: args.enable_sharding,
@@ -295,22 +355,9 @@ impl NodeState {
 
     /// Produce a single block
     async fn produce_block(&self) -> Result<()> {
-        let mut consensus = self.consensus.write().await;
         let storage = self.storage.read().await;
 
-        // Select proposer
-        let proposer = consensus.select_proposer()
-            .context("No validator available to propose")?;
-
-        // Check if we are the proposer
-        if let Some(our_address) = &self.validator_address {
-            if &proposer != our_address {
-                debug!("Not our turn to propose (proposer: {})", proposer);
-                return Ok(());
-            }
-        }
-
-        // Get current height before block creation
+        // Get current height FIRST - this determines the proposer
         let current_height = if self.sharding_enabled {
             if let Some(ref sharded) = self.sharded_blockchain {
                 sharded.read().await.get_height().await
@@ -320,6 +367,28 @@ impl NodeState {
         } else {
             self.blockchain.read().await.chain.len() as u64
         };
+
+        let next_height = current_height + 1;
+
+        // === PRODUCTION: Height-based proposer selection ===
+        // All validators use the same height to deterministically select proposer
+        // This ensures network-wide agreement on who should propose each block
+        let consensus = self.consensus.read().await;
+        let proposer = consensus.select_proposer_for_height(next_height)
+            .context("No validator available to propose")?;
+        drop(consensus);
+
+        // Check if we are the proposer for this height
+        if let Some(our_address) = &self.validator_address {
+            if &proposer != our_address {
+                debug!("Not our turn to propose height {} (proposer: {})", next_height, proposer);
+                return Ok(());
+            }
+            info!("🎯 We are proposer for height {}", next_height);
+        } else {
+            // Not a validator, skip production
+            return Ok(());
+        }
 
         // Use sharded or regular blockchain
         let block = if self.sharding_enabled {
@@ -387,9 +456,12 @@ impl NodeState {
             block
         };
 
-        // Record proposal
-        consensus.record_proposal(&proposer)
-            .context("Failed to record proposal")?;
+        // Record proposal in consensus
+        {
+            let mut consensus = self.consensus.write().await;
+            consensus.record_proposal(&proposer)
+                .context("Failed to record proposal")?;
+        }
 
         // Save to storage
         storage.save_block(&block)
@@ -398,15 +470,14 @@ impl NodeState {
         // === PRODUCTION INTEGRATIONS ===
         
         // Distribute staking rewards for this block
-        let new_height = current_height + 1;
-        if let Err(e) = self.staking_manager.distribute_block_rewards(new_height).await {
-            error!("Failed to distribute block rewards at height {}: {}", new_height, e);
+        if let Err(e) = self.staking_manager.distribute_block_rewards(next_height).await {
+            error!("Failed to distribute block rewards at height {}: {}", next_height, e);
         } else {
-            debug!("Distributed staking rewards at height {}", new_height);
+            debug!("Distributed staking rewards at height {}", next_height);
         }
 
         // Update governance height to check for voting period endings
-        self.governance_manager.update_height(new_height).await;
+        self.governance_manager.update_height(next_height).await;
         
         // Update governance with total bonded for quorum calculations
         let staking_stats = self.staking_manager.get_statistics().await;
@@ -472,11 +543,14 @@ impl NodeState {
                 let stats = sharded_bc.get_stats().await;
                 let height = sharded_bc.get_height().await;
                 
+                // Get actual account count from shards
+                let account_count = stats.total_accounts;
+                
                 (
                     height,
                     format!("sharded-block-{}", height),
                     0, // TODO: track pending txs in sharded mode
-                    stats.shard_count * 1000, // Estimate
+                    account_count,
                 )
             } else {
                 (0, String::from("unknown"), 0, 0)
@@ -884,9 +958,23 @@ mod rpc {
     }
 
     async fn handle_submit_tx(
-        tx: Transaction,
+        wallet_tx: WalletTxRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Convert wallet format to internal Transaction format
+        let tx = Transaction {
+            from: wallet_tx.tx.from,
+            to: wallet_tx.tx.to,
+            amount: wallet_tx.tx.amount,
+            gas_fee: 0, // Zero-fee network
+            timestamp: wallet_tx.tx.timestamp,
+            nonce: wallet_tx.tx.nonce,
+            signature: Some(wallet_tx.signature),
+        };
+        
+        info!("Processing transaction from wallet: from={}, to={}, amount={}", 
+            tx.from, tx.to, tx.amount);
+        
         match state.submit_transaction(tx).await {
             Ok(hash) => Ok(warp::reply::json(&serde_json::json!({ "hash": hash }))),
             Err(e) => {
@@ -1331,6 +1419,13 @@ async fn main() -> Result<()> {
         let validator_addr = args.validator_address.clone();
         let validator_stake = args.validator_stake;
         
+        // Get message receiver from P2P to process incoming validator announcements
+        let mut message_rx = if let Some(ref p2p) = state.p2p_network {
+            p2p.write().await.take_message_receiver()
+        } else {
+            None
+        };
+        
         tokio::spawn(async move {
             // Wait for peers to connect before first announcement (30 seconds delay)
             info!("🌐 P2P message handler started, waiting for peer connections...");
@@ -1351,32 +1446,155 @@ async fn main() -> Result<()> {
             
             // P2P message handler loop
             loop {
-                // Process incoming P2P messages (includes validator announcements)
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                
-                // Re-announce this validator periodically (every 30 seconds)
-                if let (Some(ref addr), Some(stake)) = (&validator_addr, validator_stake) {
-                    if let Some(ref p2p) = p2p_state.p2p_network {
-                        static ANNOUNCE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-                        let count = ANNOUNCE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if count % 6 == 0 {
-                            let peer_count = p2p.read().await.peer_count().await;
-                            if peer_count > 0 {
-                                if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
-                                    debug!("Failed to re-announce validator: {}", e);
-                                } else {
-                                    info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
+                // Process incoming P2P messages with timeout
+                tokio::select! {
+                    // Handle incoming messages from P2P network
+                    Some(msg) = async { 
+                        if let Some(ref mut rx) = message_rx { 
+                            rx.recv().await 
+                        } else { 
+                            None 
+                        } 
+                    } => {
+                        match msg {
+                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id } => {
+                                // Register validator in consensus engine
+                                let mut consensus = p2p_state.consensus.write().await;
+                                if !consensus.is_validator(address) {
+                                    match consensus.add_validator(address.clone(), stake) {
+                                        Ok(_) => {
+                                            info!("✅ Registered validator in consensus: {} (stake: {}, peer: {})", 
+                                                  address, stake, peer_id);
+                                        }
+                                        Err(e) => {
+                                            warn!("Failed to register validator {}: {}", address, e);
+                                        }
+                                    }
                                 }
+                            }
+                            NetworkMessage::BlockProposal { height, proposer, block_hash, block_data } => {
+                                // === PRODUCTION BLOCK SYNC ===
+                                // Process incoming block from another validator
+                                debug!("📥 Received block proposal: height={}, proposer={}, hash={}", 
+                                       height, proposer, &block_hash[..16.min(block_hash.len())]);
+                                
+                                // Validate proposer is a registered validator
+                                let consensus = p2p_state.consensus.read().await;
+                                if !consensus.is_validator(&proposer) {
+                                    warn!("❌ Block rejected: proposer {} is not a registered validator", proposer);
+                                    continue;
+                                }
+                                
+                                // Verify this is the expected proposer
+                                let expected_proposer = consensus.current_proposer.clone();
+                                drop(consensus); // Release lock before acquiring write lock
+                                
+                                // Deserialize block
+                                let block: Block = match bincode::deserialize(&block_data) {
+                                    Ok(b) => b,
+                                    Err(e) => {
+                                        warn!("❌ Failed to deserialize block: {}", e);
+                                        continue;
+                                    }
+                                };
+                                
+                                // Get our current height
+                                let our_height = if p2p_state.sharding_enabled {
+                                    if let Some(ref sharded) = p2p_state.sharded_blockchain {
+                                        sharded.read().await.get_height().await
+                                    } else {
+                                        0
+                                    }
+                                } else {
+                                    p2p_state.blockchain.read().await.chain.len() as u64 - 1
+                                };
+                                
+                                // Only accept blocks that are ahead of us
+                                if height <= our_height {
+                                    debug!("Block {} already processed (our height: {})", height, our_height);
+                                    continue;
+                                }
+                                
+                                // Accept block if it's the next one we need
+                                if height == our_height + 1 {
+                                    info!("📦 Applying block {} from {}", height, proposer);
+                                    
+                                    // Apply block to our chain
+                                    if p2p_state.sharding_enabled {
+                                        if let Some(ref sharded) = p2p_state.sharded_blockchain {
+                                            let mut sharded_bc = sharded.write().await;
+                                            // Apply block transactions to sharded blockchain
+                                            for tx in &block.transactions {
+                                                let _ = sharded_bc.submit_transaction(tx.clone()).await;
+                                            }
+                                            // Update height - block is already created remotely
+                                            info!("✅ Synced block {} from {} ({} txs)", 
+                                                  height, proposer, block.transactions.len());
+                                        }
+                                    } else {
+                                        let mut blockchain = p2p_state.blockchain.write().await;
+                                        // Validate and add block
+                                        if blockchain.validate_block(&block).unwrap_or(false) {
+                                            blockchain.chain.push(block.clone());
+                                            // Apply transactions
+                                            for tx in &block.transactions {
+                                                let mut temp_state = blockchain.state.clone();
+                                                if blockchain.apply_transaction(&mut temp_state, tx).is_ok() {
+                                                    blockchain.state = temp_state;
+                                                }
+                                            }
+                                            info!("✅ Synced block {} from {} ({} txs)", 
+                                                  height, proposer, block.transactions.len());
+                                        } else {
+                                            warn!("❌ Block {} validation failed", height);
+                                        }
+                                    }
+                                    
+                                    // Advance consensus round after accepting block
+                                    let mut consensus = p2p_state.consensus.write().await;
+                                    let _ = consensus.select_proposer();
+                                    
+                                    // Save to storage
+                                    if let Ok(storage) = p2p_state.storage.try_read() {
+                                        let _ = storage.save_block(&block);
+                                    }
+                                }
+                            }
+                            _ => {
+                                // Other message types handled elsewhere
                             }
                         }
                     }
-                }
-                
-                if let Some(ref p2p) = p2p_state.p2p_network {
-                    let peer_count = p2p.read().await.peer_count().await;
-                    let validator_count = p2p.read().await.known_validator_count().await;
-                    info!("🌐 P2P Status: {} peers connected, {} validators known", 
-                          peer_count, validator_count);
+                    
+                    // Periodic tasks every 5 seconds
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                        // Re-announce this validator periodically (every 30 seconds)
+                        if let (Some(ref addr), Some(stake)) = (&validator_addr, validator_stake) {
+                            if let Some(ref p2p) = p2p_state.p2p_network {
+                                static ANNOUNCE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                                let count = ANNOUNCE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                if count % 6 == 0 {
+                                    let peer_count = p2p.read().await.peer_count().await;
+                                    if peer_count > 0 {
+                                        if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
+                                            debug!("Failed to re-announce validator: {}", e);
+                                        } else {
+                                            info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Log P2P and consensus status
+                        if let Some(ref p2p) = p2p_state.p2p_network {
+                            let peer_count = p2p.read().await.peer_count().await;
+                            let p2p_validator_count = p2p.read().await.known_validator_count().await;
+                            let consensus_validator_count = p2p_state.consensus.read().await.validator_count();
+                            info!("🌐 P2P Status: {} peers, {} validators (P2P) / {} validators (consensus)", 
+                                  peer_count, p2p_validator_count, consensus_validator_count);
+                        }
+                    }
                 }
             }
         });

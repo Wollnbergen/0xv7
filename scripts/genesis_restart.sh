@@ -24,8 +24,8 @@ VALIDATORS=(
 BOOTSTRAP_NODE="${VALIDATORS[0]}"
 BOOTSTRAP_DNS="rpc.sltn.io"
 
-# Binary download URL (REAL production binary with RocksDB, libp2p, etc.)
-BINARY_URL="https://github.com/Wollnbergen/0xv7/releases/download/v1.0.0/sultan-node"
+# Binary location (local build)
+LOCAL_BINARY="/workspaces/0xv7/sultan-node"
 
 # Remote paths
 REMOTE_BIN_PATH="/root/sultan-node"
@@ -40,7 +40,7 @@ SERVICE_NAME="sultan"
 GENESIS_ACCOUNTS="sultan19mzzrah6h27draqc5tkh49yj623qwuz5f5t64c:500000000000000000"
 
 # SSH key to use
-SSH_KEY="$HOME/.ssh/sultan_do"
+SSH_KEY="$HOME/.ssh/sultan_deploy"
 
 # ============================================================================
 # COLORS
@@ -93,14 +93,23 @@ clear_all_data() {
 deploy_binary() {
     log_info "Deploying new binary to all validators..."
     
+    # Check if local binary exists
+    if [[ ! -f "$LOCAL_BINARY" ]]; then
+        log_error "Binary not found at $LOCAL_BINARY"
+        log_error "Run: cargo build --release -p sultan-core"
+        exit 1
+    fi
+    
     for host in "${VALIDATORS[@]}"; do
-        log_info "Deploying to $host..."
-        ssh_cmd "$host" "
-            wget -q '$BINARY_URL' -O $REMOTE_BIN_PATH.new && \
-            chmod +x $REMOTE_BIN_PATH.new && \
-            mv $REMOTE_BIN_PATH.new $REMOTE_BIN_PATH && \
-            echo 'Binary deployed successfully'
-        " &
+        log_info "Uploading to $host..."
+        scp -o StrictHostKeyChecking=no -i "$SSH_KEY" "$LOCAL_BINARY" "$host:$REMOTE_BIN_PATH" &
+    done
+    
+    wait
+    
+    # Make executable on all hosts
+    for host in "${VALIDATORS[@]}"; do
+        ssh_cmd "$host" "chmod +x $REMOTE_BIN_PATH" &
     done
     
     wait
@@ -202,8 +211,10 @@ create_systemd_service() {
         local is_bootstrap=""
         local bootstrap_flag=""
         
+        local genesis_flag=""
         if [[ "$idx" -eq 1 ]]; then
             is_bootstrap="# Bootstrap node"
+            genesis_flag="--genesis '$GENESIS_ACCOUNTS'"
         else
             bootstrap_flag="--bootstrap-peers /dns4/$BOOTSTRAP_DNS/tcp/26656"
         fi
@@ -225,8 +236,9 @@ ExecStart=$REMOTE_BIN_PATH \\
     --validator-stake 10000 \\
     --enable-p2p \\
     --enable-sharding \\
-    --shard-count 8 \\
+    --shard-count 16 \\
     --rpc-addr 0.0.0.0:26657 \\
+    $genesis_flag \\
     $bootstrap_flag
 Restart=always
 RestartSec=5
@@ -303,7 +315,7 @@ main() {
     echo "║  ✅ Zero gas fees sustainable at 76M+ TPS                      ║"
     echo "║                                                                ║"
     echo "║  Network Status:                                               ║"
-    echo "║  - Validators: 15                                              ║"
+    echo "║  - Validators: 6                                               ║"
     echo "║  - Block Height: Starting from 0                               ║"
     echo "║  - RPC: https://rpc.sltn.io                                    ║"
     echo "╚════════════════════════════════════════════════════════════════╝"

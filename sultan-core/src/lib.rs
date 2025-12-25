@@ -4,6 +4,7 @@
 //! It provides the fundamental blockchain logic, consensus, and state management.
 
 pub mod blockchain;
+pub mod block_sync;
 pub mod consensus;
 pub mod p2p;
 pub mod quantum;

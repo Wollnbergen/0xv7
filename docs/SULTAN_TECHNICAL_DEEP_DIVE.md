@@ -1,8 +1,8 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.0  
-**Date:** December 24, 2025  
+**Version:** 3.1  
+**Date:** December 25, 2025  
 **Classification:** Public Technical Reference
 
 ---

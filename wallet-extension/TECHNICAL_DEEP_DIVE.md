@@ -72,7 +72,7 @@ Sultan Wallet is a **Progressive Web Application (PWA)** for the Sultan L1 block
                                ▼
                     ┌─────────────────────┐
                     │  Sultan L1 Network   │
-                    │  16 Shards · 5 Val   │
+                    │  16 Shards · 6 Val   │
                     │  2s Blocks · 64K TPS │
                     └─────────────────────┘
 ```

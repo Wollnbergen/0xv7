@@ -1023,6 +1023,13 @@ impl ShardingCoordinator {
         let should_expand = max_load > config.auto_expand_threshold 
             && config.shard_count < config.max_shards;
 
+        // Count total accounts across all shards
+        let mut total_accounts = 0;
+        for shard in shards.iter() {
+            let state = shard.state.read().await;
+            total_accounts += state.len();
+        }
+
         ShardStats {
             shard_count: config.shard_count,
             max_shards: config.max_shards,
@@ -1033,6 +1040,7 @@ impl ShardingCoordinator {
             estimated_tps: self.get_tps_capacity_internal(&config),
             current_load: max_load,
             should_expand,
+            total_accounts,
         }
     }
     
@@ -1121,6 +1129,7 @@ pub struct ShardStats {
     pub estimated_tps: u64,
     pub current_load: f64,
     pub should_expand: bool,
+    pub total_accounts: usize,
 }
 
 #[cfg(test)]

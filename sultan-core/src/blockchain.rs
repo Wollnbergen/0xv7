@@ -86,7 +86,7 @@ impl Blockchain {
     }
 
     /// Add transaction to pool with validation
-    pub fn add_transaction(&mut self, tx: Transaction) -> Result<()> {
+    pub fn add_transaction(&mut self, mut tx: Transaction) -> Result<()> {
         // Validate transaction
         if tx.amount == 0 {
             bail!("Transaction amount must be greater than 0");
@@ -100,6 +100,10 @@ impl Blockchain {
         if let Some(account) = self.state.get(&tx.from) {
             if account.balance < tx.amount {
                 bail!("Insufficient balance: {} < {}", account.balance, tx.amount);
+            }
+            // Auto-set nonce if 0 (wallet compatibility)
+            if tx.nonce == 0 {
+                tx.nonce = account.nonce + 1;
             }
             if account.nonce >= tx.nonce {
                 bail!("Invalid nonce: expected > {}, got {}", account.nonce, tx.nonce);

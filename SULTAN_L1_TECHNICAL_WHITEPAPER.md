@@ -2,8 +2,8 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.0  
-**Date:** December 24, 2025  
+**Version:** 3.1  
+**Date:** December 25, 2025  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
 
@@ -184,45 +184,77 @@ Sultan implements a **bespoke Proof-of-Stake consensus** designed for speed and 
 - Deterministic proposer rotation
 - Single-round block finality
 - Low latency block propagation
+- Height-based proposer synchronization
 
 ### 3.2 Validator Selection
 
-Validators are selected to propose blocks based on their stake proportion:
+Validators are selected to propose blocks based on their stake proportion and **block height**. This ensures all validators agree on who should propose each block:
 
 ```rust
-fn select_proposer(round: u64, validators: &[Validator]) -> &Validator {
-    let total_stake: u64 = validators.iter().map(|v| v.stake).sum();
-    let selection_seed = sha3_256(&round.to_le_bytes());
+/// Select proposer for a specific block height (synchronized across network)
+/// All validators use the same height to deterministically select proposer
+fn select_proposer_for_height(height: u64, validators: &[Validator]) -> &Validator {
+    // Sort validators deterministically by address
+    let mut sorted_validators = validators.to_vec();
+    sorted_validators.sort_by(|a, b| a.address.cmp(&b.address));
+    
+    let total_stake: u64 = sorted_validators.iter().map(|v| v.stake).sum();
+    let seed_data = format!("sultan_proposer_{}_{}", height, total_stake);
+    let selection_seed = sha256(seed_data.as_bytes());
     let random_value = u64::from_le_bytes(selection_seed[0..8]) % total_stake;
     
     let mut cumulative = 0u64;
-    for validator in validators {
+    for validator in &sorted_validators {
         cumulative += validator.stake;
         if random_value < cumulative {
             return validator;
         }
     }
-    &validators[0]
+    &sorted_validators[0]
 }
 ```
 
 **Properties:**
+- **Height-based consensus:** All validators agree on proposer for each height
 - **Probabilistic fairness:** Higher stake = proportionally more blocks
 - **Deterministic:** Any node can verify proposer legitimacy
-- **Resistant to manipulation:** SHA3 hash prevents prediction
+- **Network-synchronized:** Uses block height, not local round counter
+- **Resistant to manipulation:** SHA256 hash prevents prediction
 
-### 3.3 Block Production Flow
+### 3.3 Block Synchronization
+
+When validators receive blocks from the network, they validate and apply them:
+
+1. **Verify proposer:** Check that the block was created by the expected proposer for that height
+2. **Validate block hash:** Cryptographic verification of block integrity
+3. **Apply transactions:** Update local state with block transactions
+4. **Advance consensus:** Move to next height for proposer selection
+
+This ensures all validators maintain synchronized chain state even during network partitions.
+
+### 3.4 Block Production Flow
 
 ```
 Every 2 seconds:
 
-1. ROUND START
-   └─► Network time synchronization (NTP)
+1. HEIGHT CHECK
+   └─► Determine current chain height
 
 2. PROPOSER SELECTION  
-   └─► Stake-weighted deterministic selection
+   └─► Height-based deterministic selection (all nodes agree)
 
-3. TRANSACTION COLLECTION
+3. IF WE ARE PROPOSER:
+   └─► Collect transactions from mempool
+   └─► Create block (50-105µs)
+   └─► Sign and broadcast via P2P
+
+4. IF WE ARE NOT PROPOSER:
+   └─► Wait for block from network
+   └─► Validate incoming block
+   └─► Apply block to local chain
+
+5. IMMEDIATE FINALITY
+   └─► Block accepted, state committed
    └─► Mempool prioritization (fee-optional)
 
 4. BLOCK CREATION (50-105µs)
@@ -282,9 +314,10 @@ Sultan partitions blockchain state across multiple shards, each capable of proce
 
 | Parameter | Value |
 |-----------|-------|
-| Active Shards | 8 |
-| Maximum Shards | 8,000 |
-| TPS per Shard | 8,000 |
+| Active Shards | 16 |
+| Maximum Shards | 16,000 |
+| TX per Block/Shard | 8,000 |
+| TPS per Shard | 4,000 |
 | Base Capacity | 64,000 TPS |
 | Maximum Capacity | 64,000,000 TPS |
 
@@ -892,11 +925,11 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 | Block Time | 2 seconds |
 | Finality | Immediate (1 block) |
 | Block Creation | 50-105µs |
-| Active Shards | 8 |
-| Maximum Shards | 8,000 |
+| Active Shards | 16 |
+| Maximum Shards | 16,000 |
 | Base TPS | 64,000 |
 | Maximum TPS | 64,000,000 |
-| Consensus | Custom PoS |
+| Consensus | Custom PoS with height-based leader election |
 | Minimum Validator Stake | 10,000 SLTN |
 | Genesis Supply | 500,000,000 SLTN |
 | Inflation | 4% → 2% (decreasing) |
@@ -906,7 +939,7 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 | Networking | libp2p |
 | Storage | RocksDB |
 | Cryptography | Ed25519 + Dilithium3 |
-| Hashing | SHA3-256 |
+| Hashing | SHA256 |
 
 ---
 
