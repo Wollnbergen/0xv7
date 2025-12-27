@@ -267,9 +267,8 @@ impl Shard {
             Err(e) => {
                 warn!("Shard {}: ✗ Signature FAILED for tx from {}: {} (message: {})", 
                       self.id, tx.from, e, message_str);
-                // SOFT MODE: Allow transaction but log failure for debugging
-                // TODO: Change to bail!() for strict mode after verification
-                Ok(())
+                // STRICT MODE: Reject transactions with invalid signatures
+                bail!("Signature verification failed for tx from {}: {}", tx.from, e)
             }
         }
     }
