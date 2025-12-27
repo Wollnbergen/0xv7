@@ -641,11 +641,30 @@ A mathematical proof that a message came from a specific person, similar to a ha
 4. Only you could have created that signature (proves authenticity)
 5. If the message changes, the signature becomes invalid (proves integrity)
 
-**Sultan uses Ed25519:**
+**Sultan uses Ed25519 with STRICT enforcement:**
 
 ```rust
-// From sharding_production.rs
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey, Verifier, SIGNATURE_LENGTH};
+// From sharding_production.rs - PRODUCTION signature verification
+pub fn verify_signature(&self, tx: &Transaction) -> Result<()> {
+    // Get signature and public key from transaction
+    let signature = Signature::from_bytes(&sig_bytes);
+    let verifying_key = VerifyingKey::from_bytes(&pubkey_bytes)?;
+    
+    // Recreate the message that was signed by the wallet
+    // Format: JSON.stringify({from, to, amount, memo, nonce, timestamp})
+    let message_str = format!(
+        r#"{{"from":"{}","to":"{}","amount":"{}","memo":"","nonce":{},"timestamp":{}}}"
+        tx.from, tx.to, tx.amount, tx.nonce, tx.timestamp
+    );
+    
+    // SHA256 hash the message (matching wallet behavior)
+    let message_hash = Sha256::digest(message_str.as_bytes());
+    
+    // STRICT: Reject if signature is invalid
+    verifying_key.verify(&message_hash, &signature)
+        .context("Signature verification failed")?;
+    Ok(())
+}
 ```
 
 **What is Ed25519?**
@@ -1673,13 +1692,22 @@ Multiple layers of security, so if one layer fails, others still protect the sys
 
 ### 11.4 Key Security Features
 
-| Feature | What It Does | Why It Matters |
-|---------|--------------|----------------|
-| **Ed25519 Signatures** | Modern elliptic curve crypto | No ECDSA malleability issues that plagued Bitcoin |
-| **Deterministic Finality** | Blocks are final immediately | No chain reorganizations, no double-spend window |
-| **Encrypted P2P** | Noise protocol on all connections | Can't eavesdrop on validator communication |
-| **Rate Limiting** | Limit requests per IP/peer | Prevents DDoS attacks on RPC endpoints |
-| **Commit Log** | Persistent log of cross-shard transactions | Crash recovery without losing transactions |
+| Feature | What It Does | Status | Why It Matters |
+|---------|--------------|--------|----------------|
+| **Ed25519 Signature Verification** | Cryptographic proof of transaction origin | ✅ **STRICT** | All transactions must be signed - no unsigned tx accepted |
+| **SHA-256 Message Hashing** | Transaction data integrity | ✅ **Live** | Ensures message wasn't tampered with |
+| **Nonce-Based Replay Protection** | Prevents transaction replay | ✅ **Live** | Each tx has unique nonce, can't be replayed |
+| **Deterministic Finality** | Blocks are final immediately | ✅ **Live** | No chain reorganizations, no double-spend window |
+| **Encrypted P2P** | Noise protocol on all connections | ✅ **Live** | Can't eavesdrop on validator communication |
+| **Rate Limiting** | Limit requests per IP/peer | ✅ **Live** | Prevents DDoS attacks on RPC endpoints |
+| **Commit Log** | Persistent log of cross-shard transactions | ✅ **Live** | Crash recovery without losing transactions |
+
+**Signature Verification Flow (Production):**
+```
+Transaction Submission → Signature Check → Nonce Validation → Balance Check → Execute
+                              ↓
+                      Invalid? REJECT with error
+```
 
 ### 11.5 Security Audits
 
@@ -1876,25 +1904,34 @@ A Progressive Web App is a website that behaves like a native app:
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Transaction Signing:**
+**Transaction Signing (Production Flow):**
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  1. Construct transaction object                              │
 │     { from, to, amount, memo, nonce, timestamp }             │
 │                           ▼                                   │
-│  2. Serialize to canonical JSON                               │
+│  2. Serialize to canonical JSON (exact format required)       │
+│     JSON.stringify({from, to, amount, memo, nonce, timestamp})│
 │                           ▼                                   │
-│  3. Hash with SHA-512 (as per Ed25519 spec)                  │
+│  3. Hash with SHA-256 (matching node verification)           │
+│     messageHash = SHA256(jsonString)                         │
 │                           ▼                                   │
-│  4. Sign hash with private key                               │
-│     signature = Ed25519.sign(hash, privateKey)               │
+│  4. Sign hash with Ed25519 private key                       │
+│     signature = ed25519.sign(messageHash, privateKey)        │
 │                           ▼                                   │
-│  5. Submit to RPC: { tx, signature, publicKey }              │
+│  5. Submit to RPC: { tx, signature (hex), public_key (hex) } │
 │                           ▼                                   │
-│  6. Node verifies signature and includes in block            │
+│  6. Node STRICTLY verifies signature before accepting        │
+│     → Invalid signature = Transaction REJECTED               │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+**⚠️ IMPORTANT:** The node enforces STRICT signature verification. Transactions with:
+- Missing signatures → REJECTED
+- Invalid signatures → REJECTED  
+- Missing public keys → REJECTED
+- Wrong message format → REJECTED
 
 ### 13.5 Security Model
 

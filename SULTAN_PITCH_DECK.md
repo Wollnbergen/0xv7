@@ -125,11 +125,12 @@ We built a blockchain from first principles—no frameworks, no compromises.
 
 ---
 
-**🔐 Post-Quantum Ready Architecture**
-- Ed25519 for current operations (battle-tested, secure)
-- Dilithium3 upgrade path planned for future
-- Architecture designed for seamless quantum-safe transition
-- Proactive approach to quantum computing era
+**🔐 Production-Grade Security (LIVE)**
+- **Ed25519 strict signature verification** - All transactions cryptographically verified
+- Nonce-based replay protection - Prevents transaction replay attacks
+- SHA-256 message hashing - Industry-standard integrity
+- Post-quantum ready architecture (Dilithium3 upgrade path)
+- All security features **deployed and enforced in production**
 
 ---
 

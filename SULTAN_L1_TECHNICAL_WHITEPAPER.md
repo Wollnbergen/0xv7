@@ -471,14 +471,24 @@ The bootstrap node maintains persistent connections to all active validators, en
 
 ### 6.1 Signature Schemes
 
-Sultan implements **dual cryptographic layers** for current and future security:
+Sultan implements **strict cryptographic verification** on all transactions:
 
-**Primary: Ed25519 (Current)**
+**Primary: Ed25519 (Production)**
 - Algorithm: Edwards-curve Digital Signature Algorithm
-- Key size: 256-bit
-- Signature size: 512-bit
+- Key size: 256-bit (32 bytes)
+- Signature size: 512-bit (64 bytes)
 - Security: 128-bit equivalent
 - Use: Transaction signing, block signatures
+- **Enforcement: STRICT** - Invalid signatures are rejected
+
+**Transaction Signing Flow:**
+```
+1. Wallet creates message: JSON.stringify({from, to, amount, memo, nonce, timestamp})
+2. Message is SHA-256 hashed
+3. Hash is signed with Ed25519 private key
+4. Signature + public key sent with transaction
+5. Node verifies signature before accepting transaction
+```
 
 **Secondary: Dilithium3 (Post-Quantum)**
 - Algorithm: CRYSTALS-Dilithium (NIST PQC winner)
@@ -515,15 +525,17 @@ Example: sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7l8qn5t2
 
 **Protected Against:**
 
-| Threat | Mitigation |
-|--------|------------|
-| 51% attacks | Economic stake at risk (slashing) |
-| Double-spending | Immediate finality |
-| Sybil attacks | Stake-weighted consensus |
-| Long-range attacks | Periodic checkpoints |
-| DDoS | Rate limiting, stake requirements |
-| MEV attacks | Encrypted mempool (planned) |
-| Quantum attacks | Dilithium3 signatures |
+| Threat | Mitigation | Status |
+|--------|------------|--------|
+| Unauthorized transactions | Ed25519 signature verification (STRICT) | ✅ Live |
+| 51% attacks | Economic stake at risk (slashing) | ✅ Live |
+| Double-spending | Immediate finality | ✅ Live |
+| Replay attacks | Nonce-based replay protection | ✅ Live |
+| Sybil attacks | Stake-weighted consensus | ✅ Live |
+| Long-range attacks | Periodic checkpoints | ✅ Live |
+| DDoS | Rate limiting, stake requirements | ✅ Live |
+| MEV attacks | Encrypted mempool | 🔜 Planned |
+| Quantum attacks | Dilithium3 signatures | 🔜 Planned |
 
 ### 6.5 Security Audits
 
