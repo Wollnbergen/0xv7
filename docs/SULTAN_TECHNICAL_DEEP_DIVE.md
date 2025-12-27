@@ -1,8 +1,8 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.1  
-**Date:** December 25, 2025  
+**Version:** 3.2  
+**Date:** December 27, 2025  
 **Classification:** Public Technical Reference
 
 ---
@@ -1769,6 +1769,8 @@ Base URL: `https://rpc.sltn.io`
 | `/balance/{address}` | GET | Account balance |
 | `/transfer` | POST | Send tokens |
 | `/validators` | GET | Active validator set |
+| `/transactions/{address}` | GET | Transaction history by address |
+| `/tx/{hash}` | GET | Transaction details by hash |
 
 ---
 
@@ -2325,6 +2327,6 @@ Validators are decentralized and permissionless. Anyone can become a validator b
 ---
 
 **Document Maintainer:** Sultan Core Team  
-**Last Updated:** December 24, 2025  
-**Version:** 3.0
+**Last Updated:** December 27, 2025  
+**Version:** 3.2
 

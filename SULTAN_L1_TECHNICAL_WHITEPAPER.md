@@ -2,8 +2,8 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.1  
-**Date:** December 25, 2025  
+**Version:** 3.2  
+**Date:** December 27, 2025  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
 
@@ -816,6 +816,7 @@ Validators should monitor:
 | Health | `GET /health` | Node health check |
 | Block | `GET /block/:height` | Block by height |
 | Transaction | `GET /tx/:hash` | Transaction by hash |
+| TX History | `GET /transactions/:address` | Transaction history by address |
 | Submit TX | `POST /tx` | Submit transaction |
 | Account | `GET /account/:address` | Balance and state |
 | Validators | `GET /validators` | Active validator set |
@@ -847,9 +848,9 @@ Official non-custodial wallet with enterprise-grade security:
 ## 12. Roadmap
 
 ### Q4 2025 ✅ Complete
-- [x] Mainnet launch (December 6, 2025)
+- [x] Mainnet launch (December 25, 2025)
 - [x] 16-shard production deployment
-- [x] 15 global validators operational
+- [x] 6 global validators operational
 - [x] Core RPC endpoints
 - [x] P2P networking (libp2p)
 - [x] SLTN wallet (security-hardened)
@@ -908,9 +909,9 @@ Sultan L1 represents a new paradigm in blockchain design: **native Rust performa
 | Post-Quantum | Dilithium3 | None |
 | Max TPS | 64,000,000 | 10,000 - 65,000 |
 
-**Production Status:** ✅ **LIVE** since December 6, 2025
+**Production Status:** ✅ **LIVE** since December 25, 2025
 
-**Network:** 15 globally distributed validators
+**Network:** 6 globally distributed validators
 
 **RPC:** `https://rpc.sltn.io`
 
@@ -969,8 +970,8 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 
 ---
 
-**Document Version:** 2.0  
-**Last Updated:** December 8, 2025  
+**Document Version:** 3.2  
+**Last Updated:** December 27, 2025  
 **Status:** Production Mainnet Live  
 **Authors:** Sultan Core Team
 

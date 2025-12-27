@@ -226,16 +226,47 @@ export async function getValidators(): Promise<Validator[]> {
 
 /**
  * Get transaction history for an address
- * Note: Node doesn't have tx history endpoint yet, returns empty for now
+ * Fetches from the node's /transactions/{address} endpoint
  */
 export async function getTransactions(
-  _address: string,
-  _limit = 20,
+  address: string,
+  limit = 20,
   _offset = 0
 ): Promise<Transaction[]> {
-  // Transaction history not yet implemented on node
-  // Future: GET /transactions/{address}
-  return [];
+  try {
+    const result = await restApi<{
+      address: string;
+      transactions: Array<{
+        hash: string;
+        from: string;
+        to: string;
+        amount: number;
+        memo?: string;
+        nonce: number;
+        timestamp: number;
+        block_height: number;
+        status: string;
+      }>;
+      count: number;
+    }>(`/transactions/${address}?limit=${limit}`);
+    
+    // Convert to Transaction format
+    return result.transactions.map(tx => ({
+      hash: tx.hash,
+      from: tx.from,
+      to: tx.to,
+      amount: tx.amount.toString(),
+      memo: tx.memo || '',
+      nonce: tx.nonce,
+      timestamp: tx.timestamp,
+      blockHeight: tx.block_height,
+      status: tx.status as 'pending' | 'confirmed' | 'failed',
+      type: tx.from === address ? 'send' : 'receive'
+    }));
+  } catch (error) {
+    console.warn('Failed to fetch transactions:', error);
+    return [];
+  }
 }
 
 /**
@@ -474,11 +505,21 @@ export const sultanAPI = {
   getTransactions,
   getNetworkStatus,
   
+  /**
+   * Get the current nonce for an address
+   * The nonce is fetched from the balance endpoint
+   */
+  getNonce: async (address: string): Promise<number> => {
+    const balance = await getBalance(address);
+    return balance.nonce;
+  },
+  
   broadcastTransaction: async (tx: {
     from: string;
     to: string;
     amount: string;
     memo?: string;
+    nonce: number;
     timestamp: number;
     signature: string;
     publicKey: string;
@@ -489,7 +530,7 @@ export const sultanAPI = {
         to: tx.to,
         amount: tx.amount,
         memo: tx.memo,
-        nonce: 0, // Will be set by node
+        nonce: tx.nonce,
         timestamp: tx.timestamp,
       },
       signature: tx.signature,
@@ -498,12 +539,14 @@ export const sultanAPI = {
   },
 
   stake: async (req: StakeRequest): Promise<{ hash: string }> => {
+    // Fetch current nonce for proper transaction ordering
+    const balance = await getBalance(req.delegatorAddress);
     return stakeTokens({
       transaction: {
         from: req.delegatorAddress,
         to: req.validatorAddress,
         amount: req.amount,
-        nonce: 0,
+        nonce: balance.nonce,
         timestamp: Date.now(),
       },
       signature: req.signature,
@@ -512,12 +555,14 @@ export const sultanAPI = {
   },
 
   unstake: async (req: UnstakeRequest): Promise<{ hash: string }> => {
+    // Fetch current nonce for proper transaction ordering
+    const balance = await getBalance(req.delegatorAddress);
     return unstakeTokens({
       transaction: {
         from: req.delegatorAddress,
         to: '', // Self-unbond
         amount: req.amount,
-        nonce: 0,
+        nonce: balance.nonce,
         timestamp: Date.now(),
       },
       signature: req.signature,
@@ -526,12 +571,14 @@ export const sultanAPI = {
   },
 
   claimRewards: async (req: ClaimRewardsRequest): Promise<{ hash: string }> => {
+    // Fetch current nonce for proper transaction ordering
+    const balance = await getBalance(req.delegatorAddress);
     return claimRewards({
       transaction: {
         from: req.delegatorAddress,
         to: '',
         amount: '0',
-        nonce: 0,
+        nonce: balance.nonce,
         timestamp: Date.now(),
       },
       signature: req.signature,

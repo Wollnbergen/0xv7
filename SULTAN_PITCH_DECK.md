@@ -5,7 +5,7 @@
 **The Native Rust Blockchain**  
 *2-Second Finality | $0 Gas Fees | 64M TPS Scalability*
 
-**Version:** 3.1 | **Updated:** December 25, 2025
+**Version:** 3.2 | **Updated:** December 27, 2025
 
 ---
 
@@ -195,7 +195,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 | Metric | Sultan (Native Rust) | Typical Framework |
 |--------|---------------------|-------------------|
 | Block Creation | 50-105µs | 100-500ms |
-| Binary Size | 14MB | 500MB+ |
+| Binary Size | 15MB | 500MB+ |
 | Minimum RAM | 1GB | 8-16GB |
 | GC Pauses | None | Frequent |
 | Startup Time | <1 second | 30-60 seconds |
