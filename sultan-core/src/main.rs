@@ -20,7 +20,7 @@ use sultan_core::sharding_production::ShardConfig;
 use sultan_core::sharded_blockchain_production::ConfirmedTransaction;
 use sultan_core::SultanBlockchain;
 use sultan_core::p2p::{P2PNetwork, NetworkMessage};
-use anyhow::{Result, Context};
+use anyhow::{Result, Context, bail};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
 use std::sync::Arc;
@@ -30,6 +30,7 @@ use tokio::time::{interval, Duration};
 use std::path::PathBuf;
 use clap::Parser;
 use sha2::Digest;
+use ed25519_dalek::{Signature, VerifyingKey, Verifier, SIGNATURE_LENGTH};
 
 /// Sultan Node CLI Arguments
 #[derive(Parser, Debug)]
@@ -489,9 +490,74 @@ impl NodeState {
         Ok(())
     }
 
+    /// Verify transaction signature using Ed25519
+    /// The wallet signs: SHA256(JSON.stringify({from, to, amount, memo, nonce, timestamp}))
+    fn verify_transaction_signature(tx: &Transaction) -> Result<()> {
+        // Get signature - required for production
+        let sig_str = match tx.signature.as_ref() {
+            Some(s) if !s.is_empty() => s,
+            _ => {
+                bail!("Transaction signature is required");
+            }
+        };
+
+        // Get public key - required for production
+        let pubkey_str = match tx.public_key.as_ref() {
+            Some(pk) if !pk.is_empty() => pk,
+            _ => {
+                bail!("Transaction public key is required for signature verification");
+            }
+        };
+
+        // Decode signature from hex
+        let sig_bytes = hex::decode(sig_str)
+            .context("Invalid signature: not valid hex")?;
+
+        if sig_bytes.len() != SIGNATURE_LENGTH {
+            bail!("Invalid signature length: expected {}, got {}", SIGNATURE_LENGTH, sig_bytes.len());
+        }
+
+        let sig_array: [u8; SIGNATURE_LENGTH] = sig_bytes.try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert signature bytes to array"))?;
+        let signature = Signature::from_bytes(&sig_array);
+
+        // Decode public key from hex
+        let pubkey_bytes = hex::decode(pubkey_str)
+            .context("Invalid public key: not valid hex")?;
+
+        if pubkey_bytes.len() != 32 {
+            bail!("Invalid public key length: expected 32, got {}", pubkey_bytes.len());
+        }
+
+        let pubkey_array: [u8; 32] = pubkey_bytes.try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert public key bytes to array"))?;
+        let verifying_key = VerifyingKey::from_bytes(&pubkey_array)
+            .context("Invalid Ed25519 public key")?;
+
+        // Recreate the message that was signed by the wallet
+        // The wallet signs: SHA256(JSON.stringify({from, to, amount, memo, nonce, timestamp}))
+        let message_str = format!(
+            r#"{{"from":"{}","to":"{}","amount":"{}","memo":"","nonce":{},"timestamp":{}}}"#,
+            tx.from, tx.to, tx.amount, tx.nonce, tx.timestamp
+        );
+        
+        // SHA256 hash the message (matching wallet behavior)
+        let message_hash = sha2::Sha256::digest(message_str.as_bytes());
+
+        // Verify the signature - STRICT: reject invalid signatures
+        verifying_key.verify(&message_hash, &signature)
+            .context("Signature verification failed: invalid signature")?;
+
+        info!("✓ Signature verified for tx from {}", tx.from);
+        Ok(())
+    }
+
     /// Transaction submission endpoint
     /// Sultan Chain: Zero gas fees - transaction costs paid by 4% inflation
     async fn submit_transaction(&self, tx: Transaction) -> Result<String> {
+        // STRICT: Verify signature before accepting transaction
+        Self::verify_transaction_signature(&tx)?;
+        
         // Calculate transaction hash
         let tx_hash = format!("{}:{}:{}", tx.from, tx.to, tx.nonce);
         
@@ -977,7 +1043,10 @@ mod rpc {
             Ok(hash) => Ok(warp::reply::json(&serde_json::json!({ "hash": hash }))),
             Err(e) => {
                 warn!("Transaction rejected: {}", e);
-                Err(warp::reject())
+                Ok(warp::reply::json(&serde_json::json!({
+                    "error": e.to_string(),
+                    "status": 400
+                })))
             }
         }
     }
