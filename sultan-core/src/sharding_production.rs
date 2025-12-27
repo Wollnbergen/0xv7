@@ -178,56 +178,100 @@ impl Shard {
         (hash_value % shard_count as u64) as usize
     }
 
-    /// Verify transaction signature
+    /// Verify transaction signature using Ed25519
+    /// 
+    /// The wallet signs: SHA256(JSON.stringify({from, to, amount, memo, nonce, timestamp}))
+    /// Signature and public key are hex-encoded
     pub fn verify_signature(&self, tx: &Transaction) -> Result<()> {
-        // DEV MODE: Skip signature verification entirely for testing
-        // The current implementation incorrectly tries to decode bech32 addresses as hex
-        // TODO: Implement proper bech32 address decoding for signature verification
-        // TODO: Add public_key field to Transaction struct for proper verification
-        debug!("Shard {}: Skipping signature verification (dev mode) for tx from {}", self.id, tx.from);
-        return Ok(());
+        // Get signature - if missing, log and allow (soft mode for migration)
+        let sig_str = match tx.signature.as_ref() {
+            Some(s) if !s.is_empty() => s,
+            _ => {
+                warn!("Shard {}: Transaction from {} has no signature (allowing for now)", self.id, tx.from);
+                return Ok(()); // Soft mode: allow unsigned for migration period
+            }
+        };
+
+        // Get public key - if missing, log and allow (soft mode for migration)
+        let pubkey_str = match tx.public_key.as_ref() {
+            Some(pk) if !pk.is_empty() => pk,
+            _ => {
+                warn!("Shard {}: Transaction from {} has no public_key (allowing for now)", self.id, tx.from);
+                return Ok(()); // Soft mode: allow for migration period
+            }
+        };
+
+        // Decode signature from hex
+        let sig_bytes = match hex::decode(sig_str) {
+            Ok(b) => b,
+            Err(e) => {
+                warn!("Shard {}: Invalid signature hex from {}: {} (allowing)", self.id, tx.from, e);
+                return Ok(());
+            }
+        };
+
+        if sig_bytes.len() != SIGNATURE_LENGTH {
+            warn!("Shard {}: Invalid signature length from {}: expected {}, got {} (allowing)", 
+                  self.id, tx.from, SIGNATURE_LENGTH, sig_bytes.len());
+            return Ok(());
+        }
+
+        let sig_array: [u8; SIGNATURE_LENGTH] = sig_bytes.try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert signature bytes to array"))?;
+        let signature = Signature::from_bytes(&sig_array);
+
+        // Decode public key from hex
+        let pubkey_bytes = match hex::decode(pubkey_str) {
+            Ok(b) => b,
+            Err(e) => {
+                warn!("Shard {}: Invalid public_key hex from {}: {} (allowing)", self.id, tx.from, e);
+                return Ok(());
+            }
+        };
+
+        if pubkey_bytes.len() != 32 {
+            warn!("Shard {}: Invalid public_key length from {}: expected 32, got {} (allowing)", 
+                  self.id, tx.from, pubkey_bytes.len());
+            return Ok(());
+        }
+
+        let pubkey_array: [u8; 32] = pubkey_bytes.try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert public key bytes to array"))?;
+        let verifying_key = match VerifyingKey::from_bytes(&pubkey_array) {
+            Ok(k) => k,
+            Err(e) => {
+                warn!("Shard {}: Invalid Ed25519 public key from {}: {} (allowing)", self.id, tx.from, e);
+                return Ok(());
+            }
+        };
+
+        // Recreate the message that was signed by the wallet
+        // The wallet signs: SHA256(JSON.stringify({from, to, amount, memo, nonce, timestamp}))
+        // IMPORTANT: Must match exact JS JSON.stringify output format and key order
+        // Wallet sends amount as string for precision, we store as u64
+        let message_str = format!(
+            r#"{{"from":"{}","to":"{}","amount":"{}","memo":"","nonce":{},"timestamp":{}}}"#,
+            tx.from, tx.to, tx.amount, tx.nonce, tx.timestamp
+        );
         
-        // PRODUCTION CODE (currently disabled):
-        // let sig_str = match tx.signature.as_ref() {
-        //     Some(s) if !s.is_empty() => s,
-        //     _ => {
-        //         debug!("Shard {}: Allowing unsigned transaction (dev mode)", self.id);
-        //         return Ok(());
-        //     }
-        // };
-        // 
-        // // Decode signature
-        // let sig_bytes = hex::decode(sig_str)
-        //     .context("Invalid signature hex")?;
-        // 
-        // if sig_bytes.len() != SIGNATURE_LENGTH {
-        //     bail!("Invalid signature length: expected {}, got {}", SIGNATURE_LENGTH, sig_bytes.len());
-        // }
-        //
-        // let sig_array: [u8; SIGNATURE_LENGTH] = sig_bytes.try_into()
-        //     .map_err(|_| anyhow::anyhow!("Failed to convert signature bytes"))?;
-        // let signature = Signature::from_bytes(&sig_array);
-        //
-        // // Decode public key from sender address
-        // let pubkey_bytes = hex::decode(&tx.from)
-        //     .context("Invalid sender address hex")?;
-        // 
-        // if pubkey_bytes.len() != 32 {
-        //     bail!("Invalid public key length");
-        // }
-        //
-        // let pubkey_array: [u8; 32] = pubkey_bytes.try_into()
-        //     .map_err(|_| anyhow::anyhow!("Failed to convert public key bytes"))?;
-        // let verifying_key = VerifyingKey::from_bytes(&pubkey_array)
-        //     .context("Invalid public key")?;
-        //
-        // // Create message to verify
-        // let message = format!("{}:{}:{}", tx.from, tx.to, tx.amount);
-        // 
-        // verifying_key.verify(message.as_bytes(), &signature)
-        //     .context("Signature verification failed")?;
-        //
-        // Ok(())
+        // SHA256 hash the message (matching wallet behavior)
+        use sha2::{Sha256, Digest};
+        let message_hash = Sha256::digest(message_str.as_bytes());
+
+        // Verify the signature - in soft mode, log failures but don't reject
+        match verifying_key.verify(&message_hash, &signature) {
+            Ok(()) => {
+                info!("Shard {}: ✓ Signature VERIFIED for tx from {}", self.id, tx.from);
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Shard {}: ✗ Signature FAILED for tx from {}: {} (message: {})", 
+                      self.id, tx.from, e, message_str);
+                // SOFT MODE: Allow transaction but log failure for debugging
+                // TODO: Change to bail!() for strict mode after verification
+                Ok(())
+            }
+        }
     }
 
     /// Validate nonce for replay protection

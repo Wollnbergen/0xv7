@@ -17,6 +17,7 @@ use sultan_core::governance::GovernanceManager;
 use sultan_core::token_factory::TokenFactory;
 use sultan_core::native_dex::NativeDex;
 use sultan_core::sharding_production::ShardConfig;
+use sultan_core::sharded_blockchain_production::ConfirmedTransaction;
 use sultan_core::SultanBlockchain;
 use sultan_core::p2p::{P2PNetwork, NetworkMessage};
 use anyhow::{Result, Context};
@@ -427,6 +428,24 @@ impl NodeState {
         // Save to storage
         storage.save_block(&block)
             .context("Failed to save block")?;
+
+        // Save transactions to persistent storage for history queries
+        for tx in &block.transactions {
+            let confirmed_tx = ConfirmedTransaction {
+                hash: format!("{:x}", sha2::Sha256::digest(format!("{}:{}:{}:{}", tx.from, tx.to, tx.amount, tx.timestamp).as_bytes())),
+                from: tx.from.clone(),
+                to: tx.to.clone(),
+                amount: tx.amount,
+                memo: None,
+                nonce: tx.nonce,
+                timestamp: tx.timestamp,
+                block_height: block.index,
+                status: "confirmed".to_string(),
+            };
+            if let Err(e) = storage.save_transaction(&confirmed_tx) {
+                warn!("Failed to save transaction to storage: {}", e);
+            }
+        }
 
         // === PRODUCTION INTEGRATIONS ===
         
@@ -935,6 +954,7 @@ mod rpc {
                     timestamp: wallet_tx.tx.timestamp,
                     nonce: wallet_tx.tx.nonce,
                     signature: Some(wallet_tx.signature),
+                    public_key: Some(wallet_tx.public_key),
                 }
             }
             TxRequest::Simple(simple_tx) => {
@@ -948,6 +968,7 @@ mod rpc {
                     timestamp: simple_tx.timestamp,
                     nonce: simple_tx.nonce,
                     signature: simple_tx.signature,
+                    public_key: None,
                 }
             }
         };
@@ -994,8 +1015,17 @@ mod rpc {
         query: TxHistoryQuery,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
+        // First try in-memory cache
         let blockchain = state.blockchain.read().await;
-        let transactions = blockchain.get_transaction_history(&address, query.limit).await;
+        let mut transactions = blockchain.get_transaction_history(&address, query.limit).await;
+        
+        // If empty, try persistent storage
+        if transactions.is_empty() {
+            let storage = state.storage.read().await;
+            if let Ok(stored_txs) = storage.get_transaction_history(&address, query.limit) {
+                transactions = stored_txs;
+            }
+        }
         
         Ok(warp::reply::json(&serde_json::json!({
             "address": address,

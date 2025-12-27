@@ -180,6 +180,81 @@ impl PersistentStorage {
         info!("✅ Database compaction complete");
         Ok(())
     }
+
+    /// Save a confirmed transaction to storage
+    /// Stores: tx by hash, and indexes by sender/receiver address
+    pub fn save_transaction(&self, tx: &crate::sharded_blockchain_production::ConfirmedTransaction) -> Result<()> {
+        // Store transaction by hash
+        let tx_key = format!("tx:{}", tx.hash);
+        let tx_data = serde_json::to_vec(tx)?;
+        self.db.put(tx_key.as_bytes(), &tx_data)?;
+
+        // Add to sender's transaction list
+        self.append_tx_to_address(&tx.from, &tx.hash)?;
+
+        // Add to receiver's transaction list (if different)
+        if tx.from != tx.to {
+            self.append_tx_to_address(&tx.to, &tx.hash)?;
+        }
+
+        Ok(())
+    }
+
+    /// Append a transaction hash to an address's transaction index
+    fn append_tx_to_address(&self, address: &str, tx_hash: &str) -> Result<()> {
+        let index_key = format!("txindex:{}", address);
+        
+        // Get existing hashes
+        let mut hashes: Vec<String> = if let Some(data) = self.db.get(index_key.as_bytes())? {
+            serde_json::from_slice(&data).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        // Add new hash (avoid duplicates)
+        if !hashes.contains(&tx_hash.to_string()) {
+            hashes.push(tx_hash.to_string());
+            let data = serde_json::to_vec(&hashes)?;
+            self.db.put(index_key.as_bytes(), &data)?;
+        }
+
+        Ok(())
+    }
+
+    /// Get transaction by hash
+    pub fn get_transaction(&self, hash: &str) -> Result<Option<crate::sharded_blockchain_production::ConfirmedTransaction>> {
+        let key = format!("tx:{}", hash);
+        if let Some(data) = self.db.get(key.as_bytes())? {
+            let tx: crate::sharded_blockchain_production::ConfirmedTransaction = serde_json::from_slice(&data)?;
+            return Ok(Some(tx));
+        }
+        Ok(None)
+    }
+
+    /// Get transaction history for an address (most recent first)
+    pub fn get_transaction_history(&self, address: &str, limit: usize) -> Result<Vec<crate::sharded_blockchain_production::ConfirmedTransaction>> {
+        let index_key = format!("txindex:{}", address);
+        
+        // Get transaction hashes for this address
+        let hashes: Vec<String> = if let Some(data) = self.db.get(index_key.as_bytes())? {
+            serde_json::from_slice(&data).unwrap_or_default()
+        } else {
+            return Ok(Vec::new());
+        };
+
+        // Fetch transactions (most recent last in storage, so reverse)
+        let mut transactions = Vec::new();
+        for hash in hashes.iter().rev().take(limit) {
+            if let Some(tx) = self.get_transaction(hash)? {
+                transactions.push(tx);
+            }
+        }
+
+        // Sort by block height descending (most recent first)
+        transactions.sort_by(|a, b| b.block_height.cmp(&a.block_height));
+
+        Ok(transactions)
+    }
     
     /// Clear all data (DANGEROUS - for testing only)
     #[cfg(test)]

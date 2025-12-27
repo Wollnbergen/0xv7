@@ -251,17 +251,22 @@ export async function getTransactions(
     }>(`/transactions/${address}?limit=${limit}`);
     
     // Convert to Transaction format
+    // Import the formatSLTN function for display amounts
+    const formatAmount = (atomic: string): string => {
+      const sltn = Number(atomic) / 1e9;
+      return sltn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 9 });
+    };
+    
     return result.transactions.map(tx => ({
       hash: tx.hash,
       from: tx.from,
       to: tx.to,
       amount: tx.amount.toString(),
+      displayAmount: formatAmount(tx.amount.toString()),
       memo: tx.memo || '',
-      nonce: tx.nonce,
       timestamp: tx.timestamp,
       blockHeight: tx.block_height,
       status: tx.status as 'pending' | 'confirmed' | 'failed',
-      type: tx.from === address ? 'send' : 'receive'
     }));
   } catch (error) {
     console.warn('Failed to fetch transactions:', error);

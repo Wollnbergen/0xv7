@@ -34,6 +34,9 @@ pub struct Transaction {
     pub timestamp: u64,
     pub nonce: u64,
     pub signature: Option<String>,
+    /// Public key for signature verification (hex-encoded ed25519 key)
+    #[serde(default)]
+    pub public_key: Option<String>,
 }
 
 /// Account state in the blockchain
@@ -366,6 +369,7 @@ impl Transaction {
             timestamp,
             nonce,
             signature: None,
+            public_key: None,
         }
     }
 

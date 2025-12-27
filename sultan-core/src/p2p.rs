@@ -242,6 +242,7 @@ impl P2PNetwork {
         let known_validators = self.known_validators.clone();
         let is_running = self.is_running.clone();
         let message_tx = self.message_tx.clone();
+        let bootstrap_peers_for_reconnect = self.bootstrap_peers.clone();
         
         // Create broadcast channel - receiver for event loop, sender stays in self
         let (broadcast_tx, mut broadcast_rx) = mpsc::unbounded_channel::<(String, Vec<u8>)>();
@@ -249,6 +250,10 @@ impl P2PNetwork {
 
         // Spawn the swarm event loop
         tokio::spawn(async move {
+            // Reconnection timer - check every 30 seconds
+            let mut reconnect_interval = tokio::time::interval(std::time::Duration::from_secs(30));
+            reconnect_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            
             loop {
                 if !*is_running.read().await {
                     info!("🛑 P2P network stopping");
@@ -256,6 +261,18 @@ impl P2PNetwork {
                 }
 
                 tokio::select! {
+                    // Periodic reconnection check
+                    _ = reconnect_interval.tick() => {
+                        let peer_count = connected_peers.read().await.len();
+                        if peer_count < 2 && !bootstrap_peers_for_reconnect.is_empty() {
+                            info!("🔄 Low peer count ({}), attempting reconnection to bootstrap peers...", peer_count);
+                            for peer_addr in &bootstrap_peers_for_reconnect {
+                                if let Err(e) = swarm.dial(peer_addr.clone()) {
+                                    debug!("Reconnect dial failed for {}: {}", peer_addr, e);
+                                }
+                            }
+                        }
+                    }
                     // Handle broadcast requests
                     Some((topic, data)) = broadcast_rx.recv() => {
                         // Publish to gossipsub
