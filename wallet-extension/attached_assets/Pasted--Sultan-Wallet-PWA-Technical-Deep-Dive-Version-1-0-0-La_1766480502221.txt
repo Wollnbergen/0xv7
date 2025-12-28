@@ -29,7 +29,7 @@ Sultan Wallet is a **Progressive Web Application (PWA)** for the Sultan L1 block
 
 ### Key Features
 - **Zero-Fee Transactions**: All transfers on Sultan L1 are completely free
-- **~13.33% Staking APY**: Variable APY based on network stake and participation
+- **13.33% Staking APY**: Stake SLTN tokens with network validators
 - **Ed25519 Signatures**: Fast, secure cryptographic operations
 - **Offline Capable**: Service worker caching for core functionality
 - **Optional 2FA**: TOTP-based two-factor authentication
@@ -72,7 +72,7 @@ Sultan Wallet is a **Progressive Web Application (PWA)** for the Sultan L1 block
                                ▼
                     ┌─────────────────────┐
                     │  Sultan L1 Network   │
-                    │  16 Shards · 6 Val   │
+                    │  16 Shards · 5 Val   │
                     │  2s Blocks · 64K TPS │
                     └─────────────────────┘
 ```
@@ -510,7 +510,7 @@ export interface StakingInfo {
   staked: string;
   pendingRewards: string;
   validator?: string;
-  stakingAPY: number;  // ~13.33% (variable)
+  stakingAPY: number;  // 13.33%
 }
 
 export interface Validator {
@@ -777,7 +777,7 @@ npx vitest --coverage
 | Decimals | 9 |
 | Address Prefix | sultan |
 | BIP44 Coin Type | 1984 |
-| Staking APY | ~13.33% (variable) |
+| Staking APY | 13.33% |
 | Min Validator Stake | 10,000 SLTN |
 | RPC Endpoint | https://rpc.sltn.io |
 

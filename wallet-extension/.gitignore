@@ -31,6 +31,3 @@ coverage/
 
 # PWA generated
 dev-dist/
-
-# Internal documentation (never publish)
-.internal/
