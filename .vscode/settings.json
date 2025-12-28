@@ -3,5 +3,7 @@
   "terminal.integrated.profiles.linux": {
     "Clean Bash": { "path": "/workspaces/0xv7/.vscode/bash-clean.sh" }
   },
-  "terminal.integrated.defaultProfile.linux": "Clean Bash"
+  "terminal.integrated.defaultProfile.linux": "Clean Bash",
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python-envs.pythonProjects": []
 }

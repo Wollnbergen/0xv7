@@ -1,0 +1,37 @@
+From a136d5e027018918e0afd1211cfc550a4b2fee73 Mon Sep 17 00:00:00 2001
+From: MrCiocchetti <wollnbergen@protonmail.com>
+Date: Sat, 27 Dec 2025 17:07:13 +0000
+Subject: [PATCH] fix: Use REST API for broadcastTransaction instead of
+ JSON-RPC
+
+The broadcastTransaction function was using JSON-RPC format (POST to / with
+method: 'broadcast_tx'), but the Sultan node's API expects REST format
+(POST to /tx).
+
+This caused transactions to fail silently - the pending screen would never
+appear and transactions would not be sent.
+
+Changed from:
+  rpc<{ hash: string }>('broadcast_tx', {...})
+To:
+  restApi<{ hash: string }>('/tx', 'POST', {...})
+---
+ src/api/sultanAPI.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/api/sultanAPI.ts b/src/api/sultanAPI.ts
+index 10e0625..4c0d415 100644
+--- a/src/api/sultanAPI.ts
++++ b/src/api/sultanAPI.ts
+@@ -479,7 +479,7 @@ export const sultanAPI = {
+     signature: string;
+     publicKey: string;
+   }): Promise<{ hash: string }> => {
+-    return rpc<{ hash: string }>('broadcast_tx', {
++    return restApi<{ hash: string }>('/tx', 'POST', {
+       tx: {
+         from: tx.from,
+         to: tx.to,
+-- 
+2.50.1
+

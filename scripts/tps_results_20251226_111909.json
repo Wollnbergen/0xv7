@@ -1,0 +1,14 @@
+{
+  "timestamp": "2025-12-26T11:19:09+00:00",
+  "endpoint": "http://134.122.96.36:8545",
+  "tx_count": 100,
+  "concurrency": 10,
+  "duration_sec": .69,
+  "success_count": 100,
+  "fail_count": 0,
+  "tps": 144.92,
+  "avg_latency_ms": 46.25,
+  "blocks_produced": 0,
+  "initial_height": 39,
+  "final_height": 39
+}

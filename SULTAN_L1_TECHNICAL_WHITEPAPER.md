@@ -2,8 +2,8 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.0  
-**Date:** December 24, 2025  
+**Version:** 3.2  
+**Date:** December 27, 2025  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
 
@@ -184,45 +184,77 @@ Sultan implements a **bespoke Proof-of-Stake consensus** designed for speed and 
 - Deterministic proposer rotation
 - Single-round block finality
 - Low latency block propagation
+- Height-based proposer synchronization
 
 ### 3.2 Validator Selection
 
-Validators are selected to propose blocks based on their stake proportion:
+Validators are selected to propose blocks based on their stake proportion and **block height**. This ensures all validators agree on who should propose each block:
 
 ```rust
-fn select_proposer(round: u64, validators: &[Validator]) -> &Validator {
-    let total_stake: u64 = validators.iter().map(|v| v.stake).sum();
-    let selection_seed = sha3_256(&round.to_le_bytes());
+/// Select proposer for a specific block height (synchronized across network)
+/// All validators use the same height to deterministically select proposer
+fn select_proposer_for_height(height: u64, validators: &[Validator]) -> &Validator {
+    // Sort validators deterministically by address
+    let mut sorted_validators = validators.to_vec();
+    sorted_validators.sort_by(|a, b| a.address.cmp(&b.address));
+    
+    let total_stake: u64 = sorted_validators.iter().map(|v| v.stake).sum();
+    let seed_data = format!("sultan_proposer_{}_{}", height, total_stake);
+    let selection_seed = sha256(seed_data.as_bytes());
     let random_value = u64::from_le_bytes(selection_seed[0..8]) % total_stake;
     
     let mut cumulative = 0u64;
-    for validator in validators {
+    for validator in &sorted_validators {
         cumulative += validator.stake;
         if random_value < cumulative {
             return validator;
         }
     }
-    &validators[0]
+    &sorted_validators[0]
 }
 ```
 
 **Properties:**
+- **Height-based consensus:** All validators agree on proposer for each height
 - **Probabilistic fairness:** Higher stake = proportionally more blocks
 - **Deterministic:** Any node can verify proposer legitimacy
-- **Resistant to manipulation:** SHA3 hash prevents prediction
+- **Network-synchronized:** Uses block height, not local round counter
+- **Resistant to manipulation:** SHA256 hash prevents prediction
 
-### 3.3 Block Production Flow
+### 3.3 Block Synchronization
+
+When validators receive blocks from the network, they validate and apply them:
+
+1. **Verify proposer:** Check that the block was created by the expected proposer for that height
+2. **Validate block hash:** Cryptographic verification of block integrity
+3. **Apply transactions:** Update local state with block transactions
+4. **Advance consensus:** Move to next height for proposer selection
+
+This ensures all validators maintain synchronized chain state even during network partitions.
+
+### 3.4 Block Production Flow
 
 ```
 Every 2 seconds:
 
-1. ROUND START
-   └─► Network time synchronization (NTP)
+1. HEIGHT CHECK
+   └─► Determine current chain height
 
 2. PROPOSER SELECTION  
-   └─► Stake-weighted deterministic selection
+   └─► Height-based deterministic selection (all nodes agree)
 
-3. TRANSACTION COLLECTION
+3. IF WE ARE PROPOSER:
+   └─► Collect transactions from mempool
+   └─► Create block (50-105µs)
+   └─► Sign and broadcast via P2P
+
+4. IF WE ARE NOT PROPOSER:
+   └─► Wait for block from network
+   └─► Validate incoming block
+   └─► Apply block to local chain
+
+5. IMMEDIATE FINALITY
+   └─► Block accepted, state committed
    └─► Mempool prioritization (fee-optional)
 
 4. BLOCK CREATION (50-105µs)
@@ -282,9 +314,10 @@ Sultan partitions blockchain state across multiple shards, each capable of proce
 
 | Parameter | Value |
 |-----------|-------|
-| Active Shards | 8 |
-| Maximum Shards | 8,000 |
-| TPS per Shard | 8,000 |
+| Active Shards | 16 |
+| Maximum Shards | 16,000 |
+| TX per Block/Shard | 8,000 |
+| TPS per Shard | 4,000 |
 | Base Capacity | 64,000 TPS |
 | Maximum Capacity | 64,000,000 TPS |
 
@@ -438,14 +471,24 @@ The bootstrap node maintains persistent connections to all active validators, en
 
 ### 6.1 Signature Schemes
 
-Sultan implements **dual cryptographic layers** for current and future security:
+Sultan implements **strict cryptographic verification** on all transactions:
 
-**Primary: Ed25519 (Current)**
+**Primary: Ed25519 (Production)**
 - Algorithm: Edwards-curve Digital Signature Algorithm
-- Key size: 256-bit
-- Signature size: 512-bit
+- Key size: 256-bit (32 bytes)
+- Signature size: 512-bit (64 bytes)
 - Security: 128-bit equivalent
 - Use: Transaction signing, block signatures
+- **Enforcement: STRICT** - Invalid signatures are rejected
+
+**Transaction Signing Flow:**
+```
+1. Wallet creates message: JSON.stringify({from, to, amount, memo, nonce, timestamp})
+2. Message is SHA-256 hashed
+3. Hash is signed with Ed25519 private key
+4. Signature + public key sent with transaction
+5. Node verifies signature before accepting transaction
+```
 
 **Secondary: Dilithium3 (Post-Quantum)**
 - Algorithm: CRYSTALS-Dilithium (NIST PQC winner)
@@ -482,15 +525,17 @@ Example: sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7l8qn5t2
 
 **Protected Against:**
 
-| Threat | Mitigation |
-|--------|------------|
-| 51% attacks | Economic stake at risk (slashing) |
-| Double-spending | Immediate finality |
-| Sybil attacks | Stake-weighted consensus |
-| Long-range attacks | Periodic checkpoints |
-| DDoS | Rate limiting, stake requirements |
-| MEV attacks | Encrypted mempool (planned) |
-| Quantum attacks | Dilithium3 signatures |
+| Threat | Mitigation | Status |
+|--------|------------|--------|
+| Unauthorized transactions | Ed25519 signature verification (STRICT) | ✅ Live |
+| 51% attacks | Economic stake at risk (slashing) | ✅ Live |
+| Double-spending | Immediate finality | ✅ Live |
+| Replay attacks | Nonce-based replay protection | ✅ Live |
+| Sybil attacks | Stake-weighted consensus | ✅ Live |
+| Long-range attacks | Periodic checkpoints | ✅ Live |
+| DDoS | Rate limiting, stake requirements | ✅ Live |
+| MEV attacks | Encrypted mempool | 🔜 Planned |
+| Quantum attacks | Dilithium3 signatures | 🔜 Planned |
 
 ### 6.5 Security Audits
 
@@ -783,6 +828,7 @@ Validators should monitor:
 | Health | `GET /health` | Node health check |
 | Block | `GET /block/:height` | Block by height |
 | Transaction | `GET /tx/:hash` | Transaction by hash |
+| TX History | `GET /transactions/:address` | Transaction history by address |
 | Submit TX | `POST /tx` | Submit transaction |
 | Account | `GET /account/:address` | Balance and state |
 | Validators | `GET /validators` | Active validator set |
@@ -814,9 +860,9 @@ Official non-custodial wallet with enterprise-grade security:
 ## 12. Roadmap
 
 ### Q4 2025 ✅ Complete
-- [x] Mainnet launch (December 6, 2025)
+- [x] Mainnet launch (December 25, 2025)
 - [x] 16-shard production deployment
-- [x] 15 global validators operational
+- [x] 6 global validators operational
 - [x] Core RPC endpoints
 - [x] P2P networking (libp2p)
 - [x] SLTN wallet (security-hardened)
@@ -875,9 +921,9 @@ Sultan L1 represents a new paradigm in blockchain design: **native Rust performa
 | Post-Quantum | Dilithium3 | None |
 | Max TPS | 64,000,000 | 10,000 - 65,000 |
 
-**Production Status:** ✅ **LIVE** since December 6, 2025
+**Production Status:** ✅ **LIVE** since December 25, 2025
 
-**Network:** 15 globally distributed validators
+**Network:** 6 globally distributed validators
 
 **RPC:** `https://rpc.sltn.io`
 
@@ -892,11 +938,11 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 | Block Time | 2 seconds |
 | Finality | Immediate (1 block) |
 | Block Creation | 50-105µs |
-| Active Shards | 8 |
-| Maximum Shards | 8,000 |
+| Active Shards | 16 |
+| Maximum Shards | 16,000 |
 | Base TPS | 64,000 |
 | Maximum TPS | 64,000,000 |
-| Consensus | Custom PoS |
+| Consensus | Custom PoS with height-based leader election |
 | Minimum Validator Stake | 10,000 SLTN |
 | Genesis Supply | 500,000,000 SLTN |
 | Inflation | 4% → 2% (decreasing) |
@@ -906,7 +952,7 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 | Networking | libp2p |
 | Storage | RocksDB |
 | Cryptography | Ed25519 + Dilithium3 |
-| Hashing | SHA3-256 |
+| Hashing | SHA256 |
 
 ---
 
@@ -936,8 +982,8 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 
 ---
 
-**Document Version:** 2.0  
-**Last Updated:** December 8, 2025  
+**Document Version:** 3.2  
+**Last Updated:** December 27, 2025  
 **Status:** Production Mainnet Live  
 **Authors:** Sultan Core Team
 

@@ -1,22 +1,44 @@
-// Sultan L1 Network Stats - CORRECTED VERSION
+// Sultan L1 Network Stats - Production Validators (Christmas Day 2025)
 // This JavaScript properly maps the RPC response to the HTML stat boxes
 
 (function() {
-    const API_URL = 'https://rpc.sltn.io/status';
-    const UPDATE_INTERVAL = 10000; // 10 seconds
+    // Production validator endpoints
+    const RPC_ENDPOINTS = [
+        'http://134.122.96.36:8545',   // London
+        'http://143.198.205.21:8545',  // Singapore  
+        'http://142.93.238.33:8545',   // Amsterdam
+        'http://46.101.122.13:8545',   // Frankfurt
+        'http://24.144.94.23:8545',    // San Francisco
+        'http://206.189.224.142:8545'  // New York
+    ];
+    const UPDATE_INTERVAL = 5000; // 5 seconds
+    let currentEndpointIndex = 0;
 
     async function fetchNetworkStats() {
-        try {
-            const response = await fetch(API_URL);
-            if (!response.ok) throw new Error('API request failed');
-            const data = await response.json();
-            
-            console.log('✅ RPC Response:', data); // Debug log
-            updateUI(data);
-        } catch (error) {
-            console.error('❌ Failed to fetch network stats:', error);
-            setOfflineState();
+        // Try each endpoint until one succeeds
+        for (let i = 0; i < RPC_ENDPOINTS.length; i++) {
+            const endpoint = RPC_ENDPOINTS[(currentEndpointIndex + i) % RPC_ENDPOINTS.length];
+            try {
+                const response = await fetch(`${endpoint}/status`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (!response.ok) continue;
+                const data = await response.json();
+                
+                console.log('✅ RPC Response from', endpoint, ':', data);
+                currentEndpointIndex = (currentEndpointIndex + i) % RPC_ENDPOINTS.length;
+                updateUI(data);
+                return;
+            } catch (error) {
+                console.warn('⚠️ Endpoint failed:', endpoint, error.message);
+                continue;
+            }
         }
+        console.error('❌ All endpoints failed');
+        setOfflineState();
     }
 
     function updateUI(data) {
@@ -39,11 +61,11 @@
             blockHeightEl.innerHTML = groups.join('<br>');
         }
 
-        // Active Validators - API returns "validator_count" not "validators.active"
+        // Active Validators - API returns "validator_count" 
         const validatorsEl = document.getElementById('active-validators');
         if (validatorsEl && data.validator_count !== undefined) {
-            // Assuming total validators = 11 (from genesis config)
-            validatorsEl.textContent = data.validator_count + ' / 11';
+            // 6 total validators in production
+            validatorsEl.textContent = data.validator_count + ' / 6';
         }
 
         // TPS Capacity - calculate from shard_count (16 shards × 4000 TPS each = 64K)
@@ -51,12 +73,6 @@
         if (tpsEl && data.shard_count) {
             const tps = data.shard_count * 4000; // 4K TPS per shard
             tpsEl.textContent = tps >= 1000 ? (tps / 1000) + 'K' : tps;
-        }
-
-        // Block Time - hardcoded to 2s (not in API response)
-        const blockTimeEl = document.getElementById('block-time');
-        if (blockTimeEl) {
-            blockTimeEl.textContent = '2s';
         }
 
         // Active Shards - API returns "shard_count"

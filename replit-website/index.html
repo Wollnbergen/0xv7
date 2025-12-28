@@ -306,36 +306,63 @@
     </footer>
 
     <script>
-        // Fetch real network data from production RPC (NYC bootstrap validator)
-        const RPC_ENDPOINT = 'https://rpc.sltn.io';
+        // Sultan L1 Production Validators - Christmas Day 2025 Launch
+        // Try multiple endpoints for redundancy
+        const RPC_ENDPOINTS = [
+            'http://134.122.96.36:8545',   // London
+            'http://143.198.205.21:8545',  // Singapore  
+            'http://142.93.238.33:8545',   // Amsterdam
+            'http://46.101.122.13:8545',   // Frankfurt
+            'http://24.144.94.23:8545',    // San Francisco
+            'http://206.189.224.142:8545'  // New York
+        ];
+        
+        let currentEndpointIndex = 0;
         
         async function fetchNetworkStatus() {
-            try {
-                const response = await fetch(`${RPC_ENDPOINT}/status`);
-                if (!response.ok) throw new Error('Network response was not ok');
-                
-                const data = await response.json();
-                
-                // Update block height
-                if (data.height) {
-                    document.getElementById('blockHeight').textContent = data.height.toLocaleString();
+            // Try each endpoint until one succeeds
+            for (let i = 0; i < RPC_ENDPOINTS.length; i++) {
+                const endpoint = RPC_ENDPOINTS[(currentEndpointIndex + i) % RPC_ENDPOINTS.length];
+                try {
+                    const response = await fetch(`${endpoint}/status`, {
+                        method: 'GET',
+                        mode: 'cors',
+                        cache: 'no-cache',
+                        signal: AbortSignal.timeout(5000) // 5 second timeout
+                    });
+                    
+                    if (!response.ok) continue;
+                    
+                    const data = await response.json();
+                    
+                    // Update block height
+                    if (data.height !== undefined) {
+                        document.getElementById('blockHeight').textContent = data.height.toLocaleString();
+                    }
+                    
+                    // Update validator count
+                    if (data.validator_count !== undefined) {
+                        document.getElementById('validatorCount').textContent = data.validator_count + ' / 6';
+                    }
+                    
+                    // Remember successful endpoint for next time
+                    currentEndpointIndex = (currentEndpointIndex + i) % RPC_ENDPOINTS.length;
+                    console.log('✅ Network stats updated from', endpoint, data);
+                    return; // Success!
+                    
+                } catch (error) {
+                    console.warn(`⚠️ Endpoint ${endpoint} failed:`, error.message);
+                    continue; // Try next endpoint
                 }
-                
-                // Update validator count
-                if (data.validator_count) {
-                    document.getElementById('validatorCount').textContent = data.validator_count;
-                }
-                
-                console.log('Network stats updated:', data);
-            } catch (error) {
-                console.error('Could not fetch network status:', error);
-                // Fallback to showing offline status
-                document.getElementById('blockHeight').textContent = 'Offline';
             }
+            
+            // All endpoints failed
+            console.error('❌ All RPC endpoints failed');
+            document.getElementById('blockHeight').textContent = 'Connecting...';
         }
         
-        // Update every 3 seconds (faster than block time for responsive UI)
-        setInterval(fetchNetworkStatus, 3000);
+        // Update every 5 seconds
+        setInterval(fetchNetworkStatus, 5000);
         // Initial fetch
         fetchNetworkStatus();
     </script>

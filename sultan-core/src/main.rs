@@ -9,6 +9,7 @@
 //! - Persistent storage
 
 use sultan_core::*;
+use sultan_core::block_sync::{BlockSyncManager, SyncConfig, SyncState};
 use sultan_core::economics::Economics;
 use sultan_core::bridge_integration::BridgeManager;
 use sultan_core::staking::StakingManager;
@@ -16,9 +17,10 @@ use sultan_core::governance::GovernanceManager;
 use sultan_core::token_factory::TokenFactory;
 use sultan_core::native_dex::NativeDex;
 use sultan_core::sharding_production::ShardConfig;
-use sultan_core::ShardedBlockchainProduction;
+use sultan_core::sharded_blockchain_production::ConfirmedTransaction;
+use sultan_core::SultanBlockchain;
 use sultan_core::p2p::{P2PNetwork, NetworkMessage};
-use anyhow::{Result, Context};
+use anyhow::{Result, Context, bail};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
 use std::sync::Arc;
@@ -28,6 +30,7 @@ use tokio::time::{interval, Duration};
 use std::path::PathBuf;
 use clap::Parser;
 use sha2::Digest;
+use ed25519_dalek::{Signature, VerifyingKey, Verifier, SIGNATURE_LENGTH};
 
 /// Sultan Node CLI Arguments
 #[derive(Parser, Debug)]
@@ -95,10 +98,81 @@ struct Args {
     enable_p2p: bool,
 }
 
+/// Wallet transaction request format (matches wallet extension API)
+/// Flexible transaction request - accepts both wallet format and simple format
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+enum TxRequest {
+    /// Wallet format: { tx: {...}, signature: "...", public_key: "..." }
+    Wallet(WalletTxRequest),
+    /// Simple format: { from: "...", to: "...", amount: 100, ... }
+    Simple(SimpleTxRequest),
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct WalletTxRequest {
+    tx: WalletTxInner,
+    signature: String,
+    public_key: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct SimpleTxRequest {
+    from: String,
+    to: String,
+    #[serde(deserialize_with = "deserialize_amount")]
+    amount: u64,
+    #[serde(default)]
+    gas_fee: u64,
+    #[serde(default)]
+    nonce: u64,
+    #[serde(default)]
+    timestamp: u64,
+    #[serde(default)]
+    signature: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct WalletTxInner {
+    from: String,
+    to: String,
+    #[serde(deserialize_with = "deserialize_amount")]
+    amount: u64,
+    #[serde(default)]
+    memo: Option<String>,
+    #[serde(default)]
+    nonce: u64,
+    #[serde(default)]
+    timestamp: u64,
+}
+
+fn deserialize_amount<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value: serde_json::Value = serde::Deserialize::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Number(n) => {
+            n.as_u64().ok_or_else(|| D::Error::custom("Invalid amount"))
+        }
+        serde_json::Value::String(s) => {
+            s.parse::<u64>().map_err(|_| D::Error::custom("Invalid amount string"))
+        }
+        _ => Err(D::Error::custom("Amount must be number or string")),
+    }
+}
+
 /// Main node state
+/// 
+/// Sultan L1 Node with always-on sharding architecture.
+/// Sharding provides horizontal scalability from 64K to 32M TPS.
 struct NodeState {
-    blockchain: Arc<RwLock<Blockchain>>,
-    sharded_blockchain: Option<Arc<RwLock<ShardedBlockchainProduction>>>,
+    /// The unified Sultan blockchain (always sharded internally)
+    blockchain: Arc<RwLock<SultanBlockchain>>,
+    /// Legacy field for backward compatibility (always same as blockchain)
+    #[deprecated(note = "Use blockchain field - sharding is always enabled")]
+    sharded_blockchain: Option<Arc<RwLock<SultanBlockchain>>>,
     consensus: Arc<RwLock<ConsensusEngine>>,
     storage: Arc<RwLock<PersistentStorage>>,
     economics: Arc<RwLock<Economics>>,
@@ -108,8 +182,11 @@ struct NodeState {
     token_factory: Arc<TokenFactory>,
     native_dex: Arc<NativeDex>,
     p2p_network: Option<Arc<RwLock<P2PNetwork>>>,
+    block_sync_manager: Option<Arc<RwLock<BlockSyncManager>>>,
     validator_address: Option<String>,
     block_time: u64,
+    /// Always true - sharding cannot be disabled
+    #[deprecated(note = "Sharding is always enabled in Sultan L1")]
     sharding_enabled: bool,
     p2p_enabled: bool,
 }
@@ -124,38 +201,22 @@ impl NodeState {
         let storage = PersistentStorage::new(storage_path.to_str().unwrap())
             .context("Failed to initialize storage")?;
 
-        // Load or create blockchain
-        let mut blockchain = if let Some(latest_block) = storage.get_latest_block()? {
-            info!("Loading existing blockchain from height {}", latest_block.index);
-            
-            // Reconstruct blockchain from storage
-            let mut chain = Blockchain::new();
-            
-            // Load all blocks
-            for i in 0..=latest_block.index {
-                if let Some(block) = storage.get_block_by_height(i)? {
-                    chain.chain.push(block);
-                }
-            }
-            
-            // Rebuild state from all transactions
-            for block in &chain.chain {
-                for tx in &block.transactions {
-                    let mut temp_state = chain.state.clone();
-                    if chain.apply_transaction(&mut temp_state, tx).is_ok() {
-                        chain.state = temp_state;
-                    }
-                }
-            }
-            
-            info!("Loaded {} blocks, current height: {}", chain.chain.len(), chain.height());
-            chain
-        } else {
-            info!("Creating new blockchain");
-            Blockchain::new()
+        // Configure sharding (always enabled, but shard count is configurable)
+        let shard_count = if args.enable_sharding { args.shard_count } else { 16 };
+        let config = ShardConfig {
+            shard_count,
+            max_shards: args.max_shards,
+            tx_per_shard: args.tx_per_shard,
+            cross_shard_enabled: true,
+            byzantine_tolerance: 1,
+            enable_fraud_proofs: true,
+            auto_expand_threshold: 0.80,
         };
+
+        // Create the unified Sultan blockchain
+        let blockchain = SultanBlockchain::new(config.clone());
         
-        // Parse and add genesis accounts (for both new and loaded blockchains)
+        // Initialize genesis accounts
         if let Some(genesis_str) = &args.genesis {
             for account in genesis_str.split(',') {
                 let parts: Vec<&str> = account.split(':').collect();
@@ -163,60 +224,39 @@ impl NodeState {
                     let address = parts[0].to_string();
                     let balance: u64 = parts[1].parse()
                         .context("Invalid balance in genesis")?;
-                    blockchain.init_account(address.clone(), balance);
+                    blockchain.init_account(address.clone(), balance).await
+                        .context("Failed to init genesis account")?;
                     info!("Genesis account: {} = {}", address, balance);
                 }
             }
         } else {
             // Default genesis accounts for testing
-            blockchain.init_account("alice".to_string(), 1_000_000);
-            blockchain.init_account("bob".to_string(), 500_000);
-            blockchain.init_account("charlie".to_string(), 250_000);
+            blockchain.init_account("alice".to_string(), 1_000_000).await?;
+            blockchain.init_account("bob".to_string(), 500_000).await?;
+            blockchain.init_account("charlie".to_string(), 250_000).await?;
             info!("Using default genesis accounts");
         }
-
-        // Initialize sharded blockchain if enabled
-        let sharded_blockchain = if args.enable_sharding {
-            let config = ShardConfig {
-                shard_count: args.shard_count,
-                max_shards: args.max_shards,
-                tx_per_shard: args.tx_per_shard,
-                cross_shard_enabled: true,
-                byzantine_tolerance: 1,
-                enable_fraud_proofs: true,
-                auto_expand_threshold: 0.80,
-            };
-            
-            let mut sharded = ShardedBlockchainProduction::new(config.clone());
-            
-            // Initialize same accounts in sharded blockchain
-            if let Some(genesis_str) = &args.genesis {
-                for account in genesis_str.split(',') {
-                    let parts: Vec<&str> = account.split(':').collect();
-                    if parts.len() == 2 {
-                        let address = parts[0].to_string();
-                        let balance: u64 = parts[1].parse()
-                            .context("Invalid balance in genesis")?;
-                        sharded.init_account(address.clone(), balance).await
-                            .context("Failed to init sharded account")?;
+        
+        // Load existing blocks from storage if available
+        if let Some(latest_block) = storage.get_latest_block()? {
+            info!("Loading existing blockchain from height {}", latest_block.index);
+            for i in 1..=latest_block.index {
+                if let Some(block) = storage.get_block_by_height(i)? {
+                    // Apply block to restore state
+                    if let Err(e) = blockchain.apply_block(block.clone()).await {
+                        warn!("Failed to apply stored block {}: {}", i, e);
                     }
                 }
-            } else {
-                sharded.init_account("alice".to_string(), 1_000_000).await?;
-                sharded.init_account("bob".to_string(), 500_000).await?;
-                sharded.init_account("charlie".to_string(), 250_000).await?;;
             }
-            
-            let tps_capacity = sharded.get_tps_capacity().await;
-            info!("🚀 PRODUCTION SHARDING: {} shards (expandable to {}) = {} TPS (up to {}M TPS)",
-                config.shard_count, config.max_shards, tps_capacity, 
-                (config.max_shards * config.tx_per_shard) / 1_000_000);
-            
-            Some(Arc::new(RwLock::new(sharded)))
-        } else {
-            info!("Running in single-threaded mode (no sharding)");
-            None
-        };
+            info!("Loaded {} blocks", latest_block.index);
+        }
+
+        let tps_capacity = blockchain.get_tps_capacity().await;
+        info!("🚀 SULTAN L1 BLOCKCHAIN: {} shards (expandable to {}) = {} TPS",
+            config.shard_count, config.max_shards, tps_capacity);
+        info!("   💰 Zero gas fees | 4% inflation | Native bridges: BTC, ETH, SOL, TON");
+
+        let blockchain_arc = Arc::new(RwLock::new(blockchain));
 
         // Initialize consensus
         let mut consensus = ConsensusEngine::new();
@@ -260,21 +300,42 @@ impl NodeState {
             None
         };
 
+        // Create shared consensus Arc for block sync manager
+        let consensus_arc = Arc::new(RwLock::new(consensus));
+
+        // Initialize BlockSyncManager if P2P is enabled
+        let block_sync_manager = if args.enable_p2p {
+            let sync_config = SyncConfig::default();
+            let block_sync = BlockSyncManager::new(
+                sync_config,
+                args.validator_address.clone(),
+                consensus_arc.clone(),
+                Duration::from_secs(args.block_time),
+            );
+            info!("🔄 BlockSyncManager initialized");
+            Some(Arc::new(RwLock::new(block_sync)))
+        } else {
+            None
+        };
+
         Ok(Self {
-            blockchain: Arc::new(RwLock::new(blockchain)),
-            sharded_blockchain,
-            consensus: Arc::new(RwLock::new(consensus)),
+            blockchain: blockchain_arc.clone(),
+            #[allow(deprecated)]
+            sharded_blockchain: Some(blockchain_arc), // Same as blockchain for backward compat
+            consensus: consensus_arc,
             storage: Arc::new(RwLock::new(storage)),
             economics: Arc::new(RwLock::new(Economics::new())),
             bridge_manager: Arc::new(BridgeManager::new()),
-            staking_manager: Arc::new(StakingManager::new(0.08)), // 8% initial inflation
+            staking_manager: Arc::new(StakingManager::new(0.04)), // 4% inflation (zero gas model)
             governance_manager: Arc::new(GovernanceManager::new()),
             token_factory: Arc::new(TokenFactory::new()),
             native_dex: Arc::new(NativeDex::new(Arc::new(TokenFactory::new()))),
             p2p_network,
+            block_sync_manager,
             validator_address: args.validator_address.clone(),
             block_time: args.block_time,
-            sharding_enabled: args.enable_sharding,
+            #[allow(deprecated)]
+            sharding_enabled: true, // Always enabled
             p2p_enabled: args.enable_p2p,
         })
     }
@@ -295,118 +356,109 @@ impl NodeState {
 
     /// Produce a single block
     async fn produce_block(&self) -> Result<()> {
-        let mut consensus = self.consensus.write().await;
         let storage = self.storage.read().await;
 
-        // Select proposer
-        let proposer = consensus.select_proposer()
-            .context("No validator available to propose")?;
+        // Get current height FIRST - this determines the proposer
+        let current_height = self.blockchain.read().await.get_height().await;
+        let next_height = current_height + 1;
 
-        // Check if we are the proposer
+        // === PRODUCTION: Height-based proposer selection ===
+        // All validators use the same height to deterministically select proposer
+        // This ensures network-wide agreement on who should propose each block
+        let consensus = self.consensus.read().await;
+        let proposer = consensus.select_proposer_for_height(next_height)
+            .context("No validator available to propose")?;
+        drop(consensus);
+
+        // Check if we are the proposer for this height
         if let Some(our_address) = &self.validator_address {
             if &proposer != our_address {
-                debug!("Not our turn to propose (proposer: {})", proposer);
+                debug!("Not our turn to propose height {} (proposer: {})", next_height, proposer);
                 return Ok(());
             }
+            info!("🎯 We are proposer for height {}", next_height);
+        } else {
+            // Not a validator, skip production
+            return Ok(());
         }
 
-        // Get current height before block creation
-        let current_height = if self.sharding_enabled {
-            if let Some(ref sharded) = self.sharded_blockchain {
-                sharded.read().await.get_height().await
-            } else {
-                0
-            }
-        } else {
-            self.blockchain.read().await.chain.len() as u64
-        };
-
-        // Use sharded or regular blockchain
-        let block = if self.sharding_enabled {
-            if let Some(ref sharded) = self.sharded_blockchain {
-                let mut sharded_bc = sharded.write().await;
-                
-                // In production, collect pending transactions here
-                // For now, create empty block
-                let transactions = vec![];
-                
-                let block = sharded_bc.create_block(transactions, proposer.clone()).await
-                    .context("Failed to create sharded block")?;
-                
-                // Block is already added by create_block
-                
-                let stats = sharded_bc.get_stats().await;
-                info!(
-                    "✅ SHARDED Block {} | {} shards active | {} total txs | capacity: {} TPS",
-                    block.index,
-                    stats.shard_count,
-                    stats.total_processed,
-                    stats.estimated_tps
-                );
-                
-                // Auto-expand shards if load threshold exceeded
-                if stats.should_expand {
-                    let current_shards = stats.shard_count;
-                    // Double shard count (up to max 8000)
-                    let additional = current_shards.min(8000 - current_shards);
-                    if additional > 0 {
-                        info!("⚡ Auto-expansion triggered at {:.1}% load", stats.current_load * 100.0);
-                        if let Err(e) = sharded_bc.coordinator.expand_shards(additional).await {
-                            warn!("Failed to auto-expand shards: {}", e);
-                        }
-                    }
+        // Create block using unified Sultan blockchain
+        let blockchain = self.blockchain.write().await;
+        
+        // Drain pending transactions from mempool
+        let transactions = blockchain.drain_pending_transactions().await;
+        let tx_count = transactions.len();
+        
+        let block = blockchain.create_block(transactions, proposer.clone()).await
+            .context("Failed to create block")?;
+        
+        // Block is already added by create_block
+        
+        let stats = blockchain.get_stats().await;
+        info!(
+            "✅ SHARDED Block {} | {} shards active | {} txs in block | {} total processed | capacity: {} TPS",
+            block.index,
+            stats.shard_count,
+            tx_count,
+            stats.total_processed,
+            stats.estimated_tps
+        );
+        
+        // Auto-expand shards if load threshold exceeded
+        if stats.should_expand {
+            let current_shards = stats.shard_count;
+            // Double shard count (up to max 8000)
+            let additional = current_shards.min(8000 - current_shards);
+            if additional > 0 {
+                info!("⚡ Auto-expansion triggered at {:.1}% load", stats.current_load * 100.0);
+                if let Err(e) = blockchain.expand_shards(additional).await {
+                    warn!("Failed to auto-expand shards: {}", e);
                 }
-                
-                block
-            } else {
-                anyhow::bail!("Sharding enabled but sharded blockchain not initialized");
             }
-        } else {
-            let mut blockchain = self.blockchain.write().await;
-            
-            let block = blockchain.create_block(proposer.clone())
-                .context("Failed to create block")?;
+        }
+        
+        drop(blockchain);
 
-            // Validate block
-            if !blockchain.validate_block(&block)? {
-                error!("Created invalid block!");
-                return Ok(());
-            }
-
-            // Add block to chain
-            blockchain.chain.push(block.clone());
-            
-            info!(
-                "✅ Block {} produced by {} | {} txs | state_root: {}",
-                block.index,
-                block.validator,
-                block.transactions.len(),
-                &block.state_root[..16]
-            );
-            
-            block
-        };
-
-        // Record proposal
-        consensus.record_proposal(&proposer)
-            .context("Failed to record proposal")?;
+        // Record proposal in consensus
+        {
+            let mut consensus = self.consensus.write().await;
+            consensus.record_proposal(&proposer)
+                .context("Failed to record proposal")?;
+        }
 
         // Save to storage
         storage.save_block(&block)
             .context("Failed to save block")?;
 
+        // Save transactions to persistent storage for history queries
+        for tx in &block.transactions {
+            let confirmed_tx = ConfirmedTransaction {
+                hash: format!("{:x}", sha2::Sha256::digest(format!("{}:{}:{}:{}", tx.from, tx.to, tx.amount, tx.timestamp).as_bytes())),
+                from: tx.from.clone(),
+                to: tx.to.clone(),
+                amount: tx.amount,
+                memo: None,
+                nonce: tx.nonce,
+                timestamp: tx.timestamp,
+                block_height: block.index,
+                status: "confirmed".to_string(),
+            };
+            if let Err(e) = storage.save_transaction(&confirmed_tx) {
+                warn!("Failed to save transaction to storage: {}", e);
+            }
+        }
+
         // === PRODUCTION INTEGRATIONS ===
         
         // Distribute staking rewards for this block
-        let new_height = current_height + 1;
-        if let Err(e) = self.staking_manager.distribute_block_rewards(new_height).await {
-            error!("Failed to distribute block rewards at height {}: {}", new_height, e);
+        if let Err(e) = self.staking_manager.distribute_block_rewards(next_height).await {
+            error!("Failed to distribute block rewards at height {}: {}", next_height, e);
         } else {
-            debug!("Distributed staking rewards at height {}", new_height);
+            debug!("Distributed staking rewards at height {}", next_height);
         }
 
         // Update governance height to check for voting period endings
-        self.governance_manager.update_height(new_height).await;
+        self.governance_manager.update_height(next_height).await;
         
         // Update governance with total bonded for quorum calculations
         let staking_stats = self.staking_manager.get_statistics().await;
@@ -438,27 +490,98 @@ impl NodeState {
         Ok(())
     }
 
+    /// Verify transaction signature using Ed25519
+    /// The wallet signs: SHA256(JSON.stringify({from, to, amount, memo, nonce, timestamp}))
+    fn verify_transaction_signature(tx: &Transaction) -> Result<()> {
+        // Get signature - required for production
+        let sig_str = match tx.signature.as_ref() {
+            Some(s) if !s.is_empty() => s,
+            _ => {
+                bail!("Transaction signature is required");
+            }
+        };
+
+        // Get public key - required for production
+        let pubkey_str = match tx.public_key.as_ref() {
+            Some(pk) if !pk.is_empty() => pk,
+            _ => {
+                bail!("Transaction public key is required for signature verification");
+            }
+        };
+
+        // Decode signature from hex
+        let sig_bytes = hex::decode(sig_str)
+            .context("Invalid signature: not valid hex")?;
+
+        if sig_bytes.len() != SIGNATURE_LENGTH {
+            bail!("Invalid signature length: expected {}, got {}", SIGNATURE_LENGTH, sig_bytes.len());
+        }
+
+        let sig_array: [u8; SIGNATURE_LENGTH] = sig_bytes.try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert signature bytes to array"))?;
+        let signature = Signature::from_bytes(&sig_array);
+
+        // Decode public key from hex
+        let pubkey_bytes = hex::decode(pubkey_str)
+            .context("Invalid public key: not valid hex")?;
+
+        if pubkey_bytes.len() != 32 {
+            bail!("Invalid public key length: expected 32, got {}", pubkey_bytes.len());
+        }
+
+        let pubkey_array: [u8; 32] = pubkey_bytes.try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert public key bytes to array"))?;
+        let verifying_key = VerifyingKey::from_bytes(&pubkey_array)
+            .context("Invalid Ed25519 public key")?;
+
+        // Recreate the message that was signed by the wallet
+        // The wallet signs: SHA256(JSON.stringify({from, to, amount, memo, nonce, timestamp}))
+        let message_str = format!(
+            r#"{{"from":"{}","to":"{}","amount":"{}","memo":"","nonce":{},"timestamp":{}}}"#,
+            tx.from, tx.to, tx.amount, tx.nonce, tx.timestamp
+        );
+        
+        // SHA256 hash the message (matching wallet behavior)
+        let message_hash = sha2::Sha256::digest(message_str.as_bytes());
+
+        // Verify the signature - STRICT: reject invalid signatures
+        verifying_key.verify(&message_hash, &signature)
+            .context("Signature verification failed: invalid signature")?;
+
+        info!("✓ Signature verified for tx from {}", tx.from);
+        Ok(())
+    }
+
     /// Transaction submission endpoint
+    /// Sultan Chain: Zero gas fees - transaction costs paid by 4% inflation
     async fn submit_transaction(&self, tx: Transaction) -> Result<String> {
+        // STRICT: Verify signature before accepting transaction
+        Self::verify_transaction_signature(&tx)?;
+        
         // Calculate transaction hash
         let tx_hash = format!("{}:{}:{}", tx.from, tx.to, tx.nonce);
         
-        if self.sharding_enabled {
-            if let Some(ref sharded) = self.sharded_blockchain {
-                // Transaction will be processed in next block
-                // For now, just store in mempool (TODO: implement sharded mempool)
-                
-                debug!("Transaction accepted (sharded): {} -> {} ({})", tx.from, tx.to, tx.amount);
-            } else {
-                anyhow::bail!("Sharding enabled but not initialized");
+        // Add transaction to mempool
+        let blockchain = self.blockchain.write().await;
+        blockchain.submit_transaction(tx.clone()).await
+            .context("Failed to submit transaction")?;
+        
+        let pending = blockchain.pending_count().await;
+        debug!("Transaction accepted: {} -> {} ({}) [pending: {}]", 
+               tx.from, tx.to, tx.amount, pending);
+        drop(blockchain);
+        
+        // === P2P TRANSACTION BROADCAST ===
+        // Broadcast transaction to all connected peers so any validator can include it
+        if self.p2p_enabled {
+            if let Some(ref p2p) = self.p2p_network {
+                let tx_data = bincode::serialize(&tx).unwrap_or_default();
+                if let Err(e) = p2p.read().await.broadcast_transaction(&tx_hash, tx_data).await {
+                    warn!("Failed to broadcast transaction via P2P: {}", e);
+                } else {
+                    info!("📢 Transaction {} broadcast to peers", tx_hash);
+                }
             }
-        } else {
-            let mut blockchain = self.blockchain.write().await;
-            
-            blockchain.add_transaction(tx.clone())
-                .context("Transaction validation failed")?;
-
-            info!("Transaction accepted: {} -> {} ({})", tx.from, tx.to, tx.amount);
         }
         
         Ok(tx_hash)
@@ -466,40 +589,21 @@ impl NodeState {
 
     /// Get blockchain status
     async fn get_status(&self) -> Result<NodeStatus> {
-        let (height, latest_hash, pending_txs, total_accounts) = if self.sharding_enabled {
-            if let Some(ref sharded) = self.sharded_blockchain {
-                let sharded_bc = sharded.read().await;
-                let stats = sharded_bc.get_stats().await;
-                let height = sharded_bc.get_height().await;
-                
-                (
-                    height,
-                    format!("sharded-block-{}", height),
-                    0, // TODO: track pending txs in sharded mode
-                    stats.shard_count * 1000, // Estimate
-                )
-            } else {
-                (0, String::from("unknown"), 0, 0)
-            }
-        } else {
-            let blockchain = self.blockchain.read().await;
-            let latest_block = blockchain.get_latest_block();
-            
-            (
-                blockchain.height(),
-                latest_block.hash.clone(),
-                blockchain.pending_transactions.len(),
-                blockchain.state.len(),
-            )
-        };
+        // Sultan Chain unified blockchain - always uses sharded architecture
+        let blockchain = self.blockchain.read().await;
+        let stats = blockchain.get_stats().await;
+        let height = blockchain.get_height().await;
+        let pending_txs = blockchain.pending_count().await;
+        let total_accounts = stats.total_accounts;
+        let shard_count = blockchain.config.shard_count;
+        let latest_hash = format!("sultan-block-{}", height);
+        drop(blockchain);
         
         let consensus = self.consensus.read().await;
+        let validator_count = consensus.validator_count();
+        drop(consensus);
         
         let economics = self.economics.read().await;
-        
-        // Unified validator count from consensus engine
-        // All validators (both infrastructure and staked) are added to consensus
-        let validator_count = consensus.validator_count();
         
         Ok(NodeStatus {
             height,
@@ -507,15 +611,8 @@ impl NodeState {
             validator_count,
             pending_txs,
             total_accounts,
-            sharding_enabled: self.sharding_enabled,
-            shard_count: if self.sharding_enabled { 
-                self.sharded_blockchain.as_ref().and_then(|s| {
-                    // Get actual shard count from config
-                    s.try_read().ok().map(|shard| shard.config.shard_count)
-                }).unwrap_or(0)
-            } else { 
-                0 
-            },
+            sharding_enabled: true, // Sultan Chain always uses sharding
+            shard_count,
             inflation_rate: economics.current_inflation_rate,
             validator_apy: economics.validator_apy,
             total_burned: economics.total_burned,
@@ -576,11 +673,30 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_get_balance);
 
+        // GET /transactions/:address - Transaction history for an address
+        let tx_history_route = warp::path!("transactions" / String)
+            .and(warp::get())
+            .and(warp::query::<TxHistoryQuery>())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_tx_history);
+
+        // GET /tx/:hash - Get single transaction by hash
+        let tx_by_hash_route = warp::path!("tx" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_tx_by_hash);
+
         // GET /economics
         let economics_route = warp::path("economics")
             .and(warp::get())
             .and(with_state(state.clone()))
             .and_then(handle_get_economics);
+
+        // GET /supply/total - Total supply endpoint for block explorers
+        let supply_total_route = warp::path!("supply" / "total")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_total_supply);
 
         // GET /bridges
         let bridges_route = warp::path("bridges")
@@ -629,10 +745,10 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_create_validator);
 
-        // POST /staking/delegate
+        // POST /staking/delegate (accepts raw bytes and parses manually for better error handling)
         let delegate_route = warp::path!("staking" / "delegate")
             .and(warp::post())
-            .and(warp::body::json())
+            .and(warp::body::bytes())
             .and(with_state(state.clone()))
             .and_then(handle_delegate);
 
@@ -800,7 +916,10 @@ mod rpc {
             .or(tx_route)
             .or(block_route)
             .or(balance_route)
+            .or(tx_history_route)
+            .or(tx_by_hash_route)
             .or(economics_route)
+            .or(supply_total_route)
             .boxed();
         
         let bridge_routes = bridges_route
@@ -858,7 +977,8 @@ mod rpc {
         
         let routes = api_routes_1
             .or(api_routes_2)
-            .with(warp::cors().allow_any_origin());
+            .with(warp::cors().allow_any_origin())
+            .recover(handle_rejection);
 
         warp::serve(routes).run(addr).await;
 
@@ -884,14 +1004,49 @@ mod rpc {
     }
 
     async fn handle_submit_tx(
-        tx: Transaction,
+        tx_request: TxRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Convert either format to internal Transaction
+        let tx = match tx_request {
+            TxRequest::Wallet(wallet_tx) => {
+                info!("Processing wallet transaction: from={}, to={}, amount={}", 
+                    wallet_tx.tx.from, wallet_tx.tx.to, wallet_tx.tx.amount);
+                Transaction {
+                    from: wallet_tx.tx.from,
+                    to: wallet_tx.tx.to,
+                    amount: wallet_tx.tx.amount,
+                    gas_fee: 0, // Zero-fee network
+                    timestamp: wallet_tx.tx.timestamp,
+                    nonce: wallet_tx.tx.nonce,
+                    signature: Some(wallet_tx.signature),
+                    public_key: Some(wallet_tx.public_key),
+                }
+            }
+            TxRequest::Simple(simple_tx) => {
+                info!("Processing simple transaction: from={}, to={}, amount={}", 
+                    simple_tx.from, simple_tx.to, simple_tx.amount);
+                Transaction {
+                    from: simple_tx.from,
+                    to: simple_tx.to,
+                    amount: simple_tx.amount,
+                    gas_fee: simple_tx.gas_fee,
+                    timestamp: simple_tx.timestamp,
+                    nonce: simple_tx.nonce,
+                    signature: simple_tx.signature,
+                    public_key: None,
+                }
+            }
+        };
+        
         match state.submit_transaction(tx).await {
             Ok(hash) => Ok(warp::reply::json(&serde_json::json!({ "hash": hash }))),
             Err(e) => {
                 warn!("Transaction rejected: {}", e);
-                Err(warp::reject())
+                Ok(warp::reply::json(&serde_json::json!({
+                    "error": e.to_string(),
+                    "status": 400
+                })))
             }
         }
     }
@@ -902,8 +1057,8 @@ mod rpc {
     ) -> Result<impl warp::Reply, warp::Rejection> {
         let blockchain = state.blockchain.read().await;
         
-        match blockchain.get_block(height) {
-            Some(block) => Ok(warp::reply::json(block)),
+        match blockchain.get_block(height).await {
+            Some(block) => Ok(warp::reply::json(&block)),
             None => Err(warp::reject()),
         }
     }
@@ -912,20 +1067,66 @@ mod rpc {
         address: String,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Sultan Chain unified blockchain - always uses sharded architecture
         let blockchain = state.blockchain.read().await;
-        let balance = blockchain.get_balance(&address);
+        let balance = blockchain.get_balance(&address).await;
+        let nonce = blockchain.get_nonce(&address).await;
         
         Ok(warp::reply::json(&serde_json::json!({
             "address": address,
             "balance": balance,
-            "nonce": blockchain.get_nonce(&address)
+            "nonce": nonce
         })))
+    }
+
+    async fn handle_get_tx_history(
+        address: String,
+        query: TxHistoryQuery,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        // First try in-memory cache
+        let blockchain = state.blockchain.read().await;
+        let mut transactions = blockchain.get_transaction_history(&address, query.limit).await;
+        
+        // If empty, try persistent storage
+        if transactions.is_empty() {
+            let storage = state.storage.read().await;
+            if let Ok(stored_txs) = storage.get_transaction_history(&address, query.limit) {
+                transactions = stored_txs;
+            }
+        }
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "address": address,
+            "transactions": transactions,
+            "count": transactions.len()
+        })))
+    }
+
+    async fn handle_get_tx_by_hash(
+        hash: String,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let blockchain = state.blockchain.read().await;
+        
+        if let Some(tx) = blockchain.get_transaction_by_hash(&hash).await {
+            Ok(warp::reply::json(&tx))
+        } else {
+            Ok(warp::reply::json(&serde_json::json!({
+                "error": "Transaction not found",
+                "hash": hash
+            })))
+        }
     }
 
     async fn handle_get_economics(
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
         let economics = state.economics.read().await;
+        
+        // Calculate total supply (genesis + inflation - burned)
+        let genesis_supply: u64 = 500_000_000_000_000_000; // 500M SLTN in base units
+        let total_supply = genesis_supply.saturating_sub(economics.total_burned);
         
         Ok(warp::reply::json(&serde_json::json!({
             "current_inflation_rate": economics.current_inflation_rate,
@@ -938,7 +1139,34 @@ mod rpc {
             "years_since_genesis": economics.years_since_genesis,
             "is_deflationary": economics.is_deflationary(),
             "inflation_rate": "4.0% (fixed forever)",
-            "inflation_policy": "Fixed 4% annual inflation guarantees zero gas fees sustainable at 76M+ TPS"
+            "inflation_policy": "Fixed 4% annual inflation guarantees zero gas fees sustainable at 76M+ TPS",
+            "total_supply": total_supply,
+            "total_supply_formatted": format!("{:.0}", total_supply as f64 / 1_000_000_000.0),
+            "circulating_supply": total_supply,
+            "genesis_supply": genesis_supply
+        })))
+    }
+
+    /// Handler for /supply/total - Returns total supply for block explorers
+    async fn handle_get_total_supply(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let economics = state.economics.read().await;
+        
+        // Genesis supply: 500M SLTN in base units (9 decimals)
+        let genesis_supply: u64 = 500_000_000_000_000_000;
+        let total_supply = genesis_supply.saturating_sub(economics.total_burned);
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "total_supply": total_supply,
+            "total_supply_sltn": total_supply as f64 / 1_000_000_000.0,
+            "circulating_supply": total_supply,
+            "circulating_supply_sltn": total_supply as f64 / 1_000_000_000.0,
+            "genesis_supply": genesis_supply,
+            "genesis_supply_sltn": 500_000_000.0,
+            "total_burned": economics.total_burned,
+            "decimals": 9,
+            "denom": "sltn"
         })))
     }
 
@@ -976,6 +1204,16 @@ mod rpc {
     #[derive(serde::Deserialize)]
     struct FeeQuery {
         amount: u64,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct TxHistoryQuery {
+        #[serde(default = "default_limit")]
+        limit: usize,
+    }
+
+    fn default_limit() -> usize {
+        50
     }
 
     async fn handle_get_bridge_fee(
@@ -1042,8 +1280,20 @@ mod rpc {
     #[derive(serde::Deserialize)]
     struct CreateValidatorRequest {
         validator_address: String,
+        #[serde(default)]
+        moniker: Option<String>,
+        #[serde(deserialize_with = "deserialize_amount")]
         initial_stake: u64,
+        #[serde(default = "default_commission")]
         commission_rate: f64,
+        #[serde(default)]
+        signature: Option<String>,
+        #[serde(default)]
+        public_key: Option<String>,
+    }
+
+    fn default_commission() -> f64 {
+        0.05 // 5% default commission
     }
 
     async fn handle_create_validator(
@@ -1063,9 +1313,38 @@ mod rpc {
                 if let Err(e) = consensus.add_validator(req.validator_address.clone(), req.initial_stake) {
                     warn!("Validator {} added to staking but not consensus: {}", req.validator_address, e);
                 }
+                
+                // Record as transaction for history
+                {
+                    let blockchain = state.blockchain.read().await;
+                    let current_height = blockchain.get_height().await;
+                    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+                    
+                    use sha2::{Sha256, Digest};
+                    let mut hasher = Sha256::new();
+                    hasher.update(format!("create_validator_{}{}", req.validator_address, timestamp));
+                    let hash_bytes = hasher.finalize();
+                    let hash = format!("validator_{}", hex::encode(&hash_bytes[..16]));
+                    
+                    let tx = sultan_core::sharded_blockchain_production::ConfirmedTransaction {
+                        hash,
+                        from: req.validator_address.clone(),
+                        to: "network".to_string(),
+                        amount: req.initial_stake,
+                        memo: Some("Create validator".to_string()),
+                        nonce: 0,
+                        timestamp,
+                        block_height: current_height,
+                        status: "confirmed".to_string(),
+                    };
+                    blockchain.record_transaction(tx).await;
+                }
+                
+                // Return both snake_case and camelCase for compatibility
                 Ok(warp::reply::json(&serde_json::json!({
                     "validator_address": req.validator_address,
-                    "stake": req.initial_stake,
+                    "validatorAddress": req.validator_address,
+                    "stake": req.initial_stake.to_string(),
                     "commission": req.commission_rate,
                     "status": "active",
                     "consensus": true
@@ -1078,31 +1357,140 @@ mod rpc {
         }
     }
 
-    #[derive(serde::Deserialize)]
-    struct DelegateRequest {
-        delegator_address: String,
-        validator_address: String,
-        amount: u64,
-    }
+    // DelegateRequest types removed - now using manual JSON parsing for better error handling
 
     async fn handle_delegate(
-        req: DelegateRequest,
+        body: warp::hyper::body::Bytes,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Parse the JSON body manually for better error handling
+        let body_str = String::from_utf8_lossy(&body);
+        debug!("Delegate request body: {}", body_str);
+        
+        // Try to parse as JSON Value first
+        let json_value: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Failed to parse delegate request as JSON: {}", e);
+                return Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": format!("Invalid JSON: {}", e),
+                        "status": 400
+                    })),
+                    warp::http::StatusCode::BAD_REQUEST
+                ));
+            }
+        };
+        
+        // Extract delegation parameters - try wallet format first, then simple format
+        let (delegator, validator, amount): (String, String, u64) = if let Some(tx) = json_value.get("tx") {
+            // Wallet format: { tx: { from, to, amount }, signature, public_key }
+            let from = tx.get("from").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let to = tx.get("to").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let amount = tx.get("amount").map(|v| {
+                v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).unwrap_or(0)
+            }).unwrap_or(0);
+            info!("Processing wallet delegation: from={}, to={}, amount={}", from, to, amount);
+            (from, to, amount)
+        } else if json_value.get("delegator_address").is_some() {
+            // Simple format: { delegator_address, validator_address, amount }
+            let delegator = json_value.get("delegator_address").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let validator = json_value.get("validator_address").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let amount = json_value.get("amount").map(|v| {
+                v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).unwrap_or(0)
+            }).unwrap_or(0);
+            info!("Processing simple delegation: delegator={}, validator={}, amount={}", delegator, validator, amount);
+            (delegator, validator, amount)
+        } else {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": "Invalid request format. Expected either { tx: { from, to, amount }, signature, public_key } or { delegator_address, validator_address, amount }",
+                    "status": 400
+                })),
+                warp::http::StatusCode::BAD_REQUEST
+            ));
+        };
+        
+        // Validate the request
+        if delegator.is_empty() || validator.is_empty() || amount == 0 {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": "Missing required fields: delegator, validator, and amount must all be provided",
+                    "status": 400
+                })),
+                warp::http::StatusCode::BAD_REQUEST
+            ));
+        }
+        
+        // Auto-register consensus validators in staking manager if not already registered
+        {
+            let consensus = state.consensus.read().await;
+            if consensus.is_validator(&validator) {
+                if let Some(v) = consensus.get_validator(&validator) {
+                    // Register in staking manager if not exists
+                    let _ = state.staking_manager.create_validator(
+                        validator.clone(),
+                        v.stake,
+                        0.05, // Default 5% commission
+                    ).await;
+                }
+            }
+        }
+
         match state.staking_manager.delegate(
-            req.delegator_address.clone(),
-            req.validator_address.clone(),
-            req.amount,
+            delegator.clone(),
+            validator.clone(),
+            amount,
         ).await {
-            Ok(_) => Ok(warp::reply::json(&serde_json::json!({
-                "delegator": req.delegator_address,
-                "validator": req.validator_address,
-                "amount": req.amount,
-                "status": "delegated"
-            }))),
+            Ok(_) => {
+                // Generate a hash for the delegation transaction
+                use sha2::{Sha256, Digest};
+                let mut hasher = Sha256::new();
+                let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+                hasher.update(format!("{}{}{}{}", delegator, validator, amount, timestamp));
+                let hash_bytes = hasher.finalize();
+                let hash = format!("stake_{}", hex::encode(&hash_bytes[..16]));
+                
+                // Record this as a transaction in history
+                {
+                    let blockchain = state.blockchain.read().await;
+                    let current_height = blockchain.get_height().await;
+                    
+                    // Create a confirmed transaction record for the staking action
+                    let stake_tx = sultan_core::sharded_blockchain_production::ConfirmedTransaction {
+                        hash: hash.clone(),
+                        from: delegator.clone(),
+                        to: validator.clone(),
+                        amount,
+                        memo: Some("Stake delegation".to_string()),
+                        nonce: 0,
+                        timestamp,
+                        block_height: current_height,
+                        status: "confirmed".to_string(),
+                    };
+                    blockchain.record_transaction(stake_tx).await;
+                }
+                
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "delegator": delegator,
+                        "validator": validator,
+                        "amount": amount,
+                        "status": "delegated",
+                        "hash": hash
+                    })),
+                    warp::http::StatusCode::OK
+                ))
+            },
             Err(e) => {
                 warn!("Delegation failed: {}", e);
-                Err(warp::reject())
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": e.to_string(),
+                        "status": 400
+                    })),
+                    warp::http::StatusCode::BAD_REQUEST
+                ))
             }
         }
     }
@@ -1110,7 +1498,32 @@ mod rpc {
     async fn handle_get_validators(
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
-        let validators = state.staking_manager.get_validators().await;
+        let mut validators = state.staking_manager.get_validators().await;
+        
+        // If no staking validators registered, return consensus validators
+        if validators.is_empty() {
+            let consensus = state.consensus.read().await;
+            let consensus_validators = consensus.get_active_validators();
+            
+            // Convert consensus validators to staking format
+            validators = consensus_validators.iter().map(|v| {
+                sultan_core::staking::ValidatorStake {
+                    validator_address: v.address.clone(),
+                    self_stake: v.stake,
+                    delegated_stake: 0,
+                    total_stake: v.stake,
+                    commission_rate: 0.05, // Default 5%
+                    rewards_accumulated: 0,
+                    blocks_signed: v.blocks_signed,
+                    blocks_missed: 0,
+                    jailed: !v.is_active,
+                    jailed_until: 0,
+                    created_at: 0,
+                    last_reward_height: 0,
+                }
+            }).collect();
+        }
+        
         Ok(warp::reply::json(&validators))
     }
 
@@ -1331,6 +1744,13 @@ async fn main() -> Result<()> {
         let validator_addr = args.validator_address.clone();
         let validator_stake = args.validator_stake;
         
+        // Get message receiver from P2P to process incoming validator announcements
+        let mut message_rx = if let Some(ref p2p) = state.p2p_network {
+            p2p.write().await.take_message_receiver()
+        } else {
+            None
+        };
+        
         tokio::spawn(async move {
             // Wait for peers to connect before first announcement (30 seconds delay)
             info!("🌐 P2P message handler started, waiting for peer connections...");
@@ -1351,32 +1771,152 @@ async fn main() -> Result<()> {
             
             // P2P message handler loop
             loop {
-                // Process incoming P2P messages (includes validator announcements)
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                
-                // Re-announce this validator periodically (every 30 seconds)
-                if let (Some(ref addr), Some(stake)) = (&validator_addr, validator_stake) {
-                    if let Some(ref p2p) = p2p_state.p2p_network {
-                        static ANNOUNCE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-                        let count = ANNOUNCE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if count % 6 == 0 {
-                            let peer_count = p2p.read().await.peer_count().await;
-                            if peer_count > 0 {
-                                if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
-                                    debug!("Failed to re-announce validator: {}", e);
-                                } else {
-                                    info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
+                // Process incoming P2P messages with timeout
+                tokio::select! {
+                    // Handle incoming messages from P2P network
+                    Some(msg) = async { 
+                        if let Some(ref mut rx) = message_rx { 
+                            rx.recv().await 
+                        } else { 
+                            None 
+                        } 
+                    } => {
+                        match msg {
+                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id } => {
+                                // Register validator in consensus engine
+                                let mut consensus = p2p_state.consensus.write().await;
+                                if !consensus.is_validator(address) {
+                                    match consensus.add_validator(address.clone(), stake) {
+                                        Ok(_) => {
+                                            info!("✅ Registered validator in consensus: {} (stake: {}, peer: {})", 
+                                                  address, stake, peer_id);
+                                        }
+                                        Err(e) => {
+                                            warn!("Failed to register validator {}: {}", address, e);
+                                        }
+                                    }
                                 }
+                            }
+                            NetworkMessage::BlockProposal { height, proposer, block_hash, block_data } => {
+                                // === PRODUCTION BLOCK SYNC ===
+                                // Process incoming block from another validator
+                                debug!("📥 Received block proposal: height={}, proposer={}, hash={}", 
+                                       height, proposer, &block_hash[..16.min(block_hash.len())]);
+                                
+                                // Validate proposer is a registered validator
+                                let consensus = p2p_state.consensus.read().await;
+                                if !consensus.is_validator(&proposer) {
+                                    warn!("❌ Block rejected: proposer {} is not a registered validator", proposer);
+                                    continue;
+                                }
+                                
+                                // Verify this is the expected proposer
+                                let expected_proposer = consensus.current_proposer.clone();
+                                drop(consensus); // Release lock before acquiring write lock
+                                
+                                // Deserialize block
+                                let block: Block = match bincode::deserialize(&block_data) {
+                                    Ok(b) => b,
+                                    Err(e) => {
+                                        warn!("❌ Failed to deserialize block: {}", e);
+                                        continue;
+                                    }
+                                };
+                                
+                                // Get our current height - Sultan Chain unified blockchain
+                                let our_height = p2p_state.blockchain.read().await.get_height().await;
+                                
+                                // Only accept blocks that are ahead of us
+                                if height <= our_height {
+                                    debug!("Block {} already processed (our height: {})", height, our_height);
+                                    continue;
+                                }
+                                
+                                // Accept block if it's the next one we need
+                                if height == our_height + 1 {
+                                    info!("📦 Applying block {} from {}", height, proposer);
+                                    
+                                    // Apply block to our chain - Sultan Chain unified architecture
+                                    let mut blockchain = p2p_state.blockchain.write().await;
+                                    match blockchain.apply_block(block.clone()).await {
+                                        Ok(_) => {
+                                            info!("✅ Synced block {} from {} ({} txs)", 
+                                                  height, proposer, block.transactions.len());
+                                        }
+                                        Err(e) => {
+                                            warn!("❌ Failed to apply block {}: {}", height, e);
+                                            continue;
+                                        }
+                                    }
+                                    drop(blockchain);
+                                    
+                                    // Advance consensus round after accepting block
+                                    let mut consensus = p2p_state.consensus.write().await;
+                                    let _ = consensus.select_proposer();
+                                    
+                                    // Save to storage
+                                    if let Ok(storage) = p2p_state.storage.try_read() {
+                                        let _ = storage.save_block(&block);
+                                    }
+                                }
+                            }
+                            NetworkMessage::Transaction { tx_hash, tx_data } => {
+                                // === TRANSACTION GOSSIP ===
+                                // Receive transaction from another validator and add to our mempool
+                                match bincode::deserialize::<Transaction>(&tx_data) {
+                                    Ok(tx) => {
+                                        info!("📥 Received transaction from peer: {} -> {} amount={}", 
+                                              tx.from, tx.to, tx.amount);
+                                        
+                                        // Add to our local mempool - Sultan Chain unified blockchain
+                                        let blockchain = p2p_state.blockchain.write().await;
+                                        if let Err(e) = blockchain.submit_transaction(tx.clone()).await {
+                                            debug!("Failed to add peer tx to mempool: {}", e);
+                                        } else {
+                                            let pending = blockchain.pending_count().await;
+                                            debug!("Added peer tx to mempool [pending: {}]", pending);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!("❌ Failed to deserialize transaction {}: {}", tx_hash, e);
+                                    }
+                                }
+                            }
+                            _ => {
+                                // Other message types handled elsewhere
                             }
                         }
                     }
-                }
-                
-                if let Some(ref p2p) = p2p_state.p2p_network {
-                    let peer_count = p2p.read().await.peer_count().await;
-                    let validator_count = p2p.read().await.known_validator_count().await;
-                    info!("🌐 P2P Status: {} peers connected, {} validators known", 
-                          peer_count, validator_count);
+                    
+                    // Periodic tasks every 5 seconds
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                        // Re-announce this validator periodically (every 30 seconds)
+                        if let (Some(ref addr), Some(stake)) = (&validator_addr, validator_stake) {
+                            if let Some(ref p2p) = p2p_state.p2p_network {
+                                static ANNOUNCE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                                let count = ANNOUNCE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                if count % 6 == 0 {
+                                    let peer_count = p2p.read().await.peer_count().await;
+                                    if peer_count > 0 {
+                                        if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
+                                            debug!("Failed to re-announce validator: {}", e);
+                                        } else {
+                                            info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Log P2P and consensus status
+                        if let Some(ref p2p) = p2p_state.p2p_network {
+                            let peer_count = p2p.read().await.peer_count().await;
+                            let p2p_validator_count = p2p.read().await.known_validator_count().await;
+                            let consensus_validator_count = p2p_state.consensus.read().await.validator_count();
+                            info!("🌐 P2P Status: {} peers, {} validators (P2P) / {} validators (consensus)", 
+                                  peer_count, p2p_validator_count, consensus_validator_count);
+                        }
+                    }
                 }
             }
         });
@@ -1729,4 +2269,33 @@ async fn handle_get_price(
             "error": e.to_string()
         }))),
     }
+}
+
+/// Custom rejection handler to return JSON error responses instead of 404
+async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, std::convert::Infallible> {
+    use warp::http::StatusCode;
+    
+    let (code, message) = if err.is_not_found() {
+        (StatusCode::NOT_FOUND, "Endpoint not found")
+    } else if err.find::<warp::reject::MethodNotAllowed>().is_some() {
+        (StatusCode::METHOD_NOT_ALLOWED, "Method not allowed")
+    } else if err.find::<warp::reject::InvalidQuery>().is_some() {
+        (StatusCode::BAD_REQUEST, "Invalid query parameters")
+    } else if err.find::<warp::reject::PayloadTooLarge>().is_some() {
+        (StatusCode::PAYLOAD_TOO_LARGE, "Payload too large")
+    } else if err.find::<warp::filters::body::BodyDeserializeError>().is_some() {
+        (StatusCode::BAD_REQUEST, "Invalid JSON body - check request format")
+    } else if err.find::<warp::reject::MissingHeader>().is_some() {
+        (StatusCode::BAD_REQUEST, "Missing required header")
+    } else {
+        warn!("Unhandled rejection: {:?}", err);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+    };
+    
+    let json = warp::reply::json(&serde_json::json!({
+        "error": message,
+        "status": code.as_u16()
+    }));
+    
+    Ok(warp::reply::with_status(json, code))
 }

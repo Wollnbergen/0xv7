@@ -4,6 +4,7 @@
 //! It provides the fundamental blockchain logic, consensus, and state management.
 
 pub mod blockchain;
+pub mod block_sync;
 pub mod consensus;
 pub mod p2p;
 pub mod quantum;
@@ -33,13 +34,16 @@ pub use storage::PersistentStorage;
 pub use types::Address;
 pub use config::Config;
 pub use transaction_validator::TransactionValidator;
-// Legacy sharding (deprecated - tests only)
-#[deprecated(note = "Use ShardedBlockchainProduction from sharding_production module")]
-pub use sharding::{ShardingCoordinator, ShardConfig, ShardStats};
+
+// Production sharding - the unified Sultan blockchain
 pub use sharding_production::{ShardingCoordinator as ProductionShardingCoordinator, ShardConfig as ProductionShardConfig};
-#[deprecated(note = "Use ShardedBlockchainProduction instead")]
+pub use sharded_blockchain_production::{SultanBlockchain, ShardedBlockchainProduction, ConfirmedTransaction};
+
+// Legacy types (deprecated - for backward compatibility only)
+#[deprecated(note = "Use SultanBlockchain - sharding is always enabled")]
+pub use sharding::{ShardingCoordinator, ShardConfig, ShardStats};
+#[deprecated(note = "Use SultanBlockchain instead")]
 pub use sharded_blockchain::ShardedBlockchain;
-pub use sharded_blockchain_production::ShardedBlockchainProduction;
 
 /// Sultan Core version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

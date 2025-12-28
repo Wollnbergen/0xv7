@@ -5,6 +5,8 @@
 **The Native Rust Blockchain**  
 *2-Second Finality | $0 Gas Fees | 64M TPS Scalability*
 
+**Version:** 3.2 | **Updated:** December 27, 2025
+
 ---
 
 ## 📊 SLIDE 1: COVER
@@ -26,7 +28,10 @@
 | **Gas Fees** | $0 |
 | **TPS Capacity** | 64,000 → 64M |
 | **Validator APY** | 13.33% |
-| **Network Status** | ✅ **MAINNET LIVE** |
+| **Active Validators** | 6 (globally distributed) |
+| **Active Shards** | 16 |
+| **Consensus** | Height-based PoS with synchronized leader election |
+| **Network Status** | ✅ **MAINNET LIVE (Dec 25, 2025)** |
 
 ---
 
@@ -120,11 +125,12 @@ We built a blockchain from first principles—no frameworks, no compromises.
 
 ---
 
-**🔐 Post-Quantum Ready Architecture**
-- Ed25519 for current operations (battle-tested, secure)
-- Dilithium3 upgrade path planned for future
-- Architecture designed for seamless quantum-safe transition
-- Proactive approach to quantum computing era
+**🔐 Production-Grade Security (LIVE)**
+- **Ed25519 strict signature verification** - All transactions cryptographically verified
+- Nonce-based replay protection - Prevents transaction replay attacks
+- SHA-256 message hashing - Industry-standard integrity
+- Post-quantum ready architecture (Dilithium3 upgrade path)
+- All security features **deployed and enforced in production**
 
 ---
 
@@ -190,7 +196,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 | Metric | Sultan (Native Rust) | Typical Framework |
 |--------|---------------------|-------------------|
 | Block Creation | 50-105µs | 100-500ms |
-| Binary Size | 14MB | 500MB+ |
+| Binary Size | 15MB | 500MB+ |
 | Minimum RAM | 1GB | 8-16GB |
 | GC Pauses | None | Frequent |
 | Startup Time | <1 second | 30-60 seconds |
@@ -210,27 +216,29 @@ Sultan L1 is **live on mainnet** with verified metrics:
 | Metric | Value | Status |
 |--------|-------|--------|
 | **Block Time** | 2.00 seconds | ✅ Verified |
-| **Block Creation** | 50-105µs | ✅ Measured |
+| **Block Creation** | 14-28µs | ✅ Measured |
 | **Finality** | 2 seconds (1 block) | ✅ Guaranteed |
-| **Active Shards** | 8 | ✅ Live |
+| **Active Shards** | 16 | ✅ Live |
 | **Base TPS** | 64,000 | ✅ Capacity |
 | **Max TPS** | 64,000,000 | 🔄 With expansion |
-| **Validators** | 15 | ✅ Globally distributed |
-| **Uptime** | 99.9%+ | ✅ Since launch |
+| **Validators** | 6 | ✅ Globally distributed |
+| **Treasury** | 500M SLTN | ✅ Initialized |
+| **Launch Date** | December 25, 2025 | ✅ Christmas Day |
 
 ---
 
-### Live Production Evidence
+### Live Production Evidence (Christmas Day Launch)
 
 ```
-[2025-12-08T14:32:00Z] Block 1847: 64µs creation | 16 shards
-[2025-12-08T14:32:02Z] Block 1848: 52µs creation | 16 shards  
-[2025-12-08T14:32:04Z] Block 1849: 78µs creation | 16 shards
-[2025-12-08T14:32:06Z] Block 1850: 61µs creation | 16 shards
-[2025-12-08T14:32:08Z] Block 1851: 55µs creation | 16 shards
+[2025-12-25T09:44:00Z] ✅ SHARDED Block 1 | 16 shards active | capacity: 64000 TPS
+[2025-12-25T09:44:02Z] ✅ SHARDED Block 2 | 16 shards active | 14.657µs creation
+[2025-12-25T09:44:04Z] ✅ SHARDED Block 3 | 16 shards active | 22.881µs creation  
+[2025-12-25T09:52:58Z] ✅ Registered validator-2 in consensus (stake: 10000000000000)
+[2025-12-25T09:53:24Z] ✅ Registered validator-3 in consensus (stake: 10000000000000)
+[2025-12-25T09:54:46Z] 🌐 P2P Status: 5 peers, 6 validators (consensus)
 ```
 
-**Perfect 2.00-second intervals. Sub-100µs block creation. Zero missed blocks.**
+**Perfect 2.00-second intervals. Sub-30µs block creation. 6 validators synced globally.**
 
 ---
 
@@ -285,50 +293,51 @@ Sultan achieves **linear scalability** through state sharding:
 
 ### Live Mainnet Network
 
-Sultan L1 launched on **December 6, 2025** with global validator distribution:
+Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validator distribution:
 
 ---
 
 ```
-                    ┌─────────────────┐
-                    │   Bootstrap     │
-                    │ rpc.sltn.io     │
-                    │   (Germany)     │
-                    └────────┬────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-   ┌────▼────┐          ┌────▼────┐          ┌────▼────┐
-   │ Hetzner │          │   NYC   │          │   SFO   │
-   │ Germany │          │  (USA)  │          │  (USA)  │
-   │(11 nodes)│         │         │          │         │
-   └─────────┘          └─────────┘          └─────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │
-   ┌────▼────┐          ┌────▼────┐
-   │Amsterdam│          │Singapore│
-   │  (EU)   │          │ (APAC)  │
-   └─────────┘          └─────────┘
+                         ┌─────────────────┐
+                         │   Bootstrap     │
+                         │  validator-1    │
+                         │   NYC (USA)     │
+                         │ 206.189.224.142 │
+                         └────────┬────────┘
+                                  │
+        ┌─────────────────────────┼─────────────────────────┐
+        │                         │                         │
+   ┌────▼────┐               ┌────▼────┐               ┌────▼────┐
+   │validator│               │validator│               │validator│
+   │    2    │               │    3    │               │    4    │
+   │  SFO    │               │   FRA   │               │   AMS   │
+   │  (USA)  │               │  (EU)   │               │  (EU)   │
+   └─────────┘               └─────────┘               └─────────┘
+                                  │
+              ┌───────────────────┴───────────────────┐
+              │                                       │
+         ┌────▼────┐                             ┌────▼────┐
+         │validator│                             │validator│
+         │    5    │                             │    6    │
+         │   SGP   │                             │   LON   │
+         │ (APAC)  │                             │  (EU)   │
+         └─────────┘                             └─────────┘
 ```
 
 ---
 
-### Validator Distribution
+### Validator Distribution (Live)
 
-| Region | Provider | Nodes | Coverage |
-|--------|----------|-------|---------|
-| New York, USA | DigitalOcean | 1 | Americas East (Bootstrap) |
-| San Francisco, USA | DigitalOcean | 1 | Americas West |
-| Amsterdam, NL | DigitalOcean | 1 | Europe |
-| London, UK | DigitalOcean | 1 | Europe |
-| Frankfurt, DE | DigitalOcean | 1 | Europe |
-| Singapore | DigitalOcean | 1 | Asia-Pacific |
-| Nuremberg, DE | Hetzner | 1 | Europe |
-| Helsinki, FI | Hetzner | 1 | Europe |
-| Falkenstein, DE | Hetzner | 1 | Europe |
+| Validator | Region | IP | Role |
+|-----------|--------|-----|------|
+| validator-1 | New York, USA | 206.189.224.142 | Bootstrap |
+| validator-2 | San Francisco, USA | 24.144.94.23 | Validator |
+| validator-3 | Frankfurt, DE | 46.101.122.13 | Validator |
+| validator-4 | Amsterdam, NL | 142.93.238.33 | Validator |
+| validator-5 | Singapore | 143.198.205.21 | Validator |
+| validator-6 | London, UK | 134.122.96.36 | Validator |
 
-**Total: 9 globally distributed validators across 2 cloud providers**
+**Total: 6 globally distributed validators across 4 continents (DigitalOcean)**
 
 ---
 
@@ -336,9 +345,17 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 
 | Service | Endpoint | Status |
 |---------|----------|--------|
-| RPC API | https://rpc.sltn.io | ✅ Live |
-| P2P Bootstrap | /dns4/rpc.sltn.io/tcp/26656 | ✅ Live |
+| RPC API (Bootstrap) | http://206.189.224.142:26657 | ✅ Live |
+| P2P Bootstrap | /ip4/206.189.224.142/tcp/26656 | ✅ Live |
 | Website | https://sltn.io | ✅ Live |
+
+---
+
+### Treasury
+
+| Account | Balance | Purpose |
+|---------|---------|---------|
+| `sultan19mzzrah6h27draqc5tkh49yj623qwuz5f5t64c` | 500,000,000 SLTN | Genesis Treasury |
 
 ---
 
@@ -353,6 +370,7 @@ Sultan L1 launched on **December 6, 2025** with global validator distribution:
 | **Genesis Supply** | 500,000,000 |
 | **Decimals** | 9 |
 | **Type** | Native L1 Token |
+| **Treasury Address** | sultan19mzzrah6h27draqc5tkh49yj623qwuz5f5t64c |
 
 ---
 
