@@ -1,8 +1,10 @@
 //! Integration tests for sharding implementation
+//! Uses production sharding code (sharding_production.rs, sharded_blockchain_production.rs)
 
 #[cfg(test)]
 mod sharding_tests {
-    use sultan_core::{ShardedBlockchain, ShardConfig, Transaction};
+    use sultan_core::{ShardedBlockchain, ShardConfig, Transaction, SultanBlockchain};
+    use sultan_core::sharding_production::ShardConfig as ProdShardConfig;
 
     #[tokio::test]
     async fn test_sharding_initialization() {
@@ -66,6 +68,8 @@ mod sharding_tests {
                 timestamp: i,
                 nonce: i as u64,
                 signature: None,
+                public_key: None,
+                memo: None,
             });
         }
         
@@ -107,6 +111,8 @@ mod sharding_tests {
                 timestamp: i as u64,
                 nonce: i as u64,
                 signature: None,
+                public_key: None,
+                memo: None,
             });
         }
         
@@ -147,6 +153,8 @@ mod sharding_tests {
                 timestamp: i,
                 nonce: i as u64,
                 signature: None,
+                public_key: None,
+                memo: None,
             });
         }
         
@@ -162,44 +170,57 @@ mod sharding_tests {
 
     #[tokio::test]
     async fn test_tps_capacity() {
+        // Production TPS formula: (shard_count × tx_per_shard) / 2 (for 2-second blocks)
+        // Using production SultanBlockchain (sharded_blockchain_production.rs)
         let test_configs = vec![
-            (10, 10_000, 20_000),
-            (50, 10_000, 100_000),
-            (100, 10_000, 200_000),
+            (10, 10_000, 50_000),    // 10 × 10,000 / 2 = 50,000 TPS
+            (50, 10_000, 250_000),   // 50 × 10,000 / 2 = 250,000 TPS
+            (100, 10_000, 500_000),  // 100 × 10,000 / 2 = 500,000 TPS
         ];
         
         for (shards, tx_per_shard, expected_tps) in test_configs {
-            let config = ShardConfig {
+            let config = ProdShardConfig {
                 shard_count: shards,
                 tx_per_shard,
+                max_shards: 8000,
+                auto_expand_threshold: 0.8,
                 cross_shard_enabled: false,
+                byzantine_tolerance: 1,
+                enable_fraud_proofs: true,
             };
             
-            let blockchain = ShardedBlockchain::new(config);
-            let tps_capacity = blockchain.get_tps_capacity();
+            let blockchain = SultanBlockchain::new(config);
+            let tps_capacity = blockchain.get_tps_capacity().await;
             
-            assert_eq!(tps_capacity, expected_tps);
+            assert_eq!(tps_capacity, expected_tps, 
+                "TPS mismatch for {} shards × {} tx/shard", shards, tx_per_shard);
             
             println!("  {} shards × {} tx/shard = {} TPS ✅", shards, tx_per_shard, tps_capacity);
         }
         
-        println!("✅ TPS capacity test passed");
+        println!("✅ TPS capacity test passed (production formula)");
     }
 
     #[tokio::test]
     async fn test_shard_stats() {
-        let config = ShardConfig {
+        // Using production SultanBlockchain for stats
+        let config = ProdShardConfig {
             shard_count: 100,
             tx_per_shard: 10_000,
+            max_shards: 8000,
+            auto_expand_threshold: 0.8,
             cross_shard_enabled: true,
+            byzantine_tolerance: 1,
+            enable_fraud_proofs: true,
         };
         
-        let blockchain = ShardedBlockchain::new(config);
+        let blockchain = SultanBlockchain::new(config);
         
-        let stats = blockchain.get_stats();
+        let stats = blockchain.get_stats().await;
         
         assert_eq!(stats.shard_count, 100);
-        assert_eq!(stats.estimated_tps, 200_000);
+        // Production formula: 100 × 10,000 / 2 = 500,000 TPS
+        assert_eq!(stats.estimated_tps, 500_000);
         assert_eq!(stats.total_transactions, 0);
         assert_eq!(stats.total_processed, 0);
         
@@ -207,7 +228,7 @@ mod sharding_tests {
         println!("  Estimated TPS:     {}", stats.estimated_tps);
         println!("  Total Processed:   {}", stats.total_processed);
         
-        println!("✅ Shard stats test passed");
+        println!("✅ Shard stats test passed (production)");
     }
 
     #[tokio::test]
@@ -235,6 +256,8 @@ mod sharding_tests {
                 timestamp: i,
                 nonce: i as u64,
                 signature: None,
+                public_key: None,
+                memo: None,
             });
         }
         

@@ -37,6 +37,7 @@ pub use transaction_validator::TransactionValidator;
 
 // Production sharding - the unified Sultan blockchain
 pub use sharding_production::{ShardingCoordinator as ProductionShardingCoordinator, ShardConfig as ProductionShardConfig};
+#[allow(deprecated)]
 pub use sharded_blockchain_production::{SultanBlockchain, ShardedBlockchainProduction, ConfirmedTransaction};
 
 // Legacy types (deprecated - for backward compatibility only)

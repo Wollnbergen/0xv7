@@ -274,6 +274,78 @@ impl PersistentStorage {
         
         Ok(())
     }
+    
+    // ============ Staking Persistence ============
+    
+    /// Save staking state to persistent storage
+    /// Called after every staking operation (delegate, undelegate, slash)
+    pub fn save_staking_state(&self, state: &StakingStateSnapshot) -> Result<()> {
+        let value = bincode::serialize(state)?;
+        self.db.put(b"staking:state", value)?;
+        info!("💾 Staking state persisted ({} validators, {} unbonding entries)", 
+            state.validators.len(), state.unbonding_queue.len());
+        Ok(())
+    }
+    
+    /// Load staking state from persistent storage
+    /// Called on node startup to restore state
+    pub fn load_staking_state(&self) -> Result<Option<StakingStateSnapshot>> {
+        if let Some(data) = self.db.get(b"staking:state")? {
+            let state: StakingStateSnapshot = bincode::deserialize(&data)?;
+            info!("📥 Loaded staking state: {} validators, {} delegations, {} unbonding",
+                state.validators.len(), state.delegations.len(), state.unbonding_queue.len());
+            Ok(Some(state))
+        } else {
+            info!("📭 No existing staking state found");
+            Ok(None)
+        }
+    }
+    
+    /// Save slashing history (append-only log for audit)
+    pub fn append_slashing_event(&self, event: &crate::staking::SlashingEvent) -> Result<()> {
+        let key = format!("slash:{}:{}", event.height, event.validator_address);
+        let value = bincode::serialize(event)?;
+        self.db.put(key.as_bytes(), value)?;
+        warn!("⚔️  Slashing event persisted: {} slashed {} at height {}", 
+            event.validator_address, event.amount_slashed, event.height);
+        Ok(())
+    }
+    
+    /// Get slashing history for a validator
+    pub fn get_slashing_history(&self, validator_address: &str) -> Result<Vec<crate::staking::SlashingEvent>> {
+        let prefix = format!("slash:");
+        let mut events = Vec::new();
+        
+        for item in self.db.prefix_iterator(prefix.as_bytes()) {
+            let (key, value) = item?;
+            let key_str = String::from_utf8_lossy(&key);
+            if key_str.ends_with(&format!(":{}", validator_address)) || 
+               key_str.contains(&format!(":{}:", validator_address)) {
+                // This is a bit loose but works for our format
+            }
+            // Deserialize all and filter
+            if let Ok(event) = bincode::deserialize::<crate::staking::SlashingEvent>(&value) {
+                if event.validator_address == validator_address {
+                    events.push(event);
+                }
+            }
+        }
+        
+        events.sort_by_key(|e| e.height);
+        Ok(events)
+    }
+}
+
+/// Serializable snapshot of all staking state
+/// Used for persistence and state sync
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StakingStateSnapshot {
+    pub validators: std::collections::HashMap<String, crate::staking::ValidatorStake>,
+    pub delegations: std::collections::HashMap<String, Vec<crate::staking::Delegation>>,
+    pub unbonding_queue: Vec<crate::staking::UnbondingEntry>,
+    pub total_staked: u64,
+    pub current_height: u64,
+    pub snapshot_time: u64,
 }
 
 impl Clone for PersistentStorage {
@@ -288,9 +360,7 @@ impl Clone for PersistentStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blockchain::Transaction;
     use tempfile::tempdir;
-    use tracing::warn;
     
     #[test]
     fn test_storage_persistence() {
@@ -298,7 +368,7 @@ mod tests {
         let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
         
         // Create and save block
-        let mut block = Block {
+        let block = Block {
             index: 1,
             hash: "test_hash".to_string(),
             prev_hash: "genesis".to_string(),

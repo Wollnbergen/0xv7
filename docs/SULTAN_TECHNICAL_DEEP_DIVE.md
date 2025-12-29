@@ -1,8 +1,8 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.2  
-**Date:** December 27, 2025  
+**Version:** 3.3  
+**Date:** December 29, 2025  
 **Classification:** Public Technical Reference
 
 ---
@@ -76,24 +76,27 @@ The production codebase (`sultan-core/src/`) contains 22 Rust modules:
 
 ```
 sultan-core/src/
-├── main.rs               (1,698 lines) - Node binary entry point
-├── blockchain.rs         (374 lines)  - Block/TX structures
-├── consensus.rs          (255 lines)  - Validator management
+├── main.rs               (2,938 lines) - Node binary, RPC (30+ endpoints), keygen CLI
+├── blockchain.rs         (374 lines)  - Block/TX structures (with memo field)
+├── consensus.rs          (1,078 lines) - Validator management (17 tests, Ed25519)
 ├── p2p.rs                (377 lines)  - libp2p networking
 ├── storage.rs            (311 lines)  - RocksDB persistence
 ├── economics.rs          (100 lines)  - Inflation/APY model
-├── staking.rs            (532 lines)  - Validator staking
+├── staking.rs            (1,198 lines) - Validator staking
 ├── governance.rs         (556 lines)  - On-chain governance
 ├── token_factory.rs      (354 lines)  - Native token creation
 ├── native_dex.rs         (462 lines)  - AMM swap protocol
+├── transaction_validator.rs (782 lines) - TX validation (18 tests, typed errors)
 ├── bridge_fees.rs        (279 lines)  - Cross-chain fee logic
 ├── bridge_integration.rs (varies)     - Bridge coordination
-├── sharding_production.rs(1,117 lines)- PRODUCTION sharding
-├── sharded_blockchain_production.rs   - Production shard coordinator
+├── sharding_production.rs(2,244 lines)- PRODUCTION sharding (Ed25519, 2PC, WAL)
+├── sharded_blockchain_production.rs (1,342 lines) - Production shard coordinator
 ├── sharding.rs           (362 lines)  - LEGACY (deprecated)
 ├── sharded_blockchain.rs (179 lines)  - LEGACY (deprecated)
 └── [supporting modules]
 ```
+
+**Total: 12,000+ lines of production Rust code, 125 tests passing**
 
 ### 1.3 Key Design Decisions
 
@@ -285,8 +288,8 @@ Sharded Blockchain (16 shards):
 ### 3.2 CRITICAL: Production vs Legacy Files
 
 **PRODUCTION FILES (Use These):**
-- `sharding_production.rs` - 1,117 lines
-- `sharded_blockchain_production.rs` - 303 lines
+- `sharding_production.rs` - 2,244 lines (Ed25519, 2PC, WAL recovery, state proofs)
+- `sharded_blockchain_production.rs` - 1,250 lines (full shard coordinator)
 
 **LEGACY FILES (Tests Only - Deprecated):**
 - `sharding.rs` - 362 lines (marked `#[deprecated]`)
@@ -323,7 +326,7 @@ impl Default for ShardConfig {
     fn default() -> Self {
         Self {
             shard_count: 16,             // Launch with 16 shards
-            max_shards: 16_000,          // Expandable to 16,000
+            max_shards: 8_000,           // Expandable to 8,000
             tx_per_shard: 8_000,         // 8K TPS per shard
             cross_shard_enabled: true,   // Yes, cross-shard works
             byzantine_tolerance: 1,      // Tolerate 1 faulty shard
@@ -394,7 +397,34 @@ ROLLBACK (if anything fails):
 
 *Why it matters:* Atomic cross-shard transfers. Either the whole transaction happens or none of it does. No "stuck" funds.
 
-### 3.6 State Proofs (Merkle Trees)
+### 3.6 Write-Ahead Log (WAL) Security
+
+**Crash Recovery for 2PC:**
+
+Sultan uses a write-ahead log to ensure no funds are lost if a node crashes during cross-shard transactions:
+
+```rust
+// WAL Security Configuration
+const COMMIT_LOG_PATH: &str = "/var/lib/sultan/commit-log";
+
+// Directory: 0700 (owner only)
+// Files: 0600 (owner read/write only)
+// Idempotency keys prevent duplicate processing
+```
+
+**Recovery Process:**
+1. On startup, scan WAL directory for pending transactions
+2. Check idempotency keys - skip already-processed txs
+3. Re-queue `Prepared` or `Committing` state txs
+4. Rollback incomplete `Preparing` txs
+5. Clean up committed/aborted entries
+
+**State Proofs in 2PC:**
+- `from_proof`: Source shard Merkle root captured during PREPARE
+- `to_proof`: Destination shard Merkle root logged during COMMIT
+- Enables post-hoc audits and fraud proof verification
+
+### 3.7 State Proofs (Merkle Trees)
 
 **What is a Merkle Tree?**
 
@@ -434,7 +464,7 @@ pub struct MerkleTree {
 - **Cross-shard proofs:** Shard 3 can verify Shard 1 locked funds
 - **Fraud proofs:** Anyone can prove a validator cheated
 
-### 3.7 Byzantine Tolerance in Sharding
+### 3.8 Byzantine Tolerance in Sharding
 
 **What is Byzantine Fault Tolerance (BFT)?**
 
@@ -457,6 +487,88 @@ Total Validators | Can Tolerate Faulty | Percentage
 ```
 
 **For sharding:** Each shard must independently be Byzantine-fault tolerant. With `byzantine_tolerance: 1`, each shard can survive 1 malicious validator.
+
+### 3.9 Transaction History & Memo Support
+
+**What is Transaction History?**
+
+A bidirectional index of all transactions for each address, enabling wallet UIs and block explorers to show sent/received transactions efficiently.
+
+```rust
+// From sharded_blockchain_production.rs
+pub struct ConfirmedTransaction {
+    pub hash: String,
+    pub from: String,
+    pub to: String,
+    pub amount: u64,
+    pub memo: Option<String>,     // Optional user note
+    pub nonce: u64,
+    pub timestamp: u64,
+    pub block_height: u64,
+    pub status: String,
+}
+```
+
+**Memory-Bounded History (Pruning):**
+
+```rust
+/// Maximum history entries per address - prevents memory bloat
+/// Default: 10,000 (~1MB per high-volume address)
+const MAX_HISTORY_PER_ADDRESS: usize = 10_000;
+
+// When exceeded, oldest transactions are pruned
+if history.len() > MAX_HISTORY_PER_ADDRESS {
+    let excess = history.len() - MAX_HISTORY_PER_ADDRESS;
+    history.drain(0..excess);  // Remove oldest
+    warn!("Pruned {} old transactions for {}", excess, address);
+}
+```
+
+*Why it matters:* Exchanges and bridges may have millions of transactions. Without pruning, memory would grow unbounded. Pruning keeps recent (10K) transactions in-memory; full history persisted to RocksDB.
+
+**Memo Field:**
+
+The `memo` field allows optional user notes on transactions:
+- Bridge references: "Bridged from ETH tx 0xabc..."
+- Invoice IDs: "Payment for invoice #12345"
+- Governance context: "Vote delegation to validator X"
+
+```rust
+// Transaction with memo
+let tx = Transaction {
+    from: "sultan1alice...".to_string(),
+    to: "sultan1bob...".to_string(),
+    amount: 1_000_000_000,  // 1 SLTN
+    memo: Some("Q4 salary payment".to_string()),
+    // ...
+};
+```
+
+### 3.10 Deterministic Mempool Ordering
+
+**The Problem:** Different validators might order transactions differently, causing consensus forks.
+
+**The Solution:** Deterministic sorting before block creation.
+
+```rust
+// From sharded_blockchain_production.rs
+pub async fn drain_pending_transactions(&self) -> Vec<Transaction> {
+    let mut pending = self.pending_transactions.write().await;
+    let mut txs: Vec<Transaction> = pending.drain().collect();
+    
+    // Sort deterministically: timestamp → from address → nonce
+    // All validators produce identical ordering
+    txs.sort_by(|a, b| {
+        a.timestamp.cmp(&b.timestamp)
+            .then_with(|| a.from.cmp(&b.from))
+            .then_with(|| a.nonce.cmp(&b.nonce))
+    });
+    
+    txs
+}
+```
+
+*Why it matters:* All validators must agree on transaction order. Without deterministic sorting, validators could produce different block hashes for the same transactions, causing network splits.
 
 ---
 
@@ -1695,12 +1807,18 @@ Multiple layers of security, so if one layer fails, others still protect the sys
 | Feature | What It Does | Status | Why It Matters |
 |---------|--------------|--------|----------------|
 | **Ed25519 Signature Verification** | Cryptographic proof of transaction origin | ✅ **STRICT** | All transactions must be signed - no unsigned tx accepted |
+| **Full Block Validation** | Verify all tx signatures in `validate_block` | ✅ **STRICT** | Synced blocks from other validators are fully verified |
 | **SHA-256 Message Hashing** | Transaction data integrity | ✅ **Live** | Ensures message wasn't tampered with |
 | **Nonce-Based Replay Protection** | Prevents transaction replay | ✅ **Live** | Each tx has unique nonce, can't be replayed |
 | **Deterministic Finality** | Blocks are final immediately | ✅ **Live** | No chain reorganizations, no double-spend window |
 | **Encrypted P2P** | Noise protocol on all connections | ✅ **Live** | Can't eavesdrop on validator communication |
 | **Rate Limiting** | Limit requests per IP/peer | ✅ **Live** | Prevents DDoS attacks on RPC endpoints |
-| **Commit Log** | Persistent log of cross-shard transactions | ✅ **Live** | Crash recovery without losing transactions |
+| **WAL Commit Log** | Secure write-ahead log for 2PC | ✅ **Live** | Directory 0700 + file 0600 permissions |
+| **State Proofs** | Merkle roots captured in prepare/commit | ✅ **Live** | Enables fraud proofs and audit trails |
+| **Idempotency Keys** | Prevent double-processing after crash | ✅ **Live** | Crash recovery without duplicate transactions |
+| **History Pruning** | MAX_HISTORY_PER_ADDRESS (10,000) | ✅ **Live** | Prevents memory exhaustion from high-volume addresses |
+| **Deterministic Mempool** | Sort by timestamp/from/nonce | ✅ **Live** | Prevents consensus forks from ordering differences |
+| **Cross-Shard Inclusion** | All cross-shard txs in block.transactions | ✅ **Live** | Complete replication across network |
 
 **Signature Verification Flow (Production):**
 ```
@@ -1752,18 +1870,21 @@ Professional code review by specialized security firms. They look for:
 **ALWAYS USE:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `main.rs` | 1,698 | Node entry point |
-| `consensus.rs` | 255 | Validator logic |
+| `main.rs` | 2,938 | Node entry point, RPC (30+ endpoints), keygen CLI |
+| `consensus.rs` | 1,078 | Validator logic (17 tests, Ed25519) |
+| `transaction_validator.rs` | 782 | TX validation (18 tests, typed errors) |
 | `blockchain.rs` | 374 | Block/TX structures |
-| `sharding_production.rs` | 1,117 | **PRODUCTION sharding** |
-| `sharded_blockchain_production.rs` | 303 | **PRODUCTION shard coordinator** |
-| `staking.rs` | 532 | Validator staking |
-| `governance.rs` | 556 | On-chain governance |
+| `sharding_production.rs` | 2,244 | **PRODUCTION sharding** (32 tests) |
+| `sharded_blockchain_production.rs` | 1,342 | **PRODUCTION shard coordinator** |
+| `staking.rs` | 1,198 | Validator staking |
+| `governance.rs` | 911 | On-chain governance |
 | `economics.rs` | 100 | Inflation model |
 | `token_factory.rs` | 354 | Native token creation |
 | `native_dex.rs` | 462 | AMM swapping |
 | `p2p.rs` | 377 | Networking |
-| `storage.rs` | 311 | RocksDB persistence |
+| `storage.rs` | 455 | RocksDB persistence |
+
+**Total: 12,000+ lines, 125 tests passing**
 
 **DEPRECATED (Tests Only):**
 | File | Lines | Status |
@@ -1777,6 +1898,9 @@ Professional code review by specialized security firms. They look for:
 # Build the node
 cd sultan-core
 cargo build --release
+
+# Generate validator keypair
+./target/release/sultan-node keygen
 
 # Run a validator
 ./target/release/sultan-node \

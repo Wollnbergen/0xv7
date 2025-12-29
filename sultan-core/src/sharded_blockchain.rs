@@ -5,11 +5,10 @@
 //!
 //! Combines traditional blockchain with sharding for 1M+ TPS capability.
 
-use crate::blockchain::{Block, Transaction, Account};
+use crate::blockchain::{Block, Transaction};
 use crate::sharding::{ShardingCoordinator, ShardConfig, ShardStats};
 use anyhow::Result;
-use tracing::{info, debug};
-use std::collections::HashMap;
+use tracing::info;
 use std::sync::{Arc, RwLock};
 
 /// Blockchain with integrated sharding support
@@ -161,6 +160,8 @@ mod tests {
                 timestamp: i,
                 nonce: i as u64,
                 signature: None,
+                public_key: None,
+                memo: None,
             });
         }
         

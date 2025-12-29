@@ -14,7 +14,7 @@ use libp2p::{
     kad::{self, store::MemoryStore},
     noise, yamux,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, Multiaddr, PeerId, Swarm, StreamProtocol,
+    tcp, Multiaddr, PeerId, Swarm,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -22,7 +22,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, debug};
 
 /// Topics for gossipsub messaging
 pub const BLOCK_TOPIC: &str = "sultan/blocks/1.0.0";

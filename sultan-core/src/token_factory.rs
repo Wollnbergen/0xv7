@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Token metadata stored on-chain
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,8 +122,10 @@ impl TokenFactory {
         tokens.insert(denom.clone(), metadata.clone());
         drop(tokens);
         
-        // Mint initial supply to creator
-        self.mint_to(& denom, creator, total_supply).await?;
+        // Set initial supply directly (not via mint_to which requires minting_enabled)
+        let mut balances = self.balances.write().await;
+        let key = (denom.clone(), creator.to_string());
+        balances.insert(key, total_supply);
         
         info!("✅ Token created: {} ({}) - {} supply minted to {}", 
             metadata.name, denom, total_supply, creator);

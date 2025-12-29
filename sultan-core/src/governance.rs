@@ -30,6 +30,7 @@ const PASS_THRESHOLD: f64 = 0.50; // 50% of votes must be YES
 // Security constants
 const MAX_ACTIVE_PROPOSALS_PER_ADDRESS: usize = 3; // Rate limit proposals
 const PROPOSAL_COOLDOWN_BLOCKS: u64 = 43_200; // ~1 day between proposals from same address (24*60*60/2)
+#[allow(dead_code)]
 const VETO_THRESHOLD: f64 = 0.334; // >33.4% NoWithVeto = proposal fails & deposit burned
 
 // Multi-sig requirements for critical proposals

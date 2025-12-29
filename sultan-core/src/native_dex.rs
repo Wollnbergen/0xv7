@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::token_factory::TokenFactory;
 
@@ -411,7 +411,7 @@ mod tests {
         let token_factory = Arc::new(TokenFactory::new());
         let dex = NativeDex::new(token_factory.clone());
         
-        // Setup tokens and pool
+        // Setup tokens - alice creates both tokens so she can create the pool
         let token_a = token_factory.create_token(
             "sultan1alice",
             "Token A".to_string(),
@@ -424,7 +424,7 @@ mod tests {
         ).await.unwrap();
         
         let token_b = token_factory.create_token(
-            "sultan1bob",
+            "sultan1alice",
             "Token B".to_string(),
             "TKNB".to_string(),
             6,
@@ -454,8 +454,13 @@ mod tests {
             0, // No slippage protection for test
         ).await.unwrap();
         
-        // Verify swap executed (should get ~997 token_b minus fees)
-        assert!(amount_out > 990);
-        assert!(amount_out < 1000);
+        // The constant product formula with 0.3% fee:
+        // amount_out = (reserve_out * amount_in_after_fee) / (reserve_in + amount_in_after_fee)
+        // fee = 1000 * 30 / 10000 = 3
+        // amount_in_after_fee = 1000 - 3 = 997
+        // amount_out = (100000 * 997) / (100000 + 997) = 99700000 / 100997 = 986
+        // So we should expect ~986, not 990+
+        assert!(amount_out > 980, "amount_out should be > 980, got {}", amount_out);
+        assert!(amount_out < 1000, "amount_out should be < 1000, got {}", amount_out);
     }
 }

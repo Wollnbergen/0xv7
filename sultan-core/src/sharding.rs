@@ -16,16 +16,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use anyhow::{Result, bail, Context};
-use tracing::{info, warn, debug, error};
+use anyhow::Result;
+use tracing::{info, warn, debug};
 use sha2::{Sha256, Digest};
-use sha3::Keccak256;
-use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use ed25519_dalek::{Signer, Verifier, Signature, SecretKey, SigningKey, VerifyingKey};
-use std::time::{Duration, Instant};
 
-use crate::blockchain::{Transaction, Block, Account};
+use crate::blockchain::{Transaction, Account};
 
 /// Configuration for sharding system
 #[derive(Debug, Clone)]
@@ -349,6 +345,8 @@ mod tests {
                 timestamp: i,
                 nonce: i as u64,
                 signature: None,
+                public_key: None,
+                memo: None,
             });
         }
         

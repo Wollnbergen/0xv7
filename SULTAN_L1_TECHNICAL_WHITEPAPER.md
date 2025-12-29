@@ -2,8 +2,8 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.2  
-**Date:** December 27, 2025  
+**Version:** 3.3  
+**Date:** December 29, 2025  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
 
@@ -315,11 +315,11 @@ Sultan partitions blockchain state across multiple shards, each capable of proce
 | Parameter | Value |
 |-----------|-------|
 | Active Shards | 16 |
-| Maximum Shards | 16,000 |
+| Maximum Shards | 8,000 |
 | TX per Block/Shard | 8,000 |
 | TPS per Shard | 4,000 |
 | Base Capacity | 64,000 TPS |
-| Maximum Capacity | 64,000,000 TPS |
+| Maximum Capacity | 32,000,000 TPS |
 
 ### 4.2 Shard Assignment
 
@@ -357,6 +357,7 @@ PHASE 1: PREPARE
 ├── Shard A: Lock sender account, deduct balance
 ├── Shard B: Lock recipient account (reserve slot)
 ├── Validation: Sufficient balance, valid nonce
+├── Capture: State proof (Merkle root) for audit trail
 └── Response: PREPARE_OK or ABORT
 
 PHASE 2: COMMIT  
@@ -364,6 +365,7 @@ PHASE 2: COMMIT
 ├── Any ABORT: ROLLBACK all locks
 ├── Shard A: Finalize deduction
 ├── Shard B: Credit recipient
+├── Capture: Destination state proof for verification
 └── Both: Release locks, log completion
 ```
 
@@ -371,6 +373,13 @@ PHASE 2: COMMIT
 - Cross-shard transfers never lose funds
 - Either both sides commit or both rollback
 - Coordinator failure: timeout triggers rollback
+- Write-ahead log (WAL) enables crash recovery
+
+**Write-Ahead Log (WAL) Security:**
+- Directory permissions: 0700 (owner only)
+- File permissions: 0600 (owner read/write only)
+- Idempotency keys prevent double-processing after crash
+- Prepared transactions re-queued on recovery
 
 ### 4.5 Shard Expansion
 
@@ -389,6 +398,54 @@ Sultan can dynamically expand shards based on network demand:
 5. Rebalance transaction routing
 
 **Migration Timeline:** 2-4 hours for doubling (e.g., 8 → 16 shards)
+
+### 4.6 Transaction History & Mempool
+
+**Memory-Bounded History:**
+
+Each address maintains up to 10,000 recent transactions in memory for fast RPC queries:
+
+```rust
+const MAX_HISTORY_PER_ADDRESS: usize = 10_000;
+
+// Bidirectional indexing (sent + received)
+pub struct ConfirmedTransaction {
+    pub hash: String,
+    pub from: String,
+    pub to: String,
+    pub amount: u64,
+    pub memo: Option<String>,  // Optional user note
+    pub block_height: u64,
+    pub status: String,
+}
+```
+
+**Deterministic Mempool Ordering:**
+
+All validators use identical transaction ordering to prevent consensus forks:
+
+```rust
+// Sort by: timestamp → from address → nonce
+txs.sort_by(|a, b| {
+    a.timestamp.cmp(&b.timestamp)
+        .then_with(|| a.from.cmp(&b.from))
+        .then_with(|| a.nonce.cmp(&b.nonce))
+});
+```
+
+**Memo Field:**
+
+Transactions support optional memos for user notes, invoice references, or bridge metadata:
+
+```rust
+let tx = Transaction {
+    from: "sultan1alice...".to_string(),
+    to: "sultan1bob...".to_string(),
+    amount: 1_000_000_000,
+    memo: Some("Invoice #12345".to_string()),
+    // ...
+};
+```
 
 ---
 
@@ -528,11 +585,14 @@ Example: sultan1qpzry9x8gf2tvdw0s3jn54khce6mua7l8qn5t2
 | Threat | Mitigation | Status |
 |--------|------------|--------|
 | Unauthorized transactions | Ed25519 signature verification (STRICT) | ✅ Live |
+| Invalid blocks from sync | Full Ed25519 verify in validate_block | ✅ Live |
 | 51% attacks | Economic stake at risk (slashing) | ✅ Live |
 | Double-spending | Immediate finality | ✅ Live |
 | Replay attacks | Nonce-based replay protection | ✅ Live |
 | Sybil attacks | Stake-weighted consensus | ✅ Live |
 | Long-range attacks | Periodic checkpoints | ✅ Live |
+| Memory exhaustion | MAX_HISTORY_PER_ADDRESS (10K) pruning | ✅ Live |
+| Consensus forks | Deterministic mempool ordering | ✅ Live |
 | DDoS | Rate limiting, stake requirements | ✅ Live |
 | MEV attacks | Encrypted mempool | 🔜 Planned |
 | Quantum attacks | Dilithium3 signatures | 🔜 Planned |
@@ -863,9 +923,15 @@ Official non-custodial wallet with enterprise-grade security:
 - [x] Mainnet launch (December 25, 2025)
 - [x] 16-shard production deployment
 - [x] 6 global validators operational
-- [x] Core RPC endpoints
+- [x] Core RPC endpoints (30+ endpoints)
 - [x] P2P networking (libp2p)
 - [x] SLTN wallet (security-hardened)
+- [x] Enterprise code review Phase 1 & 2 (10/10 rating achieved)
+  - consensus.rs: 1,078 lines, 17 tests, Ed25519 validator keys
+  - transaction_validator.rs: 782 lines, 18 tests, typed errors
+  - main.rs: 2,938 lines, keygen CLI, TLS support, CORS security
+  - sharding_production.rs: 2,244 lines, 32 tests, 2PC/WAL
+- [x] 125 passing unit tests
 
 ### Q1 2026 🔄 In Progress
 - [ ] Block explorer launch
@@ -874,6 +940,7 @@ Official non-custodial wallet with enterprise-grade security:
 - [ ] Community governance activation
 - [ ] Security audit (CertiK)
 - [ ] 64-shard expansion
+- [ ] Code review Phase 3-5 (storage, governance, bridges)
 
 ### Q2 2026 📋 Planned
 - [ ] Smart contract support (WASM)
@@ -939,9 +1006,9 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 | Finality | Immediate (1 block) |
 | Block Creation | 50-105µs |
 | Active Shards | 16 |
-| Maximum Shards | 16,000 |
+| Maximum Shards | 8,000 |
 | Base TPS | 64,000 |
-| Maximum TPS | 64,000,000 |
+| Maximum TPS | 32,000,000 |
 | Consensus | Custom PoS with height-based leader election |
 | Minimum Validator Stake | 10,000 SLTN |
 | Genesis Supply | 500,000,000 SLTN |

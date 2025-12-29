@@ -37,6 +37,9 @@ pub struct Transaction {
     /// Public key for signature verification (hex-encoded ed25519 key)
     #[serde(default)]
     pub public_key: Option<String>,
+    /// Optional memo for bridges, governance, or user notes
+    #[serde(default)]
+    pub memo: Option<String>,
 }
 
 /// Account state in the blockchain
@@ -172,7 +175,8 @@ impl Blockchain {
             self.transaction_pool.remove(&tx_hash);
         }
         
-        // Note: Block is NOT added to chain here - caller must validate and add
+        // Add block to chain
+        self.chain.push(block.clone());
         
         info!(
             "Block {} created by {} with {} transactions",
@@ -370,6 +374,7 @@ impl Transaction {
             nonce,
             signature: None,
             public_key: None,
+            memo: None,
         }
     }
 

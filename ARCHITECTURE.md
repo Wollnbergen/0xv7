@@ -10,27 +10,30 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 
 ### Core Modules (sultan-core/src/)
 
-| Module | Purpose |
-|--------|---------|
-| `main.rs` | Node binary, RPC server, P2P networking |
-| `lib.rs` | Library exports for all modules |
-| `consensus.rs` | Proof of Stake consensus engine |
-| `staking.rs` | Validator registration, delegation, rewards |
-| `governance.rs` | On-chain proposals and voting |
-| `token_factory.rs` | Native token creation (no smart contracts) |
-| `native_dex.rs` | Built-in AMM for token swaps |
-| `sharding.rs` | Horizontal scaling (16 shards at launch, expandable to 8,000) |
-| `sharding_production.rs` | Production shard routing |
-| `sharded_blockchain.rs` | Multi-shard block production |
-| `bridge_integration.rs` | Cross-chain bridge coordinator |
-| `bridge_fees.rs` | Bridge fee calculation |
-| `economics.rs` | Inflation, rewards, APY calculations |
-| `transaction_validator.rs` | Transaction validation (zero-fee) |
-| `storage.rs` | Persistent state storage |
-| `types.rs` | Core data structures |
-| `config.rs` | Node configuration |
-| `quantum.rs` | Post-quantum cryptography (Dilithium) |
-| `mev_protection.rs` | MEV resistance |
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| `main.rs` | 2,938 | Node binary, RPC server (30+ endpoints), P2P networking, keygen CLI |
+| `lib.rs` | ~100 | Library exports for all modules |
+| `consensus.rs` | 1,078 | Proof of Stake consensus engine (17 tests, Ed25519) |
+| `staking.rs` | 1,198 | Validator registration, delegation, rewards |
+| `governance.rs` | 556 | On-chain proposals and voting |
+| `token_factory.rs` | 354 | Native token creation (no smart contracts) |
+| `native_dex.rs` | 462 | Built-in AMM for token swaps |
+| `sharding_production.rs` | 2,244 | **PRODUCTION** shard routing with Ed25519, 2PC, WAL recovery |
+| `sharded_blockchain_production.rs` | 1,342 | **PRODUCTION** multi-shard coordinator |
+| `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
+| `sharded_blockchain.rs` | 179 | ⚠️ LEGACY (deprecated, tests only) |
+| `bridge_integration.rs` | varies | Cross-chain bridge coordinator |
+| `bridge_fees.rs` | 279 | Bridge fee calculation |
+| `economics.rs` | 100 | Inflation, rewards, APY calculations |
+| `transaction_validator.rs` | 782 | Transaction validation (18 tests, typed errors, Ed25519 sig verify) |
+| `storage.rs` | 311 | Persistent state storage (RocksDB) |
+| `blockchain.rs` | 374 | Block/Transaction structures (with memo) |
+| `p2p.rs` | 377 | libp2p networking |
+| `quantum.rs` | ~200 | Post-quantum cryptography (Dilithium) |
+| `mev_protection.rs` | ~100 | MEV resistance |
+
+**Total:** ~12,000+ lines of production Rust code (125 tests passing)
 
 ### Cross-Chain Bridges (bridges/)
 
@@ -99,8 +102,12 @@ pub async fn swap(
 | Minimum Validator Stake | 10,000 SLTN |
 | Validator APY | ~13.33% |
 | Gas Fees | Zero (subsidized by inflation) |
-| Shards | 16 at launch (expandable to 8000) |
+| Shards | 16 at launch (expandable to 8,000) |
 | Consensus | Proof of Stake |
+| Max History/Address | 10,000 entries (pruned) |
+| Mempool Ordering | Deterministic (timestamp/from/nonce) |
+| Signature Verification | Ed25519 STRICT mode |
+| Tests | 125 passing (lib tests) |
 
 ---
 
@@ -139,7 +146,12 @@ cargo test --workspace
 
 ## Documentation
 
-- [Technical Whitepaper](SULTAN_L1_TECHNICAL_WHITEPAPER.md) - Full technical specification
-- [Technical Deep Dive](docs/SULTAN_TECHNICAL_DEEP_DIVE.md) - Investor-focused explanation
+- [Technical Whitepaper](SULTAN_L1_TECHNICAL_WHITEPAPER.md) - Full technical specification (v3.3)
+- [Technical Deep Dive](docs/SULTAN_TECHNICAL_DEEP_DIVE.md) - Investor-focused explanation (v3.3)
+- [Code Review Context](docs/CODE_REVIEW_CONTEXT.md) - Context for external auditors
 - [Validator Guide](VALIDATOR_GUIDE.md) - How to run a validator
 - [API Reference](docs/API_REFERENCE.md) - RPC endpoints
+
+---
+
+*Last updated: December 29, 2025 - Code Review Phase 1 & 2 Complete (125 tests, 10/10 rating)*

@@ -440,7 +440,7 @@ export class SultanWallet {
 // ============================================================================
 
 /**
- * Format base units to display units (9 decimals)
+ * Format base units to display units (9 decimals) with comma separators
  */
 export function formatSLTN(baseUnits: bigint | string | number): string {
   const value = BigInt(baseUnits);
@@ -448,13 +448,16 @@ export function formatSLTN(baseUnits: bigint | string | number): string {
   const intPart = value / divisor;
   const fracPart = value % divisor;
   
+  // Add comma separators to integer part
+  const intStr = intPart.toLocaleString('en-US');
+  
   if (fracPart === 0n) {
-    return intPart.toString();
+    return intStr;
   }
   
   const fracStr = fracPart.toString().padStart(SULTAN_DECIMALS, '0');
   const trimmed = fracStr.replace(/0+$/, '');
-  return `${intPart}.${trimmed}`;
+  return `${intStr}.${trimmed}`;
 }
 
 /**
