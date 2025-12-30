@@ -1314,4 +1314,179 @@ mod tests {
         assert!((stats.quorum - MIN_QUORUM).abs() < 0.001);
         assert!((stats.pass_threshold - PASS_THRESHOLD).abs() < 0.001);
     }
+    
+    #[tokio::test]
+    async fn test_upgrade_multisig_threshold() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Submit upgrade proposal
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Software Upgrade v2.0".to_string(),
+            "Major protocol upgrade requiring validator consensus".to_string(),
+            ProposalType::SoftwareUpgrade,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/upgrade".to_string()),
+            None,
+        ).await.unwrap();
+        
+        // Advance to voting period
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        // Vote to pass
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        // End voting and tally
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 1).await;
+        let tally = gov.tally_proposal(proposal_id).await.unwrap();
+        assert!(tally.passed);
+        
+        // Sign with validators (need 5 for threshold)
+        for i in 0..4 {
+            let addr = format!("sultan1sgn{}qqqqqqqqqqqqqqqqqqqqqqqqqqqqqsgn{:02}", i, i);
+            let sig_count = gov.sign_upgrade_proposal(
+                proposal_id, 
+                addr, 
+                format!("signature_{}", i)
+            ).await.unwrap();
+            assert_eq!(sig_count, i + 1);
+            
+            // Not yet executed (need 5)
+            let proposal = gov.get_proposal(proposal_id).await.unwrap();
+            assert_eq!(proposal.status, ProposalStatus::Passed);
+        }
+        
+        // 5th signature triggers execution
+        let sig_count = gov.sign_upgrade_proposal(
+            proposal_id,
+            "sultan1sgn5qqqqqqqqqqqqqqqqqqqqqqqqqqqqqsgn05".to_string(),
+            "signature_5".to_string(),
+        ).await.unwrap();
+        assert_eq!(sig_count, 5);
+        
+        // Now should be executed
+        let proposal = gov.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Executed);
+    }
+    
+    #[tokio::test]
+    async fn test_snapshot_prevents_flash_stake() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Create snapshot at height 0 with only VOTER1 having stake
+        let mut snapshot = HashMap::new();
+        snapshot.insert(VOTER1.to_string(), 5_000_000_000_000u64);
+        // VOTER2 not in snapshot (simulates staking after proposal)
+        gov.update_staking_snapshot(0, snapshot).await;
+        
+        // Submit proposal (captures snapshot at height 0)
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Anti-Flash Test".to_string(),
+            "Testing flash stake prevention".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/test".to_string()),
+            None,
+        ).await.unwrap();
+        
+        // Advance to voting period
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        // VOTER1 can vote (was in snapshot)
+        let result1 = gov.vote(
+            proposal_id, 
+            VOTER1.to_string(), 
+            VoteOption::Yes, 
+            5_000_000_000_000
+        ).await;
+        assert!(result1.is_ok());
+        
+        // VOTER2 cannot vote (not in snapshot - flash staker)
+        let result2 = gov.vote(
+            proposal_id, 
+            VOTER2.to_string(), 
+            VoteOption::Yes, 
+            5_000_000_000_000
+        ).await;
+        assert!(result2.is_err());
+        assert!(result2.unwrap_err().to_string().contains("Flash staking"));
+    }
+    
+    #[tokio::test]
+    async fn test_voting_power_capped_to_snapshot() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Snapshot: VOTER1 had 2T when proposal started
+        let mut snapshot = HashMap::new();
+        snapshot.insert(VOTER1.to_string(), 2_000_000_000_000u64);
+        gov.update_staking_snapshot(0, snapshot).await;
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Power Cap Test".to_string(),
+            "Testing voting power is capped to snapshot".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/test".to_string()),
+            None,
+        ).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        // Try to vote with 5T (more than snapshot)
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        // Check actual voting power was capped to snapshot (2T)
+        let votes = gov.get_proposal_votes(proposal_id).await;
+        assert_eq!(votes.len(), 1);
+        assert_eq!(votes[0].voting_power, 2_000_000_000_000); // Capped to snapshot
+    }
+    
+    #[tokio::test]
+    async fn test_execute_param_change() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Submit valid parameter change
+        let mut params = HashMap::new();
+        params.insert("inflation_rate".to_string(), "0.05".to_string()); // Valid 5%
+        params.insert("unbonding_days".to_string(), "14".to_string()); // Valid 14 days
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Update Parameters".to_string(),
+            "Adjust inflation and unbonding".to_string(),
+            ProposalType::ParameterChange,
+            PROPOSAL_DEPOSIT,
+            Some(params),
+            Some("https://t.me/SultanChain/params".to_string()),
+            None,
+        ).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 1).await;
+        let tally = gov.tally_proposal(proposal_id).await.unwrap();
+        assert!(tally.passed);
+        
+        // Execute
+        let result = gov.execute_proposal(proposal_id).await;
+        assert!(result.is_ok());
+        
+        let proposal = gov.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Executed);
+    }
 }

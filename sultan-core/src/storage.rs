@@ -2,7 +2,7 @@
 //!
 //! Features:
 //! - Block storage with height indexing
-//! - Wallet balance persistence
+//! - Wallet balance persistence (with optional encryption)
 //! - Transaction history with address indexing
 //! - Staking state snapshots
 //! - Governance state persistence
@@ -14,6 +14,7 @@
 //! - Prefixed keys prevent collisions
 //! - Atomic batch writes for consistency
 //! - Append-only slashing log for audit
+//! - Optional encryption for sensitive data (wallets)
 
 use anyhow::{Result, Context};
 use rocksdb::{DB, Options, WriteBatch, IteratorMode};
@@ -39,19 +40,60 @@ const PREFIX_GOV_PROPOSAL: &str = "gov:proposal:";
 const PREFIX_GOV_VOTES: &str = "gov:votes:";
 const PREFIX_GOV_STATE: &str = "gov:state";
 
+/// Simple XOR encryption for sensitive data (placeholder for production AES-GCM)
+/// In production, use a proper encryption library like aes-gcm-siv
+#[derive(Clone)]
+pub struct StorageEncryption {
+    key: Vec<u8>,
+}
+
+impl StorageEncryption {
+    /// Create new encryption with a 32-byte key
+    /// In production, derive from a secure key management system
+    pub fn new(key: &[u8]) -> Self {
+        // Extend key to 32 bytes using simple key derivation
+        let mut extended = vec![0u8; 32];
+        for (i, &b) in key.iter().enumerate() {
+            extended[i % 32] ^= b;
+        }
+        Self { key: extended }
+    }
+    
+    /// Encrypt data using XOR (placeholder - use AES-GCM in production)
+    pub fn encrypt(&self, data: &[u8]) -> Vec<u8> {
+        data.iter()
+            .enumerate()
+            .map(|(i, &b)| b ^ self.key[i % self.key.len()])
+            .collect()
+    }
+    
+    /// Decrypt data (XOR is symmetric)
+    pub fn decrypt(&self, data: &[u8]) -> Vec<u8> {
+        self.encrypt(data) // XOR is its own inverse
+    }
+}
+
 /// Production-grade persistent storage using RocksDB
 /// 
 /// Thread-safe storage backend with LRU caching and auto-compaction.
+/// Supports optional encryption for sensitive data.
 pub struct PersistentStorage {
     db: Arc<DB>,
     block_cache: parking_lot::Mutex<LruCache<String, Block>>,
     /// Track last compaction height for auto-compaction scheduling
     last_compaction_height: AtomicU64,
+    /// Optional encryption for sensitive data
+    encryption: Option<StorageEncryption>,
 }
 
 impl PersistentStorage {
-    /// Create new persistent storage instance
+    /// Create new persistent storage instance (unencrypted)
     pub fn new(path: &str) -> Result<Self> {
+        Self::with_encryption(path, None)
+    }
+    
+    /// Create new persistent storage instance with optional encryption
+    pub fn with_encryption(path: &str, encryption_key: Option<&[u8]>) -> Result<Self> {
         info!("Initializing RocksDB at: {}", path);
         
         let mut opts = Options::default();
@@ -64,13 +106,25 @@ impl PersistentStorage {
         
         let db = DB::open(&opts, path)?;
         
-        info!("✅ RocksDB initialized successfully");
+        let encryption = encryption_key.map(StorageEncryption::new);
+        
+        if encryption.is_some() {
+            info!("✅ RocksDB initialized with encryption enabled");
+        } else {
+            info!("✅ RocksDB initialized successfully");
+        }
         
         Ok(Self {
             db: Arc::new(db),
             block_cache: parking_lot::Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap())),
             last_compaction_height: AtomicU64::new(0),
+            encryption,
         })
+    }
+    
+    /// Check if encryption is enabled
+    pub fn is_encrypted(&self) -> bool {
+        self.encryption.is_some()
     }
     
     /// Save block to persistent storage
@@ -164,19 +218,35 @@ impl PersistentStorage {
         Ok(None)
     }
     
-    /// Save wallet balance
+    /// Save wallet balance (encrypted if encryption is enabled)
     pub fn save_wallet(&self, address: &str, balance: i64) -> Result<()> {
         let key = format!("{}{}", PREFIX_WALLET, address);
-        self.db.put(key.as_bytes(), balance.to_le_bytes())?;
+        let balance_bytes = balance.to_le_bytes();
+        
+        // Encrypt balance if encryption is enabled
+        let value = if let Some(ref enc) = self.encryption {
+            enc.encrypt(&balance_bytes)
+        } else {
+            balance_bytes.to_vec()
+        };
+        
+        self.db.put(key.as_bytes(), value)?;
         Ok(())
     }
     
-    /// Get wallet balance
+    /// Get wallet balance (decrypted if encryption is enabled)
     pub fn get_wallet(&self, address: &str) -> Result<Option<i64>> {
         let key = format!("{}{}", PREFIX_WALLET, address);
         
         if let Some(data) = self.db.get(key.as_bytes())? {
-            let bytes: [u8; 8] = data.as_slice().try_into()
+            // Decrypt if encryption is enabled
+            let decrypted = if let Some(ref enc) = self.encryption {
+                enc.decrypt(&data)
+            } else {
+                data.to_vec()
+            };
+            
+            let bytes: [u8; 8] = decrypted.as_slice().try_into()
                 .context("Invalid wallet balance data")?;
             let balance = i64::from_le_bytes(bytes);
             return Ok(Some(balance));
@@ -185,13 +255,22 @@ impl PersistentStorage {
         Ok(None)
     }
     
-    /// Batch update wallets (atomic operation)
+    /// Batch update wallets (atomic operation, encrypted if enabled)
     pub fn batch_update_wallets(&self, updates: Vec<(String, i64)>) -> Result<()> {
         let mut batch = WriteBatch::default();
         
         for (address, balance) in updates {
             let key = format!("{}{}", PREFIX_WALLET, address);
-            batch.put(key.as_bytes(), balance.to_le_bytes());
+            let balance_bytes = balance.to_le_bytes();
+            
+            // Encrypt balance if encryption is enabled
+            let value = if let Some(ref enc) = self.encryption {
+                enc.encrypt(&balance_bytes)
+            } else {
+                balance_bytes.to_vec()
+            };
+            
+            batch.put(key.as_bytes(), value);
         }
         
         self.db.write(batch)?;
@@ -522,6 +601,7 @@ impl Clone for PersistentStorage {
             db: Arc::clone(&self.db),
             block_cache: parking_lot::Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap())),
             last_compaction_height: AtomicU64::new(self.last_compaction_height.load(Ordering::Relaxed)),
+            encryption: self.encryption.clone(),
         }
     }
 }
@@ -763,5 +843,48 @@ mod tests {
         
         // Data should still be accessible
         assert_eq!(storage.get_wallet("test").unwrap().unwrap(), 1000);
+    }
+    
+    #[test]
+    fn test_encrypted_wallet_storage() {
+        let dir = tempdir().unwrap();
+        let encryption_key = b"super_secret_key_for_testing_123";
+        let storage = PersistentStorage::with_encryption(
+            dir.path().to_str().unwrap(), 
+            Some(encryption_key)
+        ).unwrap();
+        
+        assert!(storage.is_encrypted());
+        
+        // Save encrypted wallet
+        storage.save_wallet("encrypted_addr", 999_999_999).unwrap();
+        
+        // Retrieve and verify decryption works
+        let balance = storage.get_wallet("encrypted_addr").unwrap().unwrap();
+        assert_eq!(balance, 999_999_999);
+        
+        // Batch update with encryption
+        storage.batch_update_wallets(vec![
+            ("enc1".to_string(), 100),
+            ("enc2".to_string(), 200),
+        ]).unwrap();
+        
+        assert_eq!(storage.get_wallet("enc1").unwrap().unwrap(), 100);
+        assert_eq!(storage.get_wallet("enc2").unwrap().unwrap(), 200);
+    }
+    
+    #[test]
+    fn test_encryption_helper() {
+        let enc = StorageEncryption::new(b"test_key");
+        
+        let original = b"sensitive data 12345";
+        let encrypted = enc.encrypt(original);
+        
+        // Encrypted should differ from original
+        assert_ne!(encrypted, original.to_vec());
+        
+        // Decryption should restore original
+        let decrypted = enc.decrypt(&encrypted);
+        assert_eq!(decrypted, original.to_vec());
     }
 }
