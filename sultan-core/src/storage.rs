@@ -1,16 +1,52 @@
-use anyhow::Result;
+//! Production-grade Persistent Storage using RocksDB
+//!
+//! Features:
+//! - Block storage with height indexing
+//! - Wallet balance persistence
+//! - Transaction history with address indexing
+//! - Staking state snapshots
+//! - Governance state persistence
+//! - Slashing event audit log
+//! - LRU cache for hot blocks (1000 entries)
+//! - Auto-compaction scheduling
+//!
+//! Security:
+//! - Prefixed keys prevent collisions
+//! - Atomic batch writes for consistency
+//! - Append-only slashing log for audit
+
+use anyhow::{Result, Context};
 use rocksdb::{DB, Options, WriteBatch, IteratorMode};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, warn};
 use lru::LruCache;
 use std::num::NonZeroUsize;
 
 use crate::blockchain::Block;
 
+/// Compact database every N blocks
+const AUTO_COMPACT_INTERVAL_BLOCKS: u64 = 10_000;
+
+/// Key prefixes for different data types (prevent collisions)
+const PREFIX_BLOCK: &str = "block:";
+const PREFIX_HEIGHT: &str = "height:";
+const PREFIX_WALLET: &str = "wallet:";
+const PREFIX_TX: &str = "tx:";
+const PREFIX_TX_INDEX: &str = "txindex:";
+const PREFIX_SLASH: &str = "slash:";
+const PREFIX_GOV_PROPOSAL: &str = "gov:proposal:";
+const PREFIX_GOV_VOTES: &str = "gov:votes:";
+const PREFIX_GOV_STATE: &str = "gov:state";
+
 /// Production-grade persistent storage using RocksDB
+/// 
+/// Thread-safe storage backend with LRU caching and auto-compaction.
 pub struct PersistentStorage {
     db: Arc<DB>,
     block_cache: parking_lot::Mutex<LruCache<String, Block>>,
+    /// Track last compaction height for auto-compaction scheduling
+    last_compaction_height: AtomicU64,
 }
 
 impl PersistentStorage {
@@ -33,19 +69,22 @@ impl PersistentStorage {
         Ok(Self {
             db: Arc::new(db),
             block_cache: parking_lot::Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap())),
+            last_compaction_height: AtomicU64::new(0),
         })
     }
     
     /// Save block to persistent storage
+    /// 
+    /// Also triggers auto-compaction every AUTO_COMPACT_INTERVAL_BLOCKS.
     pub fn save_block(&self, block: &Block) -> Result<()> {
-        let key = format!("block:{}", block.hash);
+        let key = format!("{}{}", PREFIX_BLOCK, block.hash);
         let value = bincode::serialize(block)?;
         
         // Save block data
         self.db.put(key.as_bytes(), value)?;
         
         // Update height index for fast lookup
-        let height_key = format!("height:{}", block.index);
+        let height_key = format!("{}{}", PREFIX_HEIGHT, block.index);
         self.db.put(height_key.as_bytes(), block.hash.as_bytes())?;
         
         // Update latest block pointer
@@ -54,7 +93,30 @@ impl PersistentStorage {
         // Cache the block
         self.block_cache.lock().put(block.hash.clone(), block.clone());
         
+        // Auto-compaction check
+        self.maybe_auto_compact(block.index);
+        
         Ok(())
+    }
+    
+    /// Check if auto-compaction should run based on block height
+    fn maybe_auto_compact(&self, current_height: u64) {
+        let last_compaction = self.last_compaction_height.load(Ordering::Relaxed);
+        if current_height >= last_compaction + AUTO_COMPACT_INTERVAL_BLOCKS {
+            // Try to update atomically - only one thread should compact
+            if self.last_compaction_height
+                .compare_exchange(last_compaction, current_height, Ordering::SeqCst, Ordering::Relaxed)
+                .is_ok()
+            {
+                info!("🗂️ Auto-compaction triggered at height {}", current_height);
+                // Run compaction in background (non-blocking)
+                let db = Arc::clone(&self.db);
+                std::thread::spawn(move || {
+                    db.compact_range::<&[u8], &[u8]>(None, None);
+                    info!("✅ Auto-compaction complete");
+                });
+            }
+        }
     }
     
     /// Get block by hash (checks cache first)
@@ -65,9 +127,10 @@ impl PersistentStorage {
         }
         
         // Query database
-        let key = format!("block:{}", hash);
+        let key = format!("{}{}", PREFIX_BLOCK, hash);
         if let Some(data) = self.db.get(key.as_bytes())? {
-            let block: Block = bincode::deserialize(&data)?;
+            let block: Block = bincode::deserialize(&data)
+                .context("Failed to deserialize block")?;
             
             // Cache for next time
             self.block_cache.lock().put(hash.to_string(), block.clone());
@@ -80,10 +143,11 @@ impl PersistentStorage {
     
     /// Get block by height
     pub fn get_block_by_height(&self, height: u64) -> Result<Option<Block>> {
-        let height_key = format!("height:{}", height);
+        let height_key = format!("{}{}", PREFIX_HEIGHT, height);
         
         if let Some(hash_bytes) = self.db.get(height_key.as_bytes())? {
-            let hash = String::from_utf8(hash_bytes)?;
+            let hash = String::from_utf8(hash_bytes)
+                .context("Invalid UTF-8 in block hash")?;
             return self.get_block(&hash);
         }
         
@@ -102,17 +166,18 @@ impl PersistentStorage {
     
     /// Save wallet balance
     pub fn save_wallet(&self, address: &str, balance: i64) -> Result<()> {
-        let key = format!("wallet:{}", address);
+        let key = format!("{}{}", PREFIX_WALLET, address);
         self.db.put(key.as_bytes(), balance.to_le_bytes())?;
         Ok(())
     }
     
     /// Get wallet balance
     pub fn get_wallet(&self, address: &str) -> Result<Option<i64>> {
-        let key = format!("wallet:{}", address);
+        let key = format!("{}{}", PREFIX_WALLET, address);
         
         if let Some(data) = self.db.get(key.as_bytes())? {
-            let bytes: [u8; 8] = data.as_slice().try_into()?;
+            let bytes: [u8; 8] = data.as_slice().try_into()
+                .context("Invalid wallet balance data")?;
             let balance = i64::from_le_bytes(bytes);
             return Ok(Some(balance));
         }
@@ -125,7 +190,7 @@ impl PersistentStorage {
         let mut batch = WriteBatch::default();
         
         for (address, balance) in updates {
-            let key = format!("wallet:{}", address);
+            let key = format!("{}{}", PREFIX_WALLET, address);
             batch.put(key.as_bytes(), balance.to_le_bytes());
         }
         
@@ -185,8 +250,9 @@ impl PersistentStorage {
     /// Stores: tx by hash, and indexes by sender/receiver address
     pub fn save_transaction(&self, tx: &crate::sharded_blockchain_production::ConfirmedTransaction) -> Result<()> {
         // Store transaction by hash
-        let tx_key = format!("tx:{}", tx.hash);
-        let tx_data = serde_json::to_vec(tx)?;
+        let tx_key = format!("{}{}", PREFIX_TX, tx.hash);
+        let tx_data = serde_json::to_vec(tx)
+            .context("Failed to serialize transaction")?;
         self.db.put(tx_key.as_bytes(), &tx_data)?;
 
         // Add to sender's transaction list
@@ -202,7 +268,7 @@ impl PersistentStorage {
 
     /// Append a transaction hash to an address's transaction index
     fn append_tx_to_address(&self, address: &str, tx_hash: &str) -> Result<()> {
-        let index_key = format!("txindex:{}", address);
+        let index_key = format!("{}{}", PREFIX_TX_INDEX, address);
         
         // Get existing hashes
         let mut hashes: Vec<String> = if let Some(data) = self.db.get(index_key.as_bytes())? {
@@ -214,7 +280,8 @@ impl PersistentStorage {
         // Add new hash (avoid duplicates)
         if !hashes.contains(&tx_hash.to_string()) {
             hashes.push(tx_hash.to_string());
-            let data = serde_json::to_vec(&hashes)?;
+            let data = serde_json::to_vec(&hashes)
+                .context("Failed to serialize tx index")?;
             self.db.put(index_key.as_bytes(), &data)?;
         }
 
@@ -223,9 +290,10 @@ impl PersistentStorage {
 
     /// Get transaction by hash
     pub fn get_transaction(&self, hash: &str) -> Result<Option<crate::sharded_blockchain_production::ConfirmedTransaction>> {
-        let key = format!("tx:{}", hash);
+        let key = format!("{}{}", PREFIX_TX, hash);
         if let Some(data) = self.db.get(key.as_bytes())? {
-            let tx: crate::sharded_blockchain_production::ConfirmedTransaction = serde_json::from_slice(&data)?;
+            let tx: crate::sharded_blockchain_production::ConfirmedTransaction = 
+                serde_json::from_slice(&data).context("Failed to deserialize transaction")?;
             return Ok(Some(tx));
         }
         Ok(None)
@@ -233,7 +301,7 @@ impl PersistentStorage {
 
     /// Get transaction history for an address (most recent first)
     pub fn get_transaction_history(&self, address: &str, limit: usize) -> Result<Vec<crate::sharded_blockchain_production::ConfirmedTransaction>> {
-        let index_key = format!("txindex:{}", address);
+        let index_key = format!("{}{}", PREFIX_TX_INDEX, address);
         
         // Get transaction hashes for this address
         let hashes: Vec<String> = if let Some(data) = self.db.get(index_key.as_bytes())? {
@@ -303,8 +371,9 @@ impl PersistentStorage {
     
     /// Save slashing history (append-only log for audit)
     pub fn append_slashing_event(&self, event: &crate::staking::SlashingEvent) -> Result<()> {
-        let key = format!("slash:{}:{}", event.height, event.validator_address);
-        let value = bincode::serialize(event)?;
+        let key = format!("{}{}:{}", PREFIX_SLASH, event.height, event.validator_address);
+        let value = bincode::serialize(event)
+            .context("Failed to serialize slashing event")?;
         self.db.put(key.as_bytes(), value)?;
         warn!("⚔️  Slashing event persisted: {} slashed {} at height {}", 
             event.validator_address, event.amount_slashed, event.height);
@@ -313,17 +382,11 @@ impl PersistentStorage {
     
     /// Get slashing history for a validator
     pub fn get_slashing_history(&self, validator_address: &str) -> Result<Vec<crate::staking::SlashingEvent>> {
-        let prefix = format!("slash:");
         let mut events = Vec::new();
         
-        for item in self.db.prefix_iterator(prefix.as_bytes()) {
-            let (key, value) = item?;
-            let key_str = String::from_utf8_lossy(&key);
-            if key_str.ends_with(&format!(":{}", validator_address)) || 
-               key_str.contains(&format!(":{}:", validator_address)) {
-                // This is a bit loose but works for our format
-            }
-            // Deserialize all and filter
+        for item in self.db.prefix_iterator(PREFIX_SLASH.as_bytes()) {
+            let (_key, value) = item?;
+            // Deserialize and filter by validator address
             if let Ok(event) = bincode::deserialize::<crate::staking::SlashingEvent>(&value) {
                 if event.validator_address == validator_address {
                     events.push(event);
@@ -333,6 +396,99 @@ impl PersistentStorage {
         
         events.sort_by_key(|e| e.height);
         Ok(events)
+    }
+    
+    /// Get all slashing events (for auditing)
+    pub fn get_all_slashing_events(&self) -> Result<Vec<crate::staking::SlashingEvent>> {
+        let mut events = Vec::new();
+        
+        for item in self.db.prefix_iterator(PREFIX_SLASH.as_bytes()) {
+            let (_key, value) = item?;
+            if let Ok(event) = bincode::deserialize::<crate::staking::SlashingEvent>(&value) {
+                events.push(event);
+            }
+        }
+        
+        events.sort_by_key(|e| e.height);
+        Ok(events)
+    }
+    
+    // ============ Governance Persistence ============
+    
+    /// Save governance proposal to persistent storage
+    pub fn save_proposal(&self, proposal: &crate::governance::Proposal) -> Result<()> {
+        let key = format!("{}{}", PREFIX_GOV_PROPOSAL, proposal.id);
+        let value = serde_json::to_vec(proposal)
+            .context("Failed to serialize proposal")?;
+        self.db.put(key.as_bytes(), value)?;
+        info!("💾 Proposal #{} persisted: {}", proposal.id, proposal.title);
+        Ok(())
+    }
+    
+    /// Load a proposal by ID
+    pub fn load_proposal(&self, proposal_id: u64) -> Result<Option<crate::governance::Proposal>> {
+        let key = format!("{}{}", PREFIX_GOV_PROPOSAL, proposal_id);
+        if let Some(data) = self.db.get(key.as_bytes())? {
+            let proposal: crate::governance::Proposal = serde_json::from_slice(&data)
+                .context("Failed to deserialize proposal")?;
+            return Ok(Some(proposal));
+        }
+        Ok(None)
+    }
+    
+    /// Load all proposals from storage
+    pub fn load_all_proposals(&self) -> Result<Vec<crate::governance::Proposal>> {
+        let mut proposals = Vec::new();
+        
+        for item in self.db.prefix_iterator(PREFIX_GOV_PROPOSAL.as_bytes()) {
+            let (_key, value) = item?;
+            if let Ok(proposal) = serde_json::from_slice::<crate::governance::Proposal>(&value) {
+                proposals.push(proposal);
+            }
+        }
+        
+        // Sort by ID descending (newest first)
+        proposals.sort_by(|a, b| b.id.cmp(&a.id));
+        Ok(proposals)
+    }
+    
+    /// Save votes for a proposal
+    pub fn save_proposal_votes(&self, proposal_id: u64, votes: &[crate::governance::Vote]) -> Result<()> {
+        let key = format!("{}{}", PREFIX_GOV_VOTES, proposal_id);
+        let value = serde_json::to_vec(votes)
+            .context("Failed to serialize votes")?;
+        self.db.put(key.as_bytes(), value)?;
+        Ok(())
+    }
+    
+    /// Load votes for a proposal
+    pub fn load_proposal_votes(&self, proposal_id: u64) -> Result<Vec<crate::governance::Vote>> {
+        let key = format!("{}{}", PREFIX_GOV_VOTES, proposal_id);
+        if let Some(data) = self.db.get(key.as_bytes())? {
+            let votes: Vec<crate::governance::Vote> = serde_json::from_slice(&data)
+                .context("Failed to deserialize votes")?;
+            return Ok(votes);
+        }
+        Ok(Vec::new())
+    }
+    
+    /// Save governance state (next_proposal_id, etc.)
+    pub fn save_governance_state(&self, state: &GovernanceStateSnapshot) -> Result<()> {
+        let value = serde_json::to_vec(state)
+            .context("Failed to serialize governance state")?;
+        self.db.put(PREFIX_GOV_STATE.as_bytes(), value)?;
+        info!("💾 Governance state persisted: next_proposal_id={}", state.next_proposal_id);
+        Ok(())
+    }
+    
+    /// Load governance state
+    pub fn load_governance_state(&self) -> Result<Option<GovernanceStateSnapshot>> {
+        if let Some(data) = self.db.get(PREFIX_GOV_STATE.as_bytes())? {
+            let state: GovernanceStateSnapshot = serde_json::from_slice(&data)
+                .context("Failed to deserialize governance state")?;
+            return Ok(Some(state));
+        }
+        Ok(None)
     }
 }
 
@@ -348,11 +504,24 @@ pub struct StakingStateSnapshot {
     pub snapshot_time: u64,
 }
 
+/// Serializable snapshot of governance state
+/// Used for persistence and state sync
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GovernanceStateSnapshot {
+    pub next_proposal_id: u64,
+    pub current_height: u64,
+    pub total_bonded_tokens: u64,
+    /// Rate limit tracking: last proposal height per address
+    pub last_proposal_by_address: std::collections::HashMap<String, u64>,
+    pub snapshot_time: u64,
+}
+
 impl Clone for PersistentStorage {
     fn clone(&self) -> Self {
         Self {
             db: Arc::clone(&self.db),
             block_cache: parking_lot::Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap())),
+            last_compaction_height: AtomicU64::new(self.last_compaction_height.load(Ordering::Relaxed)),
         }
     }
 }
@@ -451,5 +620,148 @@ mod tests {
         // Get latest
         let latest = storage.get_latest_block().unwrap().unwrap();
         assert_eq!(latest.index, 10);
+    }
+    
+    #[test]
+    fn test_staking_state_persistence() {
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Create staking state snapshot
+        let mut validators = std::collections::HashMap::new();
+        validators.insert("validator1".to_string(), crate::staking::ValidatorStake {
+            validator_address: "validator1".to_string(),
+            self_stake: 10_000_000_000_000,
+            delegated_stake: 5_000_000_000_000,
+            total_stake: 15_000_000_000_000,
+            commission_rate: 0.10,
+            rewards_accumulated: 100_000_000,
+            blocks_signed: 1000,
+            blocks_missed: 5,
+            jailed: false,
+            jailed_until: 0,
+            created_at: 1700000000,
+            last_reward_height: 5000,
+        });
+        
+        let snapshot = StakingStateSnapshot {
+            validators,
+            delegations: std::collections::HashMap::new(),
+            unbonding_queue: Vec::new(),
+            total_staked: 15_000_000_000_000,
+            current_height: 5000,
+            snapshot_time: 1700000000,
+        };
+        
+        // Save and reload
+        storage.save_staking_state(&snapshot).unwrap();
+        let loaded = storage.load_staking_state().unwrap().unwrap();
+        
+        assert_eq!(loaded.total_staked, 15_000_000_000_000);
+        assert_eq!(loaded.current_height, 5000);
+        assert!(loaded.validators.contains_key("validator1"));
+    }
+    
+    #[test]
+    fn test_slashing_event_persistence() {
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Create slashing events
+        let event1 = crate::staking::SlashingEvent {
+            validator_address: "validator1".to_string(),
+            height: 1000,
+            timestamp: 1700000000,
+            reason: crate::staking::SlashReason::Downtime,
+            amount_slashed: 100_000_000_000,
+            jail_duration: 3600,
+        };
+        
+        let event2 = crate::staking::SlashingEvent {
+            validator_address: "validator1".to_string(),
+            height: 2000,
+            timestamp: 1700001000,
+            reason: crate::staking::SlashReason::DoubleSign,
+            amount_slashed: 500_000_000_000,
+            jail_duration: 10000,
+        };
+        
+        let event3 = crate::staking::SlashingEvent {
+            validator_address: "validator2".to_string(),
+            height: 1500,
+            timestamp: 1700000500,
+            reason: crate::staking::SlashReason::Downtime,
+            amount_slashed: 50_000_000_000,
+            jail_duration: 3600,
+        };
+        
+        storage.append_slashing_event(&event1).unwrap();
+        storage.append_slashing_event(&event2).unwrap();
+        storage.append_slashing_event(&event3).unwrap();
+        
+        // Get history for validator1
+        let history = storage.get_slashing_history("validator1").unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].height, 1000); // Sorted by height
+        assert_eq!(history[1].height, 2000);
+        
+        // Get all events
+        let all_events = storage.get_all_slashing_events().unwrap();
+        assert_eq!(all_events.len(), 3);
+    }
+    
+    #[test]
+    fn test_governance_state_persistence() {
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Create governance state
+        let mut last_proposal_by_address = std::collections::HashMap::new();
+        last_proposal_by_address.insert("proposer1".to_string(), 1000u64);
+        
+        let state = GovernanceStateSnapshot {
+            next_proposal_id: 5,
+            current_height: 10000,
+            total_bonded_tokens: 1_000_000_000_000_000,
+            last_proposal_by_address,
+            snapshot_time: 1700000000,
+        };
+        
+        // Save and reload
+        storage.save_governance_state(&state).unwrap();
+        let loaded = storage.load_governance_state().unwrap().unwrap();
+        
+        assert_eq!(loaded.next_proposal_id, 5);
+        assert_eq!(loaded.current_height, 10000);
+        assert_eq!(loaded.total_bonded_tokens, 1_000_000_000_000_000);
+        assert_eq!(*loaded.last_proposal_by_address.get("proposer1").unwrap(), 1000);
+    }
+    
+    #[test]
+    fn test_compaction() {
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Manual compaction should not fail
+        storage.compact().unwrap();
+        
+        // Stats should work
+        let stats = storage.stats().unwrap();
+        assert!(stats.contains("RocksDB Stats"));
+    }
+    
+    #[test]
+    fn test_checkpoint() {
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Save some data
+        storage.save_wallet("test", 1000).unwrap();
+        
+        // Checkpoint should flush to disk
+        storage.checkpoint().unwrap();
+        
+        // Data should still be accessible
+        assert_eq!(storage.get_wallet("test").unwrap().unwrap(), 1000);
     }
 }
