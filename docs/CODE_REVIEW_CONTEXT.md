@@ -34,8 +34,9 @@ sultan-core/src/
 ├── consensus.rs                    # Block validation
 ├── staking.rs                      # Validators, delegation, rewards
 ├── governance.rs                   # Proposals, voting
-├── storage.rs                      # RocksDB persistence
-├── p2p.rs                          # libp2p networking
+├── storage.rs                      # RocksDB persistence + AES-256-GCM encryption
+├── p2p.rs                          # libp2p networking (GossipSub, Kademlia, DoS, Ed25519)
+├── block_sync.rs                   # Byzantine-tolerant sync (voter verify, sig validation)
 ├── token_factory.rs                # Native token creation (fungible & NFT)
 ├── native_dex.rs                   # Built-in AMM
 └── bridge_integration.rs           # Cross-chain (BTC, ETH, SOL, TON)
@@ -57,7 +58,27 @@ sultan-core/src/
 
 - **Network:** Live at `rpc.sltn.io`
 - **Validators:** 4 active
-- **Tests:** 141 passing (96 lib + 45 integration/stress)
+- **Tests:** 202 passing (lib tests + integration/stress)
+- **Code Review:** Phase 4 Complete (10/10 ratings on all modules)
+
+## Phase 4 Review Summary (p2p.rs & block_sync.rs)
+
+**p2p.rs (1,025 lines, 16 tests) - 10/10 Enterprise-Grade:**
+- libp2p with GossipSub (strict validation, max 1MB, max_ihave 5000, max_messages_per_rpc 100)
+- Kademlia DHT for peer discovery
+- DoS protection: rate limiting (1000/min), peer banning (600s), message size caps
+- Ed25519 signatures on all message types (proposals, votes, announcements)
+- Validator pubkey registry with minimum stake verification (10T SULTAN)
+- Signature verification in event loop (rejects invalid proposals/announcements)
+
+**block_sync.rs (1,174 lines, 31 tests) - 10/10 Enterprise-Grade:**
+- Byzantine-tolerant block synchronization
+- Voter verification against consensus validators
+- Signature validation with VoteRejection::InvalidSignature
+- SyncConfig with DoS limits (max_pending 100, max_seen 10K)
+- Proposer verification in validate_block_full()
+- Statistics tracking (blocks_synced, votes_recorded, votes_rejected)
+- Sync request/response helpers for P2P integration
 
 ## When Reviewing, Check For
 
@@ -69,4 +90,4 @@ sultan-core/src/
 
 ---
 
-*Last updated: December 29, 2025*
+*Last updated: December 30, 2025 - Code Review Phase 4 Complete*

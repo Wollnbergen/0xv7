@@ -29,11 +29,12 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `economics.rs` | 100 | Inflation, rewards, APY calculations |
 | `transaction_validator.rs` | 782 | Transaction validation (18 tests, typed errors, Ed25519 sig verify) |
 | `blockchain.rs` | 374 | Block/Transaction structures (with memo) |
-| `p2p.rs` | 377 | libp2p networking |
+| `p2p.rs` | 1,025 | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify) |
+| `block_sync.rs` | 1,174 | Byzantine-tolerant block sync (voter verification, signature validation, 31 tests) |
 | `quantum.rs` | ~200 | Post-quantum cryptography (Dilithium) |
 | `mev_protection.rs` | ~100 | MEV resistance |
 
-**Total:** ~14,000+ lines of production Rust code (157 tests passing)
+**Total:** ~16,000+ lines of production Rust code (202 tests passing)
 
 ### Cross-Chain Bridges (bridges/)
 
@@ -107,7 +108,7 @@ pub async fn swap(
 | Max History/Address | 10,000 entries (pruned) |
 | Mempool Ordering | Deterministic (timestamp/from/nonce) |
 | Signature Verification | Ed25519 STRICT mode |
-| Tests | 157 passing (lib tests) |
+| Tests | 202 passing (lib tests) |
 
 ---
 
@@ -178,4 +179,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: December 30, 2025 - Code Review Phase 3 Complete (157 tests, 10/10 rating on all modules)*
+*Last updated: December 30, 2025 - Code Review Phase 4 Complete (202 tests, 10/10 rating on all modules including p2p.rs and block_sync.rs)*

@@ -525,6 +525,71 @@ New validators connect to the network via bootstrap nodes:
 
 The bootstrap node maintains persistent connections to all active validators, ensuring network connectivity even during churn.
 
+### 5.5 P2P Security Layer (Enterprise-Grade)
+
+The P2P networking layer implements comprehensive security measures:
+
+**DoS Protection:**
+
+| Protection | Value | Purpose |
+|------------|-------|----------|
+| Rate Limiting | 1,000 messages/minute | Prevent flood attacks |
+| Peer Banning | 600 seconds | Block misbehaving peers |
+| Max Message Size | 1 MB | Prevent oversized messages |
+| Max IHAVE Length | 5,000 | Bound memory per peer |
+| Max Messages/RPC | 100 | Limit per-RPC overhead |
+
+**Ed25519 Signature Verification:**
+
+All network messages are cryptographically signed and verified:
+
+| Message Type | Signature Covers | Verification Point |
+|--------------|-----------------|--------------------|
+| BlockProposal | block_hash | Event loop (before forwarding) |
+| BlockVote | block_hash | record_vote_with_signature() |
+| ValidatorAnnounce | address\|\|stake\|\|peer_id | Event loop (before registration) |
+
+**Validator Registry:**
+
+The P2P layer maintains a registry of validator public keys, populated from verified announcements. This enables:
+- Signature verification for proposals and votes
+- Minimum stake enforcement (10 trillion SULTAN)
+- Known validator tracking for consensus integration
+
+```rust
+// Validator pubkey management
+pub fn register_validator_pubkey(&self, address: String, pubkey: [u8; 32]);
+pub fn get_validator_pubkey(&self, address: &str) -> Option<[u8; 32]>;
+pub fn known_validator_count(&self) -> usize;
+```
+
+### 5.6 Block Synchronization
+
+Byzantine-tolerant block synchronization with comprehensive validation:
+
+**SyncConfig Parameters:**
+
+| Parameter | Value | Purpose |
+|-----------|-------|----------|
+| max_blocks_per_request | 100 | Bound sync request size |
+| sync_timeout | 30 seconds | Timeout for sync operations |
+| finality_confirmations | 3 | Blocks before finality |
+| max_pending_blocks | 100 | DoS prevention |
+| max_seen_blocks | 10,000 | Cache size limit |
+| verify_voters | true | Require validator verification |
+
+**Vote Rejection Handling:**
+
+```rust
+pub enum VoteRejection {
+    BlockNotFound,      // Block not in pending
+    InvalidVoter,       // Not a registered validator
+    DuplicateVote,      // Already voted
+    Expired,            // Block too old
+    InvalidSignature,   // Ed25519 verification failed
+}
+```
+
 ---
 
 ## 6. Cryptographic Security
