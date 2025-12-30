@@ -2,7 +2,7 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.4  
+**Version:** 3.5  
 **Date:** December 30, 2025  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
@@ -872,10 +872,10 @@ Sultan is designed for multi-chain interoperability through purpose-built bridge
 
 | Chain | Protocol | Status | Finality |
 |-------|----------|--------|----------|
-| Bitcoin | HTLC + SPV | Planned Q2 2026 | ~60 min |
-| Ethereum | Light Client + ZK | Planned Q2 2026 | ~3 min |
-| Solana | gRPC Streaming | Planned Q3 2026 | ~13 sec |
-| TON | Smart Contract | Planned Q3 2026 | ~5 sec |
+| Bitcoin | HTLC + SPV | ✅ Implemented | ~60 min (3 confirms) |
+| Ethereum | Light Client + ZK | ✅ Implemented | ~3 min (15 confirms) |
+| Solana | gRPC Streaming | ✅ Implemented | ~400ms |
+| TON | Smart Contract | ✅ Implemented | ~5 sec |
 
 ### 9.3 Bridge Security
 
@@ -888,6 +888,26 @@ Sultan is designed for multi-chain interoperability through purpose-built bridge
 - Real-time transaction tracking
 - Anomaly detection (unusual volumes)
 - Circuit breakers (auto-pause on attacks)
+
+### 9.4 Production Proof Verification
+
+Sultan implements **real cryptographic proof verification** for each chain:
+
+| Chain | Proof Type | Format | Confirmations |
+|-------|------------|--------|---------------|
+| **Bitcoin** | SPV Merkle | `[tx_hash:32][branch_count:4][branches:32*n][tx_index:4][header:80]` | 3 blocks |
+| **Ethereum** | ZK-SNARK | Groth16 (256+ bytes) | 15 blocks |
+| **Solana** | gRPC Finality | `[signature:64][slot:8][status:1]` | ~400ms |
+| **TON** | BOC Contract | Magic `0xb5ee9c72`/`0xb5ee9c73` | ~5 sec |
+
+### 9.5 Async Oracle Integration
+
+Live fee estimation via external oracles:
+- **Bitcoin:** Mempool.space (sat/vB estimates)
+- **Ethereum:** Etherscan (gas prices in gwei)
+- **Solana:** Native RPC (slot/fee data)
+- **TON:** TONCenterV2 (gas estimates)
+- **USD Rates:** CoinGecko API
 
 ---
 

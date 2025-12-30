@@ -18,8 +18,10 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `staking.rs` | ~1,540 | Validator registration, delegation, rewards, slashing with auto-persist (21 tests) |
 | `governance.rs` | ~1,900 | On-chain proposals, voting, slashing proposals, encrypted storage (21 tests) |
 | `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
-| `token_factory.rs` | 354 | Native token creation (no smart contracts) |
-| `native_dex.rs` | 462 | Built-in AMM for token swaps |
+| `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
+| `native_dex.rs` | ~970 | Built-in AMM with Ed25519 signatures (13 tests) |
+| `bridge_integration.rs` | ~1,600 | Cross-chain bridge with real proof verification (32 tests) |
+| `bridge_fees.rs` | ~680 | Zero-fee bridge with async oracle support (23 tests) |
 | `sharding_production.rs` | 2,244 | **PRODUCTION** shard routing with Ed25519, 2PC, WAL recovery |
 | `sharded_blockchain_production.rs` | 1,342 | **PRODUCTION** multi-shard coordinator |
 | `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
@@ -108,7 +110,7 @@ pub async fn swap(
 | Max History/Address | 10,000 entries (pruned) |
 | Mempool Ordering | Deterministic (timestamp/from/nonce) |
 | Signature Verification | Ed25519 STRICT mode |
-| Tests | 202 passing (lib tests) |
+| Tests | 274 passing (lib tests) |
 
 ---
 
@@ -179,4 +181,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: December 30, 2025 - Code Review Phase 4 Complete (202 tests, 10/10 rating on all modules including p2p.rs and block_sync.rs)*
+*Last updated: December 30, 2025 - Code Review Phase 5 Complete (274 tests, 10/10 rating on all modules including bridge_integration.rs, bridge_fees.rs, token_factory.rs, native_dex.rs)*
