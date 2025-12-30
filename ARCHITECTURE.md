@@ -15,8 +15,9 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `main.rs` | 2,938 | Node binary, RPC server (30+ endpoints), P2P networking, keygen CLI |
 | `lib.rs` | ~100 | Library exports for all modules |
 | `consensus.rs` | 1,078 | Proof of Stake consensus engine (17 tests, Ed25519) |
-| `staking.rs` | 1,198 | Validator registration, delegation, rewards |
-| `governance.rs` | 556 | On-chain proposals and voting |
+| `staking.rs` | ~1,540 | Validator registration, delegation, rewards, slashing with auto-persist (21 tests) |
+| `governance.rs` | ~1,900 | On-chain proposals, voting, slashing proposals, encrypted storage (21 tests) |
+| `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
 | `token_factory.rs` | 354 | Native token creation (no smart contracts) |
 | `native_dex.rs` | 462 | Built-in AMM for token swaps |
 | `sharding_production.rs` | 2,244 | **PRODUCTION** shard routing with Ed25519, 2PC, WAL recovery |
@@ -27,13 +28,12 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `bridge_fees.rs` | 279 | Bridge fee calculation |
 | `economics.rs` | 100 | Inflation, rewards, APY calculations |
 | `transaction_validator.rs` | 782 | Transaction validation (18 tests, typed errors, Ed25519 sig verify) |
-| `storage.rs` | 311 | Persistent state storage (RocksDB) |
 | `blockchain.rs` | 374 | Block/Transaction structures (with memo) |
 | `p2p.rs` | 377 | libp2p networking |
 | `quantum.rs` | ~200 | Post-quantum cryptography (Dilithium) |
 | `mev_protection.rs` | ~100 | MEV resistance |
 
-**Total:** ~12,000+ lines of production Rust code (125 tests passing)
+**Total:** ~14,000+ lines of production Rust code (157 tests passing)
 
 ### Cross-Chain Bridges (bridges/)
 
@@ -107,7 +107,31 @@ pub async fn swap(
 | Max History/Address | 10,000 entries (pruned) |
 | Mempool Ordering | Deterministic (timestamp/from/nonce) |
 | Signature Verification | Ed25519 STRICT mode |
-| Tests | 125 passing (lib tests) |
+| Tests | 157 passing (lib tests) |
+
+---
+
+## Security Features
+
+### Storage Encryption (AES-256-GCM)
+Sultan uses **production-grade authenticated encryption** for sensitive data:
+
+| Feature | Implementation |
+|---------|---------------|
+| Algorithm | AES-256-GCM (NIST approved) |
+| Key Derivation | HKDF-SHA256 (RFC 5869) |
+| Nonce | 12-byte random per encryption |
+| Authentication | Built-in integrity verification |
+| Multi-tenant | Custom salt support for isolation |
+
+### Governance Security
+| Protection | Mechanism |
+|------------|-----------|
+| Flash Stake Prevention | Voting power snapshot at proposal creation |
+| Anti-Spam | 1,000 SLTN deposit + rate limiting |
+| Slashing Proposals | Community can slash misbehaving validators |
+| Emergency Pause | 67% validator multisig for critical actions |
+| Encrypted Storage | Sensitive proposals can be encrypted at rest |
 
 ---
 
@@ -154,4 +178,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: December 29, 2025 - Code Review Phase 1 & 2 Complete (125 tests, 10/10 rating)*
+*Last updated: December 30, 2025 - Code Review Phase 3 Complete (157 tests, 10/10 rating on all modules)*

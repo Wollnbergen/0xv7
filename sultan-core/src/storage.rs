@@ -40,36 +40,142 @@ const PREFIX_GOV_PROPOSAL: &str = "gov:proposal:";
 const PREFIX_GOV_VOTES: &str = "gov:votes:";
 const PREFIX_GOV_STATE: &str = "gov:state";
 
-/// Simple XOR encryption for sensitive data (placeholder for production AES-GCM)
-/// In production, use a proper encryption library like aes-gcm-siv
+/// AES-256-GCM authenticated encryption for sensitive data
+/// Provides confidentiality, integrity, and authenticity guarantees
 #[derive(Clone)]
 pub struct StorageEncryption {
-    key: Vec<u8>,
+    key: [u8; 32], // 256-bit key for AES-256-GCM
 }
 
 impl StorageEncryption {
-    /// Create new encryption with a 32-byte key
-    /// In production, derive from a secure key management system
+    /// Nonce size for AES-GCM (96 bits / 12 bytes)
+    const NONCE_SIZE: usize = 12;
+    
+    /// HKDF info context for storage encryption
+    const HKDF_INFO: &'static [u8] = b"sultan-storage-encryption-v1";
+    
+    /// HKDF salt for additional security (can be stored alongside encrypted data)
+    const HKDF_SALT: &'static [u8] = b"sultan-l1-blockchain-storage";
+    
+    /// Create new encryption with HKDF-SHA256 key derivation (RFC 5869)
+    /// HKDF provides cryptographically secure key derivation with:
+    /// - Extract: Produces pseudorandom key from input key material
+    /// - Expand: Derives output key with domain separation via info
+    /// In production, derive from a secure key management system (HSM, KMS)
     pub fn new(key: &[u8]) -> Self {
-        // Extend key to 32 bytes using simple key derivation
-        let mut extended = vec![0u8; 32];
-        for (i, &b) in key.iter().enumerate() {
-            extended[i % 32] ^= b;
-        }
-        Self { key: extended }
+        use hkdf::Hkdf;
+        use sha2::Sha256;
+        
+        // HKDF-SHA256 key derivation (RFC 5869)
+        // Extract phase: Create pseudorandom key from input key material
+        // Expand phase: Derive 32-byte output key with domain separation
+        let hk = Hkdf::<Sha256>::new(Some(Self::HKDF_SALT), key);
+        let mut derived_key = [0u8; 32];
+        hk.expand(Self::HKDF_INFO, &mut derived_key)
+            .expect("32 bytes is valid output length for HKDF-SHA256");
+        
+        Self { key: derived_key }
     }
     
-    /// Encrypt data using XOR (placeholder - use AES-GCM in production)
+    /// Create encryption with custom salt for multi-tenant isolation
+    pub fn with_salt(key: &[u8], salt: &[u8]) -> Self {
+        use hkdf::Hkdf;
+        use sha2::Sha256;
+        
+        let hk = Hkdf::<Sha256>::new(Some(salt), key);
+        let mut derived_key = [0u8; 32];
+        hk.expand(Self::HKDF_INFO, &mut derived_key)
+            .expect("32 bytes is valid output length for HKDF-SHA256");
+        
+        Self { key: derived_key }
+    }
+    
+    /// Generate a cryptographically secure random nonce
+    fn generate_nonce() -> [u8; 12] {
+        use rand::RngCore;
+        let mut nonce = [0u8; 12];
+        rand::thread_rng().fill_bytes(&mut nonce);
+        nonce
+    }
+    
+    /// Encrypt data using AES-256-GCM with authenticated encryption
+    /// Returns: nonce (12 bytes) || ciphertext || auth_tag (16 bytes)
     pub fn encrypt(&self, data: &[u8]) -> Vec<u8> {
-        data.iter()
-            .enumerate()
-            .map(|(i, &b)| b ^ self.key[i % self.key.len()])
-            .collect()
+        use aes_gcm::{
+            aead::{Aead, KeyInit},
+            Aes256Gcm, Nonce,
+        };
+        
+        let cipher = Aes256Gcm::new_from_slice(&self.key)
+            .expect("Valid 32-byte key");
+        
+        let nonce_bytes = Self::generate_nonce();
+        let nonce = Nonce::from(nonce_bytes);
+        
+        // Encrypt with authentication tag appended
+        let ciphertext = cipher
+            .encrypt(&nonce, data)
+            .expect("Encryption should not fail with valid inputs");
+        
+        // Prepend nonce to ciphertext for storage
+        let mut result = Vec::with_capacity(Self::NONCE_SIZE + ciphertext.len());
+        result.extend_from_slice(&nonce_bytes);
+        result.extend_from_slice(&ciphertext);
+        result
     }
     
-    /// Decrypt data (XOR is symmetric)
+    /// Decrypt data and verify authentication tag
+    /// Input format: nonce (12 bytes) || ciphertext || auth_tag (16 bytes)
+    /// Returns decrypted plaintext or panics on authentication failure
     pub fn decrypt(&self, data: &[u8]) -> Vec<u8> {
-        self.encrypt(data) // XOR is its own inverse
+        use aes_gcm::{
+            aead::{Aead, KeyInit},
+            Aes256Gcm, Nonce,
+        };
+        
+        if data.len() < Self::NONCE_SIZE + 16 {
+            panic!("Ciphertext too short: must contain nonce and auth tag");
+        }
+        
+        let cipher = Aes256Gcm::new_from_slice(&self.key)
+            .expect("Valid 32-byte key");
+        
+        // Extract nonce and ciphertext - convert slice to fixed array
+        let mut nonce_arr = [0u8; 12];
+        nonce_arr.copy_from_slice(&data[..Self::NONCE_SIZE]);
+        let nonce = Nonce::from(nonce_arr);
+        let ciphertext = &data[Self::NONCE_SIZE..];
+        
+        // Decrypt and verify authentication tag
+        cipher
+            .decrypt(&nonce, ciphertext)
+            .expect("Decryption failed: authentication tag mismatch or corrupted data")
+    }
+    
+    /// Try to decrypt data, returning Result instead of panicking
+    /// Useful for graceful error handling in production
+    pub fn try_decrypt(&self, data: &[u8]) -> Result<Vec<u8>> {
+        use aes_gcm::{
+            aead::{Aead, KeyInit},
+            Aes256Gcm, Nonce,
+        };
+        
+        if data.len() < Self::NONCE_SIZE + 16 {
+            return Err(anyhow::anyhow!("Ciphertext too short"));
+        }
+        
+        let cipher = Aes256Gcm::new_from_slice(&self.key)
+            .map_err(|_| anyhow::anyhow!("Invalid key"))?;
+        
+        // Extract nonce and ciphertext - convert slice to fixed array
+        let mut nonce_arr = [0u8; 12];
+        nonce_arr.copy_from_slice(&data[..Self::NONCE_SIZE]);
+        let nonce = Nonce::from(nonce_arr);
+        let ciphertext = &data[Self::NONCE_SIZE..];
+        
+        cipher
+            .decrypt(&nonce, ciphertext)
+            .map_err(|_| anyhow::anyhow!("Decryption failed: authentication error"))
     }
 }
 
@@ -569,6 +675,48 @@ impl PersistentStorage {
         }
         Ok(None)
     }
+    
+    // ============ Encrypted Governance Storage ============
+    // For sensitive proposals (slashing, emergency actions, etc.)
+    
+    /// Save proposal with encryption for sensitive content
+    /// Use this for proposals containing validator addresses being slashed,
+    /// security-sensitive parameter changes, or confidential governance actions
+    pub fn save_proposal_encrypted(&self, proposal: &crate::governance::Proposal) -> Result<()> {
+        let encryption = self.encryption.as_ref()
+            .context("Encryption not enabled - use with_encryption() constructor")?;
+        
+        let key = format!("{}enc:{}", PREFIX_GOV_PROPOSAL, proposal.id);
+        let plaintext = serde_json::to_vec(proposal)
+            .context("Failed to serialize proposal")?;
+        let ciphertext = encryption.encrypt(&plaintext);
+        
+        self.db.put(key.as_bytes(), ciphertext)?;
+        info!("🔐 Proposal #{} encrypted and persisted: {}", proposal.id, proposal.title);
+        Ok(())
+    }
+    
+    /// Load encrypted proposal by ID
+    pub fn load_proposal_encrypted(&self, proposal_id: u64) -> Result<Option<crate::governance::Proposal>> {
+        let encryption = self.encryption.as_ref()
+            .context("Encryption not enabled - use with_encryption() constructor")?;
+        
+        let key = format!("{}enc:{}", PREFIX_GOV_PROPOSAL, proposal_id);
+        if let Some(ciphertext) = self.db.get(key.as_bytes())? {
+            let plaintext = encryption.try_decrypt(&ciphertext)
+                .context("Failed to decrypt proposal - possible key mismatch or data corruption")?;
+            let proposal: crate::governance::Proposal = serde_json::from_slice(&plaintext)
+                .context("Failed to deserialize proposal")?;
+            return Ok(Some(proposal));
+        }
+        Ok(None)
+    }
+    
+    /// Check if a proposal is stored encrypted
+    pub fn is_proposal_encrypted(&self, proposal_id: u64) -> bool {
+        let key = format!("{}enc:{}", PREFIX_GOV_PROPOSAL, proposal_id);
+        self.db.get(key.as_bytes()).ok().flatten().is_some()
+    }
 }
 
 /// Serializable snapshot of all staking state
@@ -886,5 +1034,126 @@ mod tests {
         // Decryption should restore original
         let decrypted = enc.decrypt(&encrypted);
         assert_eq!(decrypted, original.to_vec());
+    }
+    
+    #[test]
+    fn test_proposal_persistence() {
+        use crate::governance::{Proposal, ProposalStatus, ProposalType};
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Create a proposal
+        let proposal = Proposal {
+            id: 1,
+            proposer: "sultan1prpsr2qqqqqqqqqqqqqqqqqqqqqqqqqqqqprpsaa".to_string(),
+            title: "Test Proposal".to_string(),
+            description: "A test governance proposal".to_string(),
+            proposal_type: ProposalType::ParameterChange,
+            status: ProposalStatus::VotingPeriod,
+            submit_height: 1000,
+            submit_time: 1700000000,
+            deposit_end_height: 2000,
+            discussion_end_height: 87400,
+            voting_start_height: 87400,
+            voting_end_height: 389800,
+            total_deposit: 1_000_000_000_000,
+            depositors: vec![],
+            final_tally: None,
+            parameters: Some([("inflation_rate".to_string(), "0.05".to_string())].into()),
+            voting_power_snapshot: None,
+            telegram_discussion_url: Some("https://t.me/test".to_string()),
+            discord_discussion_url: None,
+            validator_signatures: vec![],
+            emergency_pause_votes: vec![],
+        };
+        
+        // Save and reload
+        storage.save_proposal(&proposal).unwrap();
+        let loaded = storage.load_proposal(1).unwrap().unwrap();
+        
+        assert_eq!(loaded.id, 1);
+        assert_eq!(loaded.title, "Test Proposal");
+        assert_eq!(loaded.proposer, proposal.proposer);
+        assert_eq!(loaded.status, ProposalStatus::VotingPeriod);
+        assert!(loaded.parameters.unwrap().contains_key("inflation_rate"));
+    }
+    
+    #[test]
+    fn test_proposal_votes_persistence() {
+        use crate::governance::{Vote, VoteOption};
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        let votes = vec![
+            Vote {
+                proposal_id: 1,
+                voter: "sultan1vtr2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqvtraa".to_string(),
+                option: VoteOption::Yes,
+                voting_power: 5_000_000_000_000,
+                time: 1700000000,
+            },
+            Vote {
+                proposal_id: 1,
+                voter: "sultan1vtr3qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqvtrcc".to_string(),
+                option: VoteOption::No,
+                voting_power: 2_000_000_000_000,
+                time: 1700001000,
+            },
+        ];
+        
+        // Save and reload
+        storage.save_proposal_votes(1, &votes).unwrap();
+        let loaded = storage.load_proposal_votes(1).unwrap();
+        
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].option, VoteOption::Yes);
+        assert_eq!(loaded[1].option, VoteOption::No);
+        assert_eq!(loaded[0].voting_power, 5_000_000_000_000);
+    }
+    
+    #[test]
+    fn test_load_all_proposals() {
+        use crate::governance::{Proposal, ProposalStatus, ProposalType};
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Create multiple proposals
+        for i in 1..=5 {
+            let proposal = Proposal {
+                id: i,
+                proposer: format!("sultan1prp{}qqqqqqqqqqqqqqqqqqqqqqqqqqqqqprp{:02}", i, i),
+                title: format!("Proposal #{}", i),
+                description: format!("Description for proposal {}", i),
+                proposal_type: ProposalType::TextProposal,
+                status: ProposalStatus::VotingPeriod,
+                submit_height: i * 1000,
+                submit_time: 1700000000 + i,
+                deposit_end_height: i * 1000 + 1000,
+                discussion_end_height: 87400,
+                voting_start_height: 87400,
+                voting_end_height: 389800,
+                total_deposit: 1_000_000_000_000,
+                depositors: vec![],
+                final_tally: None,
+                parameters: None,
+                voting_power_snapshot: None,
+                telegram_discussion_url: Some("https://t.me/test".to_string()),
+                discord_discussion_url: None,
+                validator_signatures: vec![],
+                emergency_pause_votes: vec![],
+            };
+            storage.save_proposal(&proposal).unwrap();
+        }
+        
+        // Load all
+        let all = storage.load_all_proposals().unwrap();
+        assert_eq!(all.len(), 5);
+        
+        // Should be sorted by ID descending (newest first)
+        assert_eq!(all[0].id, 5);
+        assert_eq!(all[4].id, 1);
     }
 }

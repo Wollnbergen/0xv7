@@ -137,6 +137,8 @@ pub enum SlashReason {
     Downtime,
     InvalidBlock,
     MaliciousBehavior,
+    /// Slashing via governance proposal (validator misbehavior voted by community)
+    Governance,
 }
 
 /// Production staking manager
@@ -449,6 +451,89 @@ impl StakingManager {
             jail_duration_blocks
         );
 
+        Ok(())
+    }
+    
+    /// Slash a validator with auto-persist to storage
+    /// Use this when storage is available for automatic durability of slashing events
+    pub async fn slash_validator_with_storage(
+        &self,
+        validator_address: &str,
+        reason: SlashReason,
+        slash_percentage: f64,
+        jail_duration_blocks: u64,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<()> {
+        self.slash_validator(validator_address, reason, slash_percentage, jail_duration_blocks).await?;
+        
+        // Auto-persist slashing events to storage
+        self.persist_slashing_events(storage).await?;
+        
+        // Also persist full staking state for recovery
+        self.persist_to_storage(storage).await?;
+        
+        Ok(())
+    }
+    
+    /// Delegate tokens with auto-persist to storage
+    /// Use this when storage is available for automatic durability
+    pub async fn delegate_with_storage(
+        &self,
+        delegator_address: String,
+        validator_address: String,
+        amount: u64,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<()> {
+        self.delegate(delegator_address, validator_address, amount).await?;
+        self.persist_to_storage(storage).await?;
+        Ok(())
+    }
+    
+    /// Undelegate tokens with auto-persist to storage
+    /// Use this when storage is available for automatic durability
+    pub async fn undelegate_with_storage(
+        &self,
+        delegator_address: String,
+        validator_address: String,
+        amount: u64,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<UnbondingEntry> {
+        let unbonding = self.undelegate(delegator_address, validator_address, amount).await?;
+        self.persist_to_storage(storage).await?;
+        Ok(unbonding)
+    }
+    
+    /// Withdraw validator rewards with auto-persist to storage
+    pub async fn withdraw_validator_rewards_with_storage(
+        &self,
+        validator_address: &str,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<u64> {
+        let rewards = self.withdraw_validator_rewards(validator_address).await?;
+        self.persist_to_storage(storage).await?;
+        Ok(rewards)
+    }
+    
+    /// Withdraw delegator rewards with auto-persist to storage
+    pub async fn withdraw_delegator_rewards_with_storage(
+        &self,
+        delegator_address: &str,
+        validator_address: &str,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<u64> {
+        let rewards = self.withdraw_delegator_rewards(delegator_address, validator_address).await?;
+        self.persist_to_storage(storage).await?;
+        Ok(rewards)
+    }
+    
+    /// Unjail a validator with auto-persist to storage
+    pub async fn unjail_validator_with_storage(
+        &self,
+        validator_address: &str,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<()> {
+        self.unjail_validator(validator_address).await?;
+        self.persist_to_storage(storage).await?;
         Ok(())
     }
 

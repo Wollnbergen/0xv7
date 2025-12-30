@@ -93,6 +93,9 @@ pub enum ProposalType {
     TextProposal,
     /// Emergency action requiring validator multi-sig
     EmergencyAction,
+    /// Slashing proposal to penalize misbehaving validators
+    /// Requires validator address and slash percentage in parameters
+    SlashingProposal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -399,6 +402,37 @@ impl GovernanceManager {
 
         Ok(proposal_id)
     }
+    
+    /// Submit a proposal with auto-persist to storage
+    /// Use this when storage is available for automatic durability
+    pub async fn submit_proposal_with_storage(
+        &self,
+        proposer: String,
+        title: String,
+        description: String,
+        proposal_type: ProposalType,
+        initial_deposit: u64,
+        parameters: Option<HashMap<String, String>>,
+        telegram_discussion_url: Option<String>,
+        discord_discussion_url: Option<String>,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<u64> {
+        let proposal_id = self.submit_proposal(
+            proposer,
+            title,
+            description,
+            proposal_type,
+            initial_deposit,
+            parameters,
+            telegram_discussion_url,
+            discord_discussion_url,
+        ).await?;
+        
+        // Auto-persist after successful submit
+        self.persist_to_storage(storage).await?;
+        
+        Ok(proposal_id)
+    }
 
     /// Cast a vote on a proposal
     /// 
@@ -490,6 +524,23 @@ impl GovernanceManager {
 
         Ok(())
     }
+    
+    /// Cast a vote with auto-persist to storage
+    pub async fn vote_with_storage(
+        &self,
+        proposal_id: u64,
+        voter: String,
+        option: VoteOption,
+        voting_power: u64,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<()> {
+        self.vote(proposal_id, voter, option, voting_power).await?;
+        
+        // Auto-persist after successful vote
+        self.persist_to_storage(storage).await?;
+        
+        Ok(())
+    }
 
     /// Update staking snapshot for a height (called by staking module)
     /// This should be called at regular intervals (e.g., every 100 blocks)
@@ -552,6 +603,22 @@ impl GovernanceManager {
 
         Ok(sig_count)
     }
+    
+    /// Sign upgrade proposal with auto-persist to storage
+    pub async fn sign_upgrade_proposal_with_storage(
+        &self,
+        proposal_id: u64,
+        validator_address: String,
+        signature: String,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<usize> {
+        let sig_count = self.sign_upgrade_proposal(proposal_id, validator_address, signature).await?;
+        
+        // Auto-persist after successful signature
+        self.persist_to_storage(storage).await?;
+        
+        Ok(sig_count)
+    }
 
     /// Emergency pause a proposal (validator action)
     /// If 67% of validators vote to pause, proposal is halted
@@ -599,6 +666,22 @@ impl GovernanceManager {
         }
 
         Ok(false)
+    }
+    
+    /// Emergency pause vote with auto-persist to storage
+    pub async fn emergency_pause_vote_with_storage(
+        &self,
+        proposal_id: u64,
+        validator_address: String,
+        total_validators: usize,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<bool> {
+        let paused = self.emergency_pause_vote(proposal_id, validator_address, total_validators).await?;
+        
+        // Auto-persist after successful pause vote
+        self.persist_to_storage(storage).await?;
+        
+        Ok(paused)
     }
 
     /// Advance proposals from discussion to voting period
@@ -715,10 +798,44 @@ impl GovernanceManager {
 
         Ok(tally)
     }
+    
+    /// Tally votes with auto-persist to storage
+    pub async fn tally_proposal_with_storage(
+        &self, 
+        proposal_id: u64,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<TallyResult> {
+        let tally = self.tally_proposal(proposal_id).await?;
+        
+        // Auto-persist after successful tally
+        self.persist_to_storage(storage).await?;
+        
+        Ok(tally)
+    }
 
-    /// Execute a passed proposal
+    /// Execute a passed proposal (standalone, no external integrations)
     /// CRITICAL: This function can hot-activate features without chain restart
+    /// For parameter changes that affect staking, use execute_proposal_with_staking instead.
     pub async fn execute_proposal(&self, proposal_id: u64) -> Result<()> {
+        self.execute_proposal_internal(proposal_id, None).await
+    }
+    
+    /// Execute a passed proposal with staking integration
+    /// This allows governance to update staking parameters (inflation_rate, etc.)
+    pub async fn execute_proposal_with_staking(
+        &self, 
+        proposal_id: u64,
+        staking: &crate::staking::StakingManager,
+    ) -> Result<()> {
+        self.execute_proposal_internal(proposal_id, Some(staking)).await
+    }
+    
+    /// Internal execution logic with optional staking integration
+    async fn execute_proposal_internal(
+        &self, 
+        proposal_id: u64,
+        staking: Option<&crate::staking::StakingManager>,
+    ) -> Result<()> {
         let mut proposals = self.proposals.write().await;
         let proposal = proposals.get_mut(&proposal_id)
             .context("Proposal not found")?;
@@ -733,6 +850,22 @@ impl GovernanceManager {
                 if let Some(params) = &proposal.parameters {
                     for (key, value) in params {
                         info!("🔧 Executing parameter change: {} = {}", key, value);
+                        
+                        // === Staking parameter changes ===
+                        // These require staking module integration
+                        match key.as_str() {
+                            "inflation_rate" => {
+                                let rate: f64 = value.parse()
+                                    .context("Invalid inflation rate value")?;
+                                if let Some(staking_mgr) = staking {
+                                    staking_mgr.update_inflation_rate(rate).await?;
+                                    info!("✅ Inflation rate updated to {}%", rate * 100.0);
+                                } else {
+                                    warn!("⚠️  Staking not available, inflation rate change deferred");
+                                }
+                            }
+                            _ => {}
+                        }
                         
                         // Hot-activation of features via governance
                         // This allows enabling smart contracts, IBC, etc. without chain restart
@@ -783,6 +916,42 @@ impl GovernanceManager {
                 info!("🚨 Emergency action executed: {}", proposal.title);
                 // Emergency actions are processed by the emergency pause mechanism
                 // This type bypasses normal voting when 67% of validators agree
+            }
+            ProposalType::SlashingProposal => {
+                // Slashing proposals require validator_address and slash_percentage parameters
+                if let Some(params) = &proposal.parameters {
+                    let validator_address = params.get("validator_address")
+                        .context("Slashing proposal missing validator_address parameter")?;
+                    let slash_percentage: f64 = params.get("slash_percentage")
+                        .context("Slashing proposal missing slash_percentage parameter")?
+                        .parse()
+                        .context("Invalid slash_percentage value")?;
+                    
+                    // Validate slash percentage bounds (0.1% to 100%)
+                    if slash_percentage < 0.001 || slash_percentage > 1.0 {
+                        bail!("Slash percentage must be between 0.1% (0.001) and 100% (1.0)");
+                    }
+                    
+                    info!("⚔️ Executing slashing proposal: {} - slashing {} by {:.2}%", 
+                          proposal.title, validator_address, slash_percentage * 100.0);
+                    
+                    if let Some(staking_mgr) = staking {
+                        // Governance slashing uses SlashReason::Governance with default jail of ~1 day
+                        let jail_duration = 43200; // ~1 day at 2 seconds per block
+                        staking_mgr.slash_validator(
+                            validator_address, 
+                            crate::staking::SlashReason::Governance,
+                            slash_percentage, 
+                            jail_duration
+                        ).await?;
+                        info!("✅ Validator {} slashed {:.2}% and jailed for {} blocks via governance",
+                              validator_address, slash_percentage * 100.0, jail_duration);
+                    } else {
+                        warn!("⚠️  Staking not available, slashing deferred");
+                    }
+                } else {
+                    bail!("Slashing proposal missing required parameters");
+                }
             }
         }
 
@@ -1488,5 +1657,263 @@ mod tests {
         
         let proposal = gov.get_proposal(proposal_id).await.unwrap();
         assert_eq!(proposal.status, ProposalStatus::Executed);
+    }
+    
+    #[tokio::test]
+    async fn test_execute_with_staking_integration() {
+        use crate::staking::StakingManager;
+        
+        let gov = GovernanceManager::new();
+        let staking = StakingManager::new(0.04); // Initial 4% inflation
+        
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Submit inflation rate change
+        let mut params = HashMap::new();
+        params.insert("inflation_rate".to_string(), "0.08".to_string()); // Change to 8%
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Increase Inflation".to_string(),
+            "Increase inflation rate to 8%".to_string(),
+            ProposalType::ParameterChange,
+            PROPOSAL_DEPOSIT,
+            Some(params),
+            Some("https://t.me/SultanChain/inflation".to_string()),
+            None,
+        ).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 1).await;
+        let tally = gov.tally_proposal(proposal_id).await.unwrap();
+        assert!(tally.passed);
+        
+        // Verify initial inflation
+        let stats_before = staking.get_statistics().await;
+        assert!((stats_before.inflation_rate - 0.04).abs() < 0.001);
+        
+        // Execute with staking integration
+        let result = gov.execute_proposal_with_staking(proposal_id, &staking).await;
+        assert!(result.is_ok());
+        
+        // Verify inflation was updated
+        let stats_after = staking.get_statistics().await;
+        assert!((stats_after.inflation_rate - 0.08).abs() < 0.001, 
+            "Inflation should be updated to 8%, got {}", stats_after.inflation_rate);
+        
+        let proposal = gov.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Executed);
+    }
+    
+    #[tokio::test]
+    async fn test_governance_persistence_roundtrip() {
+        use tempfile::tempdir;
+        use crate::storage::PersistentStorage;
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Create governance manager and submit proposal
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        gov.update_height(100).await;
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Persistence Test".to_string(),
+            "Testing governance state persistence".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/persist".to_string()),
+            None,
+        ).await.unwrap();
+        
+        // Advance and vote
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 101).await;
+        gov.advance_proposal_phases().await;
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        // Persist to storage
+        gov.persist_to_storage(&storage).await.unwrap();
+        
+        // Create new governance manager and restore
+        let gov2 = GovernanceManager::new();
+        gov2.restore_from_storage(&storage).await.unwrap();
+        
+        // Verify state was restored
+        let proposal = gov2.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.title, "Persistence Test");
+        assert_eq!(proposal.status, ProposalStatus::VotingPeriod);
+        
+        let votes = gov2.get_proposal_votes(proposal_id).await;
+        assert_eq!(votes.len(), 1);
+        assert_eq!(votes[0].voter, VOTER1);
+        
+        // Verify next proposal ID was restored
+        let stats = gov2.get_statistics().await;
+        assert_eq!(stats.total_proposals, 1);
+    }
+    
+    #[tokio::test]
+    async fn test_e2e_full_restart_recovery() {
+        // E2E test: Staking + Governance persist and recover after simulated restart
+        use tempfile::tempdir;
+        use crate::storage::PersistentStorage;
+        use crate::staking::StakingManager;
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // === Phase 1: Create initial state ===
+        let staking = StakingManager::new(0.04);
+        let gov = GovernanceManager::new();
+        
+        // Create validator in staking
+        staking.create_validator(
+            VALIDATOR1.to_string(),
+            10_000_000_000_000,
+            0.10, // 10% commission as f64
+        ).await.unwrap();
+        
+        // Delegate to validator
+        staking.delegate(
+            VOTER1.to_string(),
+            VALIDATOR1.to_string(),
+            5_000_000_000_000,
+        ).await.unwrap();
+        
+        // Get staking stats for governance
+        let staking_stats = staking.get_statistics().await;
+        gov.update_total_bonded(staking_stats.total_staked).await; // 15T total
+        gov.update_height(100).await;
+        
+        // Create staking snapshot for governance voting
+        // Need enough voting power to meet quorum (33.4% of 15T = ~5T)
+        let mut snapshot = std::collections::HashMap::new();
+        snapshot.insert(VOTER1.to_string(), 10_000_000_000_000u64); // 10T voting power
+        gov.update_staking_snapshot(100, snapshot).await;
+        
+        // Submit proposal
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "E2E Recovery Test".to_string(),
+            "Testing full staking + governance recovery".to_string(),
+            ProposalType::ParameterChange,
+            PROPOSAL_DEPOSIT,
+            Some({
+                let mut params = std::collections::HashMap::new();
+                params.insert("inflation_rate".to_string(), "0.06".to_string());
+                params
+            }),
+            Some("https://t.me/SultanChain/e2e".to_string()),
+            None,
+        ).await.unwrap();
+        
+        // Advance to voting and cast vote with full voting power
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 101).await;
+        gov.advance_proposal_phases().await;
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 10_000_000_000_000).await.unwrap();
+        
+        // Persist everything
+        staking.persist_to_storage(&storage).await.unwrap();
+        gov.persist_to_storage(&storage).await.unwrap();
+        
+        // === Phase 2: Simulate restart - create new managers and restore ===
+        let staking2 = StakingManager::new(0.04);
+        let gov2 = GovernanceManager::new();
+        
+        // Restore from storage
+        staking2.restore_from_snapshot(storage.load_staking_state().unwrap().unwrap()).await.unwrap();
+        gov2.restore_from_storage(&storage).await.unwrap();
+        
+        // === Phase 3: Verify all state recovered ===
+        // Check staking state
+        let staking_stats2 = staking2.get_statistics().await;
+        assert_eq!(staking_stats2.total_validators, 1, "Validator should be recovered");
+        assert_eq!(staking_stats2.total_staked, 15_000_000_000_000, "Total stake should be recovered");
+        
+        // Check governance state
+        let proposal = gov2.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.title, "E2E Recovery Test");
+        assert_eq!(proposal.status, ProposalStatus::VotingPeriod);
+        
+        let votes = gov2.get_proposal_votes(proposal_id).await;
+        assert_eq!(votes.len(), 1);
+        assert_eq!(votes[0].voter, VOTER1);
+        assert_eq!(votes[0].voting_power, 10_000_000_000_000); // Verify voting power restored
+        
+        // === Phase 4: Continue operations after recovery ===
+        // End voting and tally
+        gov2.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 101).await;
+        let tally = gov2.tally_proposal(proposal_id).await.unwrap();
+        
+        // Verify tally results
+        assert!(tally.quorum_reached, "Quorum should be reached (10T / 15T = 66.7% > 33.4%)");
+        assert!(tally.passed, "Proposal should pass after recovery");
+        
+        // Execute with staking integration
+        gov2.execute_proposal_with_staking(proposal_id, &staking2).await.unwrap();
+        
+        // Verify inflation was updated
+        let final_stats = staking2.get_statistics().await;
+        assert!((final_stats.inflation_rate - 0.06).abs() < 0.001, 
+            "Inflation should be 6% after execution, got {}", final_stats.inflation_rate);
+        
+        // Verify proposal is executed
+        let final_proposal = gov2.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(final_proposal.status, ProposalStatus::Executed);
+    }
+    
+    #[tokio::test]
+    async fn test_auto_persist_methods() {
+        use tempfile::tempdir;
+        use crate::storage::PersistentStorage;
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Use auto-persist submit
+        let proposal_id = gov.submit_proposal_with_storage(
+            PROPOSER1.to_string(),
+            "Auto Persist Test".to_string(),
+            "Testing auto-persist on submit".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/auto".to_string()),
+            None,
+            &storage,
+        ).await.unwrap();
+        
+        // Verify immediately persisted (new manager should see it)
+        let gov2 = GovernanceManager::new();
+        gov2.restore_from_storage(&storage).await.unwrap();
+        let proposal = gov2.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.title, "Auto Persist Test");
+        
+        // Advance and use auto-persist vote
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        gov.vote_with_storage(
+            proposal_id, 
+            VOTER1.to_string(), 
+            VoteOption::Yes, 
+            5_000_000_000_000,
+            &storage,
+        ).await.unwrap();
+        
+        // Verify vote persisted
+        let gov3 = GovernanceManager::new();
+        gov3.restore_from_storage(&storage).await.unwrap();
+        let votes = gov3.get_proposal_votes(proposal_id).await;
+        assert_eq!(votes.len(), 1);
     }
 }

@@ -1,8 +1,8 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.3  
-**Date:** December 29, 2025  
+**Version:** 3.4  
+**Date:** December 30, 2025  
 **Classification:** Public Technical Reference
 
 ---
@@ -80,10 +80,10 @@ sultan-core/src/
 ├── blockchain.rs         (374 lines)  - Block/TX structures (with memo field)
 ├── consensus.rs          (1,078 lines) - Validator management (17 tests, Ed25519)
 ├── p2p.rs                (377 lines)  - libp2p networking
-├── storage.rs            (311 lines)  - RocksDB persistence
+├── storage.rs            (~1,120 lines) - RocksDB + AES-256-GCM encryption (14 tests)
 ├── economics.rs          (100 lines)  - Inflation/APY model
-├── staking.rs            (1,198 lines) - Validator staking
-├── governance.rs         (556 lines)  - On-chain governance
+├── staking.rs            (~1,540 lines) - Validator staking, auto-persist (21 tests)
+├── governance.rs         (~1,900 lines) - Governance with slashing proposals (21 tests)
 ├── token_factory.rs      (354 lines)  - Native token creation
 ├── native_dex.rs         (462 lines)  - AMM swap protocol
 ├── transaction_validator.rs (782 lines) - TX validation (18 tests, typed errors)
@@ -96,7 +96,7 @@ sultan-core/src/
 └── [supporting modules]
 ```
 
-**Total: 12,000+ lines of production Rust code, 125 tests passing**
+**Total: 14,000+ lines of production Rust code, 157 tests passing**
 
 ### 1.3 Key Design Decisions
 
@@ -1194,6 +1194,72 @@ block_cache: parking_lot::Mutex<LruCache<String, Block>>,
 
 A faster alternative to Rust's standard Mutex. Allows only one thread to access the cache at a time (prevents race conditions) but with lower overhead.
 
+### 7.5 Encryption at Rest (AES-256-GCM)
+
+**Why Encryption?**
+
+Sensitive data (wallet information, slashing evidence, some governance proposals) needs protection even if an attacker gains disk access.
+
+**Algorithm: AES-256-GCM**
+
+| Component | Value | What It Means |
+|-----------|-------|---------------|
+| AES-256 | 256-bit symmetric cipher | NIST-approved, used by banks/governments |
+| GCM | Galois/Counter Mode | Provides encryption + authentication |
+| Auth Tag | 16 bytes | Detects any tampering |
+| Nonce | 12 bytes | Unique per encryption (prevents pattern analysis) |
+
+**Key Derivation: HKDF-SHA256 (RFC 5869)**
+
+Instead of using passwords directly as keys, Sultan uses **HKDF** (HMAC-based Key Derivation Function):
+
+```rust
+// From storage.rs
+pub fn new(key: &[u8]) -> Self {
+    use hkdf::Hkdf;
+    use sha2::Sha256;
+    
+    // HKDF-SHA256 key derivation (RFC 5869)
+    let hk = Hkdf::<Sha256>::new(Some(SALT), key);
+    let mut derived_key = [0u8; 32];
+    hk.expand(b"sultan-storage-encryption-v1", &mut derived_key);
+    
+    Self { key: derived_key }
+}
+```
+
+**Why HKDF instead of simple hashing?**
+
+| Method | Security Level | Why |
+|--------|---------------|-----|
+| SHA-256 hash | Good | Fast, but lacks domain separation |
+| HKDF | **Enterprise** | Cryptographic extraction + expansion with context |
+
+*Domain separation:* The "info" parameter (`sultan-storage-encryption-v1`) ensures keys derived for storage can't be used for other purposes even if the same master key is used.
+
+**Encrypted Data Format:**
+```
+┌─────────────┬──────────────────────┬─────────────┐
+│ Nonce (12B) │ Ciphertext (varies)  │ Tag (16B)   │
+└─────────────┴──────────────────────┴─────────────┘
+```
+
+### 7.6 Auto-Compaction
+
+**What is it?**
+
+Sultan automatically compacts the database every 10,000 blocks to maintain performance:
+
+```rust
+// Triggered when blocks processed > 10,000 since last compaction
+if should_compact {
+    // Background compaction - non-blocking
+    self.db.compact_range(None::<&[u8]>, None::<&[u8]>);
+}
+```
+
+*Why it matters:* Without periodic compaction, read performance degrades as the database grows. Auto-compaction keeps queries fast.
+
 ---
 
 ## 8. Native DeFi Primitives
@@ -1581,6 +1647,8 @@ pub enum ProposalType {
     SoftwareUpgrade,    // Node version upgrade
     CommunityPool,      // Fund allocation
     TextProposal,       // Signaling (non-binding)
+    EmergencyAction,    // Requires validator multi-sig
+    SlashingProposal,   // Penalize misbehaving validators
 }
 ```
 
@@ -1592,6 +1660,8 @@ pub enum ProposalType {
 | SoftwareUpgrade | "Upgrade to Sultan v2.0 at block 1,000,000" |
 | CommunityPool | "Grant 100,000 SLTN to XYZ project for integration" |
 | TextProposal | "Should Sultan pursue a partnership with ABC?" |
+| EmergencyAction | "Emergency pause contract X due to exploit" |
+| SlashingProposal | "Slash validator Y 5% for provable misbehavior" |
 
 ### 10.3 Governance Parameters
 
@@ -1680,6 +1750,40 @@ If 5 delegators (10,000 SLTN) vote "No":
 ```
 
 *Why it matters:* Ensures all staked tokens have a voice. Delegators don't lose governance rights by delegating.
+
+### 10.7 Governance Security Features
+
+Sultan implements multiple protections against governance attacks:
+
+| Protection | Mechanism | Why |
+|------------|-----------|-----|
+| **Flash Stake Prevention** | Voting power snapshot at proposal creation | Can't buy tokens, vote, sell |
+| **Anti-Spam Deposits** | 1,000 SLTN deposit required | Economic cost to spam |
+| **Rate Limiting** | Max 3 active proposals per address | Prevents proposal flooding |
+| **Discussion Period** | 2-day wait before voting begins | Community can analyze proposal |
+| **Address Validation** | Bech32 format enforcement | Prevents invalid addresses |
+| **Parameter Bounds** | Inflation 1-20%, Commission <50% | Prevents extreme changes |
+| **Slashing Proposals** | Community can slash misbehaving validators | Accountability via governance |
+| **Emergency Pause** | 67% validator multisig | Rapid response to exploits |
+| **Encrypted Storage** | AES-256-GCM for sensitive proposals | Privacy for slashing evidence |
+
+**Slashing via Governance:**
+
+```rust
+// From governance.rs
+ProposalType::SlashingProposal => {
+    let validator_address = params.get("validator_address")?;
+    let slash_percentage: f64 = params.get("slash_percentage")?.parse()?;
+    
+    // Execute slashing through staking module
+    staking_mgr.slash_validator(
+        validator_address, 
+        SlashReason::Governance,
+        slash_percentage, 
+        jail_duration
+    ).await?;
+}
+```
 
 ---
 
