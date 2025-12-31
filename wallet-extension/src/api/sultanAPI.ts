@@ -93,32 +93,51 @@ export interface UserVote {
   votingPower: string;
 }
 
+// Default timeout for API requests (30 seconds)
+const API_TIMEOUT_MS = 30000;
+
 /**
- * Make REST API request
+ * Make REST API request with timeout
+ * SECURITY: Uses AbortController to prevent hanging requests (DoS protection)
  */
 async function restApi<T>(
   endpoint: string, 
   method: 'GET' | 'POST' = 'GET',
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  timeoutMs: number = API_TIMEOUT_MS
 ): Promise<T> {
-  const options: RequestInit = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  };
+  // Create AbortController for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (body && method === 'POST') {
-    options.body = JSON.stringify(body);
+  try {
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    };
+
+    if (body && method === 'POST') {
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(`${RPC_URL}${endpoint}`, options);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const response = await fetch(`${RPC_URL}${endpoint}`, options);
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
-
-  return response.json();
 }
 
 /**
