@@ -11,7 +11,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useBalance, useStakingInfo, useValidators } from '../hooks/useBalance';
 import { SultanWallet } from '../core/wallet';
 import { sultanAPI, Validator } from '../api/sultanAPI';
-import { validateAmount, verifySessionPin } from '../core/security';
+import { validateAmount, verifySessionPin, isHighValueTransaction, HIGH_VALUE_THRESHOLD_SLTN } from '../core/security';
 import './Stake.css';
 
 // Premium SVG Icons
@@ -85,6 +85,7 @@ export default function Stake() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [highValueWarning, setHighValueWarning] = useState(false);
   
   // PIN verification state
   const [pin, setPin] = useState(['', '', '', '', '', '']);
@@ -138,6 +139,7 @@ export default function Stake() {
   /**
    * Request PIN verification before staking
    * SECURITY: PIN must be verified before any signing operation
+   * SECURITY: Validates validator exists to prevent staking to unknown addresses
    */
   const handleStake = () => {
     if (!wallet || !currentAccount || !selectedValidator) return;
@@ -147,6 +149,21 @@ export default function Stake() {
       setError(amountValidation.error || 'Invalid amount');
       return;
     }
+
+    // SECURITY: Verify validator exists in the active validators list
+    if (!validators || validators.length === 0) {
+      setError('Unable to verify validators. Please try again.');
+      return;
+    }
+
+    const validatorExists = validators.some(v => v.address === selectedValidator.address);
+    if (!validatorExists) {
+      setError('Selected validator is not in the active validators list');
+      return;
+    }
+
+    // SECURITY: Warn user about high-value transactions
+    setHighValueWarning(isHighValueTransaction(amount));
 
     setError('');
     setPin(['', '', '', '', '', '']);
@@ -166,6 +183,9 @@ export default function Stake() {
       setError(amountValidation.error || 'Invalid amount');
       return;
     }
+
+    // SECURITY: Warn user about high-value transactions
+    setHighValueWarning(isHighValueTransaction(amount));
 
     setError('');
     setPin(['', '', '', '', '', '']);
@@ -359,11 +379,26 @@ export default function Stake() {
         <div className="stake-content fade-in" style={{ textAlign: 'center', paddingTop: '60px' }}>
           <LockIcon />
           <h3 style={{ marginTop: '16px', marginBottom: '8px' }}>Enter PIN to {pendingAction}</h3>
-          <p className="text-muted" style={{ marginBottom: '32px' }}>
+          <p className="text-muted" style={{ marginBottom: '16px' }}>
             {pendingAction === 'stake' && `Stake ${amount} SLTN with validator`}
             {pendingAction === 'unstake' && `Unstake ${amount} SLTN (21-day unbonding)`}
             {pendingAction === 'claim' && 'Claim your pending rewards'}
           </p>
+          {highValueWarning && (
+            <div style={{ 
+              background: 'rgba(255, 193, 7, 0.15)', 
+              border: '1px solid rgba(255, 193, 7, 0.5)',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              maxWidth: '300px',
+              margin: '0 auto 16px'
+            }}>
+              <p style={{ color: '#ffc107', fontSize: '14px', margin: 0 }}>
+                ⚠️ High-value transaction (&gt;{HIGH_VALUE_THRESHOLD_SLTN} SLTN)
+              </p>
+            </div>
+          )}
 
           <div className="pin-inputs" style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '24px' }}>
             {pin.map((digit, index) => (

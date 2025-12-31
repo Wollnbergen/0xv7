@@ -11,7 +11,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useBalance } from '../hooks/useBalance';
 import { SultanWallet } from '../core/wallet';
 import { sultanAPI } from '../api/sultanAPI';
-import { validateAddress, validateAmount, verifySessionPin } from '../core/security';
+import { validateAddress, validateAmount, verifySessionPin, validateMoniker } from '../core/security';
 import BackgroundAnimation from '../components/BackgroundAnimation';
 import './BecomeValidator.css';
 
@@ -116,6 +116,14 @@ export default function BecomeValidator() {
     const addrValidation = validateAddress(validatorAddress);
     if (!addrValidation.valid) {
       setError(addrValidation.error || 'Invalid validator address');
+      return;
+    }
+
+    // Validate moniker (sanitize and check length/chars)
+    const monikerToValidate = moniker.trim() || 'Sultan Validator';
+    const monikerValidation = validateMoniker(monikerToValidate);
+    if (!monikerValidation.valid) {
+      setError(monikerValidation.error || 'Invalid moniker');
       return;
     }
 
