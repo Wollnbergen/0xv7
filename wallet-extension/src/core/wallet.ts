@@ -65,6 +65,7 @@ export interface SultanTransaction {
  */
 export class SultanWallet {
   private secureMnemonic: SecureString | null = null;
+  private securePassphrase: SecureString | null = null; // BIP39 optional passphrase
   private accounts: Map<number, SultanAccount> = new Map();
   private destroyed: boolean = false;
 
@@ -106,8 +107,10 @@ export class SultanWallet {
   /**
    * Create wallet from mnemonic
    * SECURITY: Mnemonic is immediately encrypted into SecureString
+   * @param mnemonic - BIP39 mnemonic phrase
+   * @param passphrase - Optional BIP39 passphrase for additional security
    */
-  static async fromMnemonic(mnemonic: string): Promise<SultanWallet> {
+  static async fromMnemonic(mnemonic: string, passphrase?: string): Promise<SultanWallet> {
     if (!SultanWallet.validateMnemonic(mnemonic)) {
       throw new Error('Invalid mnemonic phrase');
     }
@@ -115,6 +118,11 @@ export class SultanWallet {
     
     // SECURITY: Store mnemonic as SecureString (XOR encrypted)
     wallet.secureMnemonic = new SecureString(mnemonic);
+    
+    // SECURITY: Store passphrase if provided (BIP39 optional passphrase)
+    if (passphrase) {
+      wallet.securePassphrase = new SecureString(passphrase);
+    }
     
     // Derive first account by default
     await wallet.deriveAccount(0);
@@ -138,8 +146,9 @@ export class SultanWallet {
 
     // SECURITY: Decrypt mnemonic, use it, then let temporary reference go out of scope
     const mnemonic = this.secureMnemonic.reveal();
-    const seed = mnemonicToSeedSync(mnemonic);
-    // Note: mnemonic string goes out of scope here - V8 will GC it
+    const passphrase = this.securePassphrase?.reveal() ?? '';
+    const seed = mnemonicToSeedSync(mnemonic, passphrase);
+    // Note: mnemonic/passphrase strings go out of scope here - V8 will GC them
     
     const path = `m/44'/${SULTAN_COIN_TYPE}'/0'/0'/${index}`;
     
@@ -176,7 +185,8 @@ export class SultanWallet {
     }
 
     const mnemonic = this.secureMnemonic.reveal();
-    const seed = mnemonicToSeedSync(mnemonic);
+    const passphrase = this.securePassphrase?.reveal() ?? '';
+    const seed = mnemonicToSeedSync(mnemonic, passphrase);
     const path = `m/44'/${SULTAN_COIN_TYPE}'/0'/0'/${index}`;
     const privateKey = this.deriveEd25519Key(seed, path);
     
