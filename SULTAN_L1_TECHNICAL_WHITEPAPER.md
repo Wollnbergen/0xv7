@@ -29,6 +29,7 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Staking APY** | 13.33% |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
+**Wallet PWA:** `https://wallet.sltn.io`  
 **P2P Bootstrap:** See [Validator Guide](VALIDATOR_GUIDE.md) for bootstrap peers  
 **Binary:** 14MB (stripped, LTO-optimized)
 

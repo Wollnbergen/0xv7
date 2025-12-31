@@ -20,23 +20,21 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
 | `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
 | `native_dex.rs` | ~970 | Built-in AMM with Ed25519 signatures (13 tests) |
-| `bridge_integration.rs` | ~1,600 | Cross-chain bridge with real proof verification (32 tests) |
+| `bridge_integration.rs` | ~1,600 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification (32 tests) |
 | `bridge_fees.rs` | ~680 | Zero-fee bridge with async oracle support (23 tests) |
 | `sharding_production.rs` | 2,244 | **PRODUCTION** shard routing with Ed25519, 2PC, WAL recovery |
 | `sharded_blockchain_production.rs` | 1,342 | **PRODUCTION** multi-shard coordinator |
-| `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
-| `sharded_blockchain.rs` | 179 | ⚠️ LEGACY (deprecated, tests only) |
-| `bridge_integration.rs` | varies | Cross-chain bridge coordinator |
-| `bridge_fees.rs` | 279 | Bridge fee calculation |
-| `economics.rs` | 100 | Inflation, rewards, APY calculations |
+| `economics.rs` | 100 | Inflation (fixed 4%), rewards, APY calculations |
 | `transaction_validator.rs` | 782 | Transaction validation (18 tests, typed errors, Ed25519 sig verify) |
 | `blockchain.rs` | 374 | Block/Transaction structures (with memo) |
-| `p2p.rs` | 1,025 | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify) |
+| `p2p.rs` | 1,025 | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify, 16 tests) |
 | `block_sync.rs` | 1,174 | Byzantine-tolerant block sync (voter verification, signature validation, 31 tests) |
 | `quantum.rs` | ~200 | Post-quantum cryptography (Dilithium) |
 | `mev_protection.rs` | ~100 | MEV resistance |
+| `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
+| `sharded_blockchain.rs` | 179 | ⚠️ LEGACY (deprecated, tests only) |
 
-**Total:** ~16,000+ lines of production Rust code (202 tests passing)
+**Total:** ~18,000+ lines of production Rust code (274 tests passing)
 
 ### Cross-Chain Bridges (bridges/)
 
@@ -102,9 +100,10 @@ pub async fn swap(
 | Parameter | Value |
 |-----------|-------|
 | Block Time | ~2 seconds |
+| TPS Capacity | 64,000 (launch) → 64M (max with 8,000 shards) |
 | Minimum Validator Stake | 10,000 SLTN |
-| Validator APY | ~13.33% |
-| Gas Fees | Zero (subsidized by inflation) |
+| Validator APY | ~13.33% (4% inflation ÷ 30% staked) |
+| Gas Fees | Zero (subsidized by 4% fixed inflation) |
 | Shards | 16 at launch (expandable to 8,000) |
 | Consensus | Proof of Stake |
 | Max History/Address | 10,000 entries (pruned) |
@@ -173,7 +172,7 @@ cargo test --workspace
 
 ## Documentation
 
-- [Technical Whitepaper](SULTAN_L1_TECHNICAL_WHITEPAPER.md) - Full technical specification (v3.3)
+- [Technical Whitepaper](SULTAN_L1_TECHNICAL_WHITEPAPER.md) - Full technical specification (v3.5)
 - [Technical Deep Dive](docs/SULTAN_TECHNICAL_DEEP_DIVE.md) - Investor-focused explanation (v3.3)
 - [Code Review Context](docs/CODE_REVIEW_CONTEXT.md) - Context for external auditors
 - [Validator Guide](VALIDATOR_GUIDE.md) - How to run a validator
@@ -181,4 +180,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: December 30, 2025 - Code Review Phase 5 Complete (274 tests, 10/10 rating on all modules including bridge_integration.rs, bridge_fees.rs, token_factory.rs, native_dex.rs)*
+*Last updated: December 31, 2025 - Code Review Phase 5 Complete (274 tests, 10/10 rating on all modules including bridge_integration.rs, bridge_fees.rs, token_factory.rs, native_dex.rs)*

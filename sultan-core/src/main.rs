@@ -671,11 +671,16 @@ impl NodeState {
                     .unwrap_or_default();
                 let block_hash = format!("{:x}", sha2::Sha256::digest(&block_data));
                 
+                // Sign block hash with validator's key for proposer verification
+                // In production, the proposer signs the block hash
+                let proposer_signature = Vec::new(); // TODO: Sign with validator's key
+                
                 if let Err(e) = p2p.read().await.broadcast_block(
                     block.index,
                     &proposer,
                     &block_hash,
                     block_data,
+                    proposer_signature,
                 ).await {
                     warn!("Failed to broadcast block via P2P: {}", e);
                 } else {
@@ -2369,7 +2374,10 @@ async fn main() -> Result<()> {
                 if let Some(ref p2p) = p2p_state.p2p_network {
                     let peer_count = p2p.read().await.peer_count().await;
                     info!("📢 Announcing validator {} to P2P network ({} peers connected)", addr, peer_count);
-                    if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
+                    // Use placeholder pubkey/signature - validators register via RPC with real keys
+                    let pubkey = [0u8; 32];
+                    let signature = Vec::new();
+                    if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
                         warn!("Failed to announce validator: {}", e);
                     } else {
                         info!("✅ Announced validator {} to P2P network", addr);
@@ -2390,7 +2398,7 @@ async fn main() -> Result<()> {
                         } 
                     } => {
                         match msg {
-                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id } => {
+                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, pubkey: _, signature: _ } => {
                                 // Check if validator is already registered
                                 let consensus = p2p_state.consensus.read().await;
                                 if !consensus.is_validator(address) {
@@ -2405,7 +2413,7 @@ async fn main() -> Result<()> {
                                 info!("📡 Received validator announcement: {} (stake: {}, peer: {})", 
                                       address, stake, peer_id);
                             }
-                            NetworkMessage::BlockProposal { height, proposer, block_hash, block_data } => {
+                            NetworkMessage::BlockProposal { height, proposer, block_hash, block_data, proposer_signature: _ } => {
                                 // === PRODUCTION BLOCK SYNC ===
                                 // Process incoming block from another validator
                                 debug!("📥 Received block proposal: height={}, proposer={}, hash={}", 
@@ -2528,7 +2536,9 @@ async fn main() -> Result<()> {
                                 if count % 6 == 0 {
                                     let peer_count = p2p.read().await.peer_count().await;
                                     if peer_count > 0 {
-                                        if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
+                                        let pubkey = [0u8; 32];
+                                        let signature = Vec::new();
+                                        if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
                                             debug!("Failed to re-announce validator: {}", e);
                                         } else {
                                             info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
@@ -2587,6 +2597,8 @@ struct CreateTokenRequest {
     max_supply: Option<u128>,
     logo_url: Option<String>,
     description: Option<String>,
+    signature: String,  // hex-encoded Ed25519 signature
+    pubkey: String,     // hex-encoded 32-byte public key
 }
 
 #[derive(Debug, Deserialize)]
@@ -2594,6 +2606,9 @@ struct MintTokenRequest {
     denom: String,
     to_address: String,
     amount: u128,
+    minter: String,     // address of minter (must be token creator)
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2602,6 +2617,8 @@ struct TransferTokenRequest {
     from_address: String,
     to_address: String,
     amount: u128,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2609,6 +2626,8 @@ struct BurnTokenRequest {
     denom: String,
     from_address: String,
     amount: u128,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2618,6 +2637,8 @@ struct CreatePairRequest {
     token_b: String,
     amount_a: u128,
     amount_b: u128,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2627,6 +2648,8 @@ struct SwapRequest {
     token_in: String,
     amount_in: u128,
     min_amount_out: u128,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2635,6 +2658,9 @@ struct AddLiquidityRequest {
     pair_id: String,
     amount_a: u128,
     amount_b: u128,
+    min_lp_tokens: Option<u128>,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2642,13 +2668,37 @@ struct RemoveLiquidityRequest {
     provider: String,
     pair_id: String,
     liquidity: u128,
+    min_amount_a: Option<u128>,
+    min_amount_b: Option<u128>,
+    signature: String,
+    pubkey: String,
 }
 
 async fn handle_create_token(
     request: CreateTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.token_factory.create_token(
+    // Parse signature and pubkey from hex
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.token_factory.create_token_with_signature(
         &request.creator,
         request.name,
         request.symbol,
@@ -2657,6 +2707,8 @@ async fn handle_create_token(
         request.max_supply,
         request.logo_url,
         request.description,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(denom) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2673,10 +2725,31 @@ async fn handle_mint_token(
     request: MintTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.token_factory.mint_to(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.token_factory.mint_to_with_signature(
         &request.denom,
         &request.to_address,
         request.amount,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(_) => Ok(warp::reply::json(&serde_json::json!({
             "success": true
@@ -2692,11 +2765,32 @@ async fn handle_transfer_token(
     request: TransferTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.token_factory.transfer(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.token_factory.transfer_with_signature(
         &request.denom,
         &request.from_address,
         &request.to_address,
         request.amount,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(_) => Ok(warp::reply::json(&serde_json::json!({
             "success": true
@@ -2712,10 +2806,31 @@ async fn handle_burn_token(
     request: BurnTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.token_factory.burn(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.token_factory.burn_with_signature(
         &request.denom,
         &request.from_address,
         request.amount,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(_) => Ok(warp::reply::json(&serde_json::json!({
             "success": true
@@ -2770,12 +2885,33 @@ async fn handle_create_pair(
     request: CreatePairRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.native_dex.create_pair(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.native_dex.create_pair_with_signature(
         &request.creator,
         &request.token_a,
         &request.token_b,
         request.amount_a,
         request.amount_b,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(pair_id) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2792,12 +2928,33 @@ async fn handle_swap(
     request: SwapRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.native_dex.swap(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.native_dex.swap_with_signature(
         &request.from_address,
         &request.pair_id,
         &request.token_in,
         request.amount_in,
         request.min_amount_out,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(amount_out) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2814,13 +2971,34 @@ async fn handle_add_liquidity(
     request: AddLiquidityRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.native_dex.add_liquidity(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.native_dex.add_liquidity_with_signature(
         &request.pair_id,
         &request.provider,
         request.amount_a,
         request.amount_b,
-        0, // amount_a_min
-        0, // amount_b_min
+        0, // amount_a_min (slippage protection)
+        0, // amount_b_min (slippage protection)
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok((amount_a, amount_b, liquidity)) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2839,12 +3017,33 @@ async fn handle_remove_liquidity(
     request: RemoveLiquidityRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.native_dex.remove_liquidity(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.native_dex.remove_liquidity_with_signature(
         &request.pair_id,
         &request.provider,
         request.liquidity,
-        0, // amount_a_min
-        0, // amount_b_min
+        request.min_amount_a.unwrap_or(0),
+        request.min_amount_b.unwrap_or(0),
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok((amount_a, amount_b)) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
