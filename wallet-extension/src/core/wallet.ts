@@ -15,6 +15,7 @@ import { sha512 } from '@noble/hashes/sha512';
 import { randomBytes } from '@noble/hashes/utils';
 import * as ed25519 from '@noble/ed25519';
 import { bech32 } from 'bech32';
+import stringify from 'fast-json-stable-stringify';
 import { secureWipe, SecureString } from './security';
 
 // Configure ed25519 to use sha512
@@ -276,7 +277,9 @@ export class SultanWallet {
       throw new Error(`Account at index ${accountIndex} not found`);
     }
 
-    const canonical = JSON.stringify(txData);
+    // SECURITY: Use stable JSON stringify for deterministic key ordering
+    // This ensures signature matches node verification regardless of object key order
+    const canonical = stringify(txData);
     const msgBytes = sha256(new TextEncoder().encode(canonical));
     
     // SECURITY: Derive key on-demand
@@ -352,9 +355,11 @@ export class SultanWallet {
 
   /**
    * Serialize transaction for signing
+   * SECURITY: Uses stable JSON stringify for deterministic key ordering
    */
   private serializeTransaction(tx: SultanTransaction): Uint8Array {
-    const canonical = JSON.stringify({
+    // Use stable stringify to ensure consistent key ordering
+    const canonical = stringify({
       from: tx.from,
       to: tx.to,
       amount: tx.amount,
