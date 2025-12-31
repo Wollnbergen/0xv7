@@ -218,7 +218,8 @@ describe('SultanWallet - Amount Formatting', () => {
     });
 
     it('should handle large amounts', () => {
-      expect(formatSLTN(1_000_000_000_000_000_000n)).toBe('1000000000');
+      // formatSLTN uses locale formatting with commas for readability
+      expect(formatSLTN(1_000_000_000_000_000_000n)).toBe('1,000,000,000');
     });
 
     it('should handle string input', () => {
