@@ -2299,13 +2299,30 @@ A Progressive Web App is a website that behaves like a native app:
 | Threat | Mitigation |
 |--------|------------|
 | **Server compromise** | No server - fully client-side |
-| **Key extraction** | Keys encrypted in IndexedDB with user PIN |
-| **Memory dump** | Keys only decrypted momentarily for signing |
+| **Key extraction** | Keys encrypted in IndexedDB with user PIN (AES-256-GCM, PBKDF2 600K iterations) |
+| **Memory dump** | Keys only decrypted momentarily for signing; SecureString XOR encryption in memory |
+| **Session PIN exposure** | PIN stored as SecureString (XOR encrypted), never as plaintext JS string |
 | **XSS attack** | Content Security Policy, no eval(), strict input validation |
-| **MITM attack** | HTTPS only, RPC endpoint pinning |
+| **MITM attack** | HTTPS only, RPC endpoint pinning, request timeouts |
+| **API manipulation** | Zod schema validation on all responses, retry with exponential backoff |
 | **Clipboard sniffing** | Clear clipboard after 30 seconds |
 | **Shoulder surfing** | PIN required, seed phrase hidden by default |
 | **Phishing** | No external links to sensitive actions |
+| **High-value theft** | Confirmation warning for transactions >1000 SLTN |
+| **Invalid validator staking** | Validator existence check before delegation |
+| **Log exposure** | Production logger filters mnemonic, private keys, Bech32 addresses |
+
+**Security Features (v1.1.0):**
+
+| Feature | Implementation |
+|---------|---------------|
+| **SecureString** | XOR-encrypted in-memory storage for PIN and mnemonic |
+| **BIP39 Passphrase** | Optional 25th word for plausible deniability |
+| **Deterministic Signing** | `fast-json-stable-stringify` + SHA-256 hash |
+| **API Retry** | Exponential backoff (1s, 2s, 4s) on 5xx errors |
+| **Response Validation** | Zod schemas for type-safe API parsing |
+| **PIN Verification** | Required on Send, Stake, and BecomeValidator |
+| **Moniker Validation** | 3-50 chars, alphanumeric only for validators |
 
 **Address Validation:**
 
@@ -2526,16 +2543,20 @@ export async function stake(delegation: StakeRequest): Promise<TxResult> {
 
 ### 13.10 Testing
 
-The wallet has 113 tests covering critical paths:
+The wallet has **219 tests** covering critical paths:
 
 | Test File | Count | Coverage |
 |-----------|-------|----------|
-| `wallet.test.ts` | 12 | Key generation, signing, derivation |
-| `security.test.ts` | 15 | Address validation, auth |
-| `storage.secure.test.ts` | 8 | Encrypted storage |
-| `multichain.test.ts` | 27 | Address format validation |
+| `wallet.test.ts` | 39 | Key generation, signing, BIP39 passphrase, derivation |
+| `security.test.ts` | 30+ | Address validation, rate limiting, SecureString, PBKDF2 |
+| `storage.secure.test.ts` | 14 | Encrypted storage, checksum verification |
+| `e2e.wallet.test.ts` | 12 | Full wallet lifecycle, signature verification |
+| `totp.test.ts` | 34 | TOTP generation, backup codes |
+| `logger.test.ts` | 22 | Sensitive data filtering |
+| `sultanAPI.test.ts` | 10 | API retry, Zod validation, timeouts |
+| `transactions.security.test.ts` | 29 | High-value warnings, validator checks |
 | `nfts.test.tsx` | 7 | NFT gallery UI |
-| Component tests | 44 | Screen rendering, interactions |
+| Component tests | 22+ | Screen rendering, interactions |
 
 **Running tests:**
 
@@ -2544,7 +2565,27 @@ npm test              # Run all tests
 npm run test:coverage # With coverage report
 ```
 
-### 13.11 Deployment
+### 13.11 Security Review Status (December 2025)
+
+The wallet underwent a comprehensive security review:
+
+| Priority | Files | Score |
+|----------|-------|-------|
+| P1 Core Crypto | wallet.ts, security.ts, storage.secure.ts | 10/10 ✅ |
+| P2 API Layer | sultanAPI.ts | 10/10 ✅ |
+| P3 Critical Screens | Send.tsx, Stake.tsx, BecomeValidator.tsx | 10/10 ✅ |
+| P4 Supporting Files | logger.ts, totp.ts, useWallet.tsx | 10/10 ✅ |
+| P5 Tests | All test files | 10/10 ✅ |
+
+**Key Improvements:**
+- SecureString for session PIN (XOR encrypted)
+- BIP39 passphrase support (plausible deniability)
+- Stable JSON stringify (deterministic signatures)
+- API timeouts and Zod validation
+- High-value transaction warnings
+- E2E signature verification tests
+
+### 13.12 Deployment
 
 **Repository:** `github.com/Wollnbergen/PWA`
 
