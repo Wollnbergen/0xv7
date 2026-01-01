@@ -24,11 +24,11 @@
 //!
 //! Sultan supports governance-activated feature flags for runtime upgrades:
 //!
-//! - `wasm_contracts_enabled`: CosmWasm smart contracts
-//! - `evm_contracts_enabled`: EVM smart contracts (future)
-//! - `ibc_enabled`: IBC protocol (future)
+//! - `smart_contracts_enabled`: Smart contracts (VM to be selected post-launch)
+//! - `quantum_signatures_enabled`: Dilithium3 quantum-resistant signatures
+//! - `bridges_enabled`: Cross-chain bridges (BTC, ETH, SOL, TON)
 //!
-//! See [`Config`] and [`wasm_runtime`] for details.
+//! See [`Config`] and [`FeatureFlags`] for details.
 
 pub mod blockchain;
 pub mod block_sync;
@@ -51,7 +51,6 @@ pub mod staking;
 pub mod governance;
 pub mod token_factory;
 pub mod native_dex;
-pub mod wasm_runtime;
 
 // Re-export main types for convenience
 pub use blockchain::{Blockchain, Block, Transaction, Account};
@@ -62,9 +61,6 @@ pub use storage::PersistentStorage;
 pub use types::{Address, AddressError};
 pub use config::{Config, FeatureFlags};
 pub use transaction_validator::TransactionValidator;
-
-// Hot-upgrade runtime types
-pub use wasm_runtime::{WasmRuntime, WasmStats, Contract, CodeInfo, ExecutionResult};
 
 // Production sharding - the unified Sultan blockchain
 pub use sharding_production::{ShardingCoordinator as ProductionShardingCoordinator, ShardConfig as ProductionShardConfig};
@@ -170,23 +166,5 @@ mod tests {
         
         // Unknown feature should fail
         assert!(config.update_feature("unknown_feature", true).is_err());
-    }
-
-    #[test]
-    fn test_wasm_runtime_disabled_by_default() {
-        let runtime = WasmRuntime::new();
-        assert!(!runtime.is_enabled());
-    }
-
-    #[test]
-    fn test_wasm_runtime_activation() {
-        let mut runtime = WasmRuntime::new();
-        assert!(!runtime.is_enabled());
-        
-        runtime.set_enabled(true);
-        assert!(runtime.is_enabled());
-        
-        runtime.set_enabled(false);
-        assert!(!runtime.is_enabled());
     }
 }

@@ -30,13 +30,17 @@ pub struct FeatureFlags {
     /// Cross-chain bridges (currently active)
     pub bridges_enabled: bool,
     
-    /// CosmWasm smart contracts (to be activated via governance)
+    /// Smart contracts - VM to be selected post-launch (future)
+    /// Options: wasmer/wasmtime, Move VM, or custom
     pub wasm_contracts_enabled: bool,
     
-    /// EVM smart contracts (future, to be activated via governance)
+    /// EVM compatibility layer (future)
     pub evm_contracts_enabled: bool,
     
-    /// IBC protocol (future, to be activated via governance)
+    /// Quantum-resistant signatures using Dilithium3 (future)
+    pub quantum_signatures_enabled: bool,
+    
+    /// Reserved for future cross-chain protocol (future)
     pub ibc_enabled: bool,
 }
 
@@ -65,6 +69,7 @@ impl Default for FeatureFlags {
             // Disabled at launch, activated later via governance
             wasm_contracts_enabled: false,
             evm_contracts_enabled: false,
+            quantum_signatures_enabled: false,
             ibc_enabled: false,
         }
     }
@@ -88,12 +93,16 @@ impl Config {
     /// Update a feature flag (used by governance)
     pub fn update_feature(&mut self, feature: &str, enabled: bool) -> Result<()> {
         match feature {
-            "wasm_contracts_enabled" => {
+            "wasm_contracts_enabled" | "smart_contracts_enabled" => {
                 self.features.wasm_contracts_enabled = enabled;
                 Ok(())
             }
             "evm_contracts_enabled" => {
                 self.features.evm_contracts_enabled = enabled;
+                Ok(())
+            }
+            "quantum_signatures_enabled" => {
+                self.features.quantum_signatures_enabled = enabled;
                 Ok(())
             }
             "ibc_enabled" => {

@@ -21,7 +21,6 @@ use sultan_core::sharded_blockchain_production::ConfirmedTransaction;
 use sultan_core::SultanBlockchain;
 use sultan_core::p2p::{P2PNetwork, NetworkMessage};
 use sultan_core::config::Config;
-use sultan_core::wasm_runtime::{WasmRuntime, SharedWasmRuntime};
 use anyhow::{Result, Context, bail};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
@@ -321,8 +320,6 @@ struct NodeState {
     config: Arc<RwLock<Config>>,
     /// Path to config file for persistence
     config_path: PathBuf,
-    /// WASM runtime for CosmWasm smart contracts (activated via governance)
-    wasm_runtime: SharedWasmRuntime,
 }
 
 impl NodeState {
@@ -519,13 +516,6 @@ impl NodeState {
             }
             cfg
         };
-        
-        // Initialize WASM runtime (enabled state matches config)
-        let wasm_runtime = Arc::new(RwLock::new(WasmRuntime::new()));
-        if config.features.wasm_contracts_enabled {
-            wasm_runtime.write().await.set_enabled(true);
-            info!("🚀 WASM runtime enabled from config");
-        }
 
         Ok(Self {
             blockchain: blockchain_arc,
@@ -545,7 +535,6 @@ impl NodeState {
             allowed_origins,
             config: Arc::new(RwLock::new(config)),
             config_path,
-            wasm_runtime,
         })
     }
 
@@ -580,33 +569,25 @@ impl NodeState {
             }
         }
         
-        // Activate runtime components based on feature
+        // Log feature activation - actual runtime components to be added post-launch
         match feature {
-            "wasm_contracts_enabled" => {
-                let mut runtime = self.wasm_runtime.write().await;
-                runtime.set_enabled(enabled);
+            "smart_contracts_enabled" => {
                 if enabled {
-                    info!("🚀 WASM runtime activated - CosmWasm contracts now available");
+                    info!("🚀 Smart contracts feature flag enabled (VM to be selected post-launch)");
                 } else {
-                    warn!("⚠️  WASM runtime deactivated - Contract operations will fail");
-                }
-            }
-            "evm_contracts_enabled" => {
-                if enabled {
-                    info!("🚀 EVM contracts feature flag enabled (runtime pending implementation)");
-                    // TODO: Initialize EVM runtime when implemented
-                }
-            }
-            "ibc_enabled" => {
-                if enabled {
-                    info!("🚀 IBC protocol feature flag enabled (runtime pending implementation)");
-                    // TODO: Initialize IBC relayer when implemented
+                    warn!("⚠️  Smart contracts feature flag disabled");
                 }
             }
             "bridges_enabled" => {
                 info!("🌉 Bridge feature flag updated: {}", enabled);
                 // Bridges are currently always available via BridgeManager
                 // This flag can be used for emergency disabling
+            }
+            "quantum_signatures_enabled" => {
+                if enabled {
+                    info!("🔐 Quantum-resistant signatures feature flag enabled");
+                    // TODO: Integrate Dilithium3 signatures when ready
+                }
             }
             _ => {
                 info!("📋 Feature flag {} updated to {}", feature, enabled);
@@ -2523,21 +2504,16 @@ mod rpc {
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
         let features = state.get_feature_flags().await;
-        let wasm_stats = state.wasm_runtime.read().await.get_stats();
         
         Ok(warp::reply::json(&serde_json::json!({
             "features": {
                 "sharding_enabled": features.sharding_enabled,
                 "governance_enabled": features.governance_enabled,
                 "bridges_enabled": features.bridges_enabled,
-                "wasm_contracts_enabled": features.wasm_contracts_enabled,
+                "smart_contracts_enabled": features.wasm_contracts_enabled,
                 "evm_contracts_enabled": features.evm_contracts_enabled,
+                "quantum_signatures_enabled": features.quantum_signatures_enabled,
                 "ibc_enabled": features.ibc_enabled
-            },
-            "wasm_runtime": {
-                "enabled": wasm_stats.enabled,
-                "total_codes": wasm_stats.total_codes,
-                "total_contracts": wasm_stats.total_contracts
             }
         })))
     }

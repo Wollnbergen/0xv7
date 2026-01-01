@@ -45,19 +45,20 @@ node/                  # Separate crate - NOT the main node code
 | **Quantum Crypto (Dilithium3)** | ✅ Implemented, compiles | ❌ Not integrated into transaction flow |
 | **Feature Flags** | ✅ Config in NodeState | ✅ Loaded at startup, persisted |
 | **Governance Hot-Activation** | ✅ Full integration | ✅ execute_proposal → activate_feature |
-| **WASM Runtime** | ✅ Implemented | ✅ wasm_runtime.rs with enable/disable |
-| **EVM Runtime** | ❌ Not implemented | ❌ Future feature |
-| **IBC Protocol** | ❌ Not implemented | ❌ Future feature |
+| **Smart Contracts** | ❌ VM not selected | ❌ To be decided post-launch (wasmer/wasmtime/Move) |
+| **EVM Compatibility** | ❌ Not implemented | ❌ Future feature |
 
 ### ✅ Hot-Upgrade Infrastructure Complete (Jan 2026)
 The hot-upgrade pipeline is now fully wired:
 - `NodeState` has `config: Arc<RwLock<Config>>` field
-- `NodeState` has `wasm_runtime: SharedWasmRuntime` field
 - Config is loaded from `data/config.json` at startup
-- `NodeState::activate_feature()` method enables runtime components
+- `NodeState::activate_feature()` method updates config and logs changes
 - `POST /governance/execute/:id` calls `activate_feature` for feature flags
 - `GET /governance/features` shows current feature status
 - Config changes are persisted to disk after activation
+
+**Note**: Sultan is NOT a Cosmos chain. Feature flags for smart contracts exist as placeholders
+until a VM is selected post-launch. The infrastructure is ready for any VM choice.
 
 ---
 
