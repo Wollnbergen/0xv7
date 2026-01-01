@@ -881,14 +881,25 @@ Sultan is designed for multi-chain interoperability through purpose-built bridge
 ### 9.3 Bridge Security
 
 **Multi-Signature Validation:**
-- Threshold: 7-of-11 validator signatures
-- Rotation: Validator set updates monthly
+- Large transaction threshold: >100,000 units requires 2-of-3 multi-sig
+- Treasury updates: 3-of-5 governance multi-sig required
+- Validator set rotation: Monthly key updates
 - Slashing: 50% stake for bridge fraud
+
+**Rate Limiting:**
+- Per-pubkey limits: 50 requests/minute default
+- Automatic window cleanup for memory efficiency
+- Integrated into transaction submission flow
 
 **Monitoring:**
 - Real-time transaction tracking
 - Anomaly detection (unusual volumes)
 - Circuit breakers (auto-pause on attacks)
+
+**ZK Proof Validation:**
+- Groth16 structure validation (pi_a:64, pi_b:128, pi_c:64 bytes)
+- Zero-element rejection for elliptic curve points
+- Enhanced error reporting with validation details
 
 ### 9.4 Production Proof Verification
 

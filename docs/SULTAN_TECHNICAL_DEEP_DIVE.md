@@ -88,8 +88,8 @@ sultan-core/src/
 ├── token_factory.rs      (~880 lines) - Native token creation, Ed25519 signatures (14 tests)
 ├── native_dex.rs         (~970 lines) - AMM with Ed25519 signatures (13 tests)
 ├── transaction_validator.rs (782 lines) - TX validation (18 tests, typed errors)
-├── bridge_fees.rs        (~680 lines) - Zero-fee bridge, async oracle (23 tests)
-├── bridge_integration.rs (~1,600 lines) - Bridge coordination, real proof verification (32 tests)
+├── bridge_fees.rs        (~880 lines) - Zero-fee bridge, rate limiting, treasury governance (30 tests)
+├── bridge_integration.rs (~1,965 lines) - Bridge coordination, real proof verification, multi-sig (39 tests)
 ├── sharding_production.rs(2,244 lines)- PRODUCTION sharding (Ed25519, 2PC, WAL)
 ├── sharded_blockchain_production.rs (1,342 lines) - Production shard coordinator
 ├── sharding.rs           (362 lines)  - LEGACY (deprecated)
@@ -1656,9 +1656,38 @@ fee_configs.insert("bitcoin".to_string(), BridgeFeeConfig {
 | Mechanism | What It Does | Why It Matters |
 |-----------|--------------|----------------|
 | **HTLC** | Atomic swaps with cryptographic locks | Either swap completes or no one loses money |
-| **Multi-sig** | Distributed custody (3-of-5, etc.) | No single party can steal funds |
+| **Multi-sig** | Distributed custody (2-of-3 for large tx, 3-of-5 for treasury) | No single party can steal funds |
+| **Rate Limiting** | 50 req/min per pubkey | Prevents spam and DoS attacks |
+| **Treasury Governance** | Multi-sig approval for treasury updates | Prevents unauthorized treasury changes |
+| **ZK Validation** | Groth16 structure checks + zero-element rejection | Cryptographic proof integrity |
 | **Fraud proofs** | Prove invalid state claims | Anyone can challenge a bad bridge transaction |
 | **Time-locks** | Large withdrawals have delay | Time to respond if attack detected |
+
+**Large Transaction Protection:**
+
+Transactions exceeding 100,000 units automatically require multi-signature approval:
+
+```rust
+// From bridge_integration.rs
+pub const LARGE_TX_THRESHOLD: u128 = 100_000;
+
+// 2-of-3 multi-sig for large transactions
+pub struct MultiSigConfig {
+    pub required_signatures: usize,  // Default: 2
+    pub authorized_pubkeys: Vec<[u8; 32]>,  // Default: 3 signers
+}
+```
+
+**Rate Limiting Implementation:**
+
+```rust
+// From bridge_fees.rs
+pub struct RateLimiter {
+    pub max_requests: u32,     // Default: 50
+    pub window_secs: u64,      // Default: 60 seconds
+    windows: HashMap<String, (u64, u32)>,  // per-pubkey tracking
+}
+```
 
 ### 9.6 Proof Verification (Production Implementation)
 

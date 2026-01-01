@@ -20,8 +20,8 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
 | `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
 | `native_dex.rs` | ~970 | Built-in AMM with Ed25519 signatures (13 tests) |
-| `bridge_integration.rs` | ~1,600 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification (32 tests) |
-| `bridge_fees.rs` | ~680 | Zero-fee bridge with async oracle support (23 tests) |
+| `bridge_integration.rs` | ~1,965 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification, rate limiting, multi-sig (39 tests) |
+| `bridge_fees.rs` | ~880 | Zero-fee bridge with rate limiting, treasury governance, async oracle (30 tests) |
 | `sharding_production.rs` | 2,244 | **PRODUCTION** shard routing with Ed25519, 2PC, WAL recovery |
 | `sharded_blockchain_production.rs` | 1,342 | **PRODUCTION** multi-shard coordinator |
 | `economics.rs` | 100 | Inflation (fixed 4%), rewards, APY calculations |
