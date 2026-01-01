@@ -1,12 +1,17 @@
 // Native DEX Module - Automated Market Maker (AMM)
 // Enables token swapping without smart contracts using constant product formula
+//
+// Security features:
+// - Ed25519 signature verification on swap/add/remove operations
+// - Slippage protection with minimum output amounts
+// - Constant product formula (x * y = k) for fair pricing
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{info, debug};
 
 use crate::token_factory::TokenFactory;
 
@@ -42,8 +47,9 @@ impl NativeDex {
         }
     }
     
-    /// Create a new liquidity pool
-    pub async fn create_pair(
+    /// Internal: Create a new liquidity pool
+    /// Private method - use `create_pair_with_signature` for public API
+    async fn create_pair_internal(
         &self,
         creator: &str,
         token_a: &str,
@@ -73,8 +79,8 @@ impl NativeDex {
         drop(pools);
         
         // Transfer tokens from creator to pool
-        self.token_factory.transfer(&token_a, creator, &pair_id, reserve_a).await?;
-        self.token_factory.transfer(&token_b, creator, &pair_id, reserve_b).await?;
+        self.token_factory.transfer_internal(&token_a, creator, &pair_id, reserve_a).await?;
+        self.token_factory.transfer_internal(&token_b, creator, &pair_id, reserve_b).await?;
         
         // Calculate initial LP tokens (geometric mean: sqrt(a * b))
         let lp_supply = integer_sqrt(reserve_a * reserve_b);
@@ -112,8 +118,9 @@ impl NativeDex {
         Ok(pair_id)
     }
     
-    /// Swap tokens using constant product formula
-    pub async fn swap(
+    /// Internal: Swap tokens using constant product formula
+    /// Private method - use `swap_with_signature` for public API
+    async fn swap_internal(
         &self,
         pair_id: &str,
         user: &str,
@@ -177,8 +184,8 @@ impl NativeDex {
         drop(pools);
         
         // Execute token transfers
-        self.token_factory.transfer(token_in, user, &pair_id_clone, amount_in).await?;
-        self.token_factory.transfer(&token_out_clone, &pair_id_clone, user, amount_out).await?;
+        self.token_factory.transfer_internal(token_in, user, &pair_id_clone, amount_in).await?;
+        self.token_factory.transfer_internal(&token_out_clone, &pair_id_clone, user, amount_out).await?;
         
         info!("✅ Swap executed: {} {} → {} {}", 
             amount_in, token_in, amount_out, token_out_clone);
@@ -186,8 +193,9 @@ impl NativeDex {
         Ok(amount_out)
     }
     
-    /// Add liquidity to existing pool
-    pub async fn add_liquidity(
+    /// Internal: Add liquidity to existing pool
+    /// Private method - use `add_liquidity_with_signature` for public API
+    async fn add_liquidity_internal(
         &self,
         pair_id: &str,
         user: &str,
@@ -244,8 +252,8 @@ impl NativeDex {
         drop(pools);
         
         // Transfer tokens to pool
-        self.token_factory.transfer(&token_a, user, &pair_id_clone, amount_a).await?;
-        self.token_factory.transfer(&token_b, user, &pair_id_clone, amount_b).await?;
+        self.token_factory.transfer_internal(&token_a, user, &pair_id_clone, amount_a).await?;
+        self.token_factory.transfer_internal(&token_b, user, &pair_id_clone, amount_b).await?;
         
         info!("✅ Liquidity added: {} {} + {} {} → {} LP tokens", 
             amount_a, token_a, amount_b, token_b, lp_tokens);
@@ -253,8 +261,9 @@ impl NativeDex {
         Ok((amount_a, amount_b, lp_tokens))
     }
     
-    /// Remove liquidity from pool
-    pub async fn remove_liquidity(
+    /// Internal: Remove liquidity from pool
+    /// Private method - use `remove_liquidity_with_signature` for public API
+    async fn remove_liquidity_internal(
         &self,
         pair_id: &str,
         user: &str,
@@ -306,8 +315,8 @@ impl NativeDex {
         drop(pools);
         
         // Transfer tokens back to user
-        self.token_factory.transfer(&token_a, &pair_id_clone, user, amount_a).await?;
-        self.token_factory.transfer(&token_b, &pair_id_clone, user, amount_b).await?;
+        self.token_factory.transfer_internal(&token_a, &pair_id_clone, user, amount_a).await?;
+        self.token_factory.transfer_internal(&token_b, &pair_id_clone, user, amount_b).await?;
         
         info!("✅ Liquidity removed: {} LP tokens → {} {} + {} {}", 
             lp_tokens, amount_a, token_a, amount_b, token_b);
@@ -340,6 +349,139 @@ impl NativeDex {
             0
         }
     }
+
+    /// Verify Ed25519 signature for DEX operations
+    pub fn verify_ed25519_signature(pubkey: &[u8; 32], message: &[u8], signature: &[u8]) -> bool {
+        use ed25519_dalek::{Signature, VerifyingKey, Verifier};
+        
+        if signature.len() != 64 {
+            return false;
+        }
+        
+        let Ok(verifying_key) = VerifyingKey::from_bytes(pubkey) else {
+            return false;
+        };
+        
+        let Ok(sig) = Signature::try_from(signature) else {
+            return false;
+        };
+        
+        verifying_key.verify(message, &sig).is_ok()
+    }
+
+    /// Swap with Ed25519 signature verification
+    pub async fn swap_with_signature(
+        &self,
+        pair_id: &str,
+        user: &str,
+        token_in: &str,
+        amount_in: u128,
+        min_amount_out: u128,
+        signature: &[u8],
+        pubkey: &[u8; 32],
+    ) -> Result<u128> {
+        // Verify signature over swap data
+        let sign_data = format!("swap:{}:{}:{}:{}:{}", pair_id, user, token_in, amount_in, min_amount_out);
+        if !Self::verify_ed25519_signature(pubkey, sign_data.as_bytes(), signature) {
+            bail!("Invalid Ed25519 signature on swap");
+        }
+        debug!("✅ Swap signature verified for {} {} in {}", amount_in, token_in, pair_id);
+        
+        // Perform the actual swap
+        self.swap_internal(pair_id, user, token_in, amount_in, min_amount_out).await
+    }
+
+    /// Create pair with Ed25519 signature verification
+    pub async fn create_pair_with_signature(
+        &self,
+        creator: &str,
+        token_a: &str,
+        token_b: &str,
+        amount_a: u128,
+        amount_b: u128,
+        signature: &[u8],
+        pubkey: &[u8; 32],
+    ) -> Result<String> {
+        let sign_data = format!("create_pair:{}:{}:{}:{}:{}", creator, token_a, token_b, amount_a, amount_b);
+        if !Self::verify_ed25519_signature(pubkey, sign_data.as_bytes(), signature) {
+            bail!("Invalid Ed25519 signature on create_pair");
+        }
+        debug!("✅ Create pair signature verified for {}/{}", token_a, token_b);
+        
+        self.create_pair_internal(creator, token_a, token_b, amount_a, amount_b).await
+    }
+
+    /// Add liquidity with Ed25519 signature verification
+    pub async fn add_liquidity_with_signature(
+        &self,
+        pair_id: &str,
+        user: &str,
+        amount_a_desired: u128,
+        amount_b_desired: u128,
+        amount_a_min: u128,
+        amount_b_min: u128,
+        signature: &[u8],
+        pubkey: &[u8; 32],
+    ) -> Result<(u128, u128, u128)> {
+        let sign_data = format!("add_liquidity:{}:{}:{}:{}:{}:{}", 
+            pair_id, user, amount_a_desired, amount_b_desired, amount_a_min, amount_b_min);
+        if !Self::verify_ed25519_signature(pubkey, sign_data.as_bytes(), signature) {
+            bail!("Invalid Ed25519 signature on add_liquidity");
+        }
+        debug!("✅ Add liquidity signature verified for {} in {}", user, pair_id);
+        
+        self.add_liquidity_internal(pair_id, user, amount_a_desired, amount_b_desired, amount_a_min, amount_b_min).await
+    }
+
+    /// Remove liquidity with Ed25519 signature verification
+    pub async fn remove_liquidity_with_signature(
+        &self,
+        pair_id: &str,
+        user: &str,
+        lp_tokens: u128,
+        amount_a_min: u128,
+        amount_b_min: u128,
+        signature: &[u8],
+        pubkey: &[u8; 32],
+    ) -> Result<(u128, u128)> {
+        let sign_data = format!("remove_liquidity:{}:{}:{}:{}:{}", 
+            pair_id, user, lp_tokens, amount_a_min, amount_b_min);
+        if !Self::verify_ed25519_signature(pubkey, sign_data.as_bytes(), signature) {
+            bail!("Invalid Ed25519 signature on remove_liquidity");
+        }
+        debug!("✅ Remove liquidity signature verified for {} in {}", user, pair_id);
+        
+        self.remove_liquidity_internal(pair_id, user, lp_tokens, amount_a_min, amount_b_min).await
+    }
+
+    /// Get DEX statistics
+    pub async fn get_statistics(&self) -> DexStatistics {
+        let pools = self.pools.read().await;
+        
+        let total_pools = pools.len();
+        let total_volume: u128 = pools.values()
+            .map(|p| p.total_volume_a + p.total_volume_b)
+            .sum();
+        let total_liquidity: u128 = pools.values()
+            .map(|p| p.reserve_a + p.reserve_b)
+            .sum();
+        
+        DexStatistics {
+            total_pools,
+            total_volume,
+            total_liquidity,
+            default_fee_rate: self.default_fee_rate,
+        }
+    }
+}
+
+/// DEX statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexStatistics {
+    pub total_pools: usize,
+    pub total_volume: u128,
+    pub total_liquidity: u128,
+    pub default_fee_rate: u32,
 }
 
 /// Integer square root (for LP token calculation)
@@ -369,7 +511,7 @@ mod tests {
         let dex = NativeDex::new(token_factory.clone());
         
         // Create two tokens
-        let token_a = token_factory.create_token(
+        let token_a = token_factory.create_token_internal(
             "sultan1alice",
             "Token A".to_string(),
             "TKNA".to_string(),
@@ -380,7 +522,7 @@ mod tests {
             None,
         ).await.unwrap();
         
-        let token_b = token_factory.create_token(
+        let token_b = token_factory.create_token_internal(
             "sultan1alice",
             "Token B".to_string(),
             "TKNB".to_string(),
@@ -392,7 +534,7 @@ mod tests {
         ).await.unwrap();
         
         // Create pool
-        let pair_id = dex.create_pair(
+        let pair_id = dex.create_pair_internal(
             "sultan1alice",
             &token_a,
             &token_b,
@@ -411,8 +553,8 @@ mod tests {
         let token_factory = Arc::new(TokenFactory::new());
         let dex = NativeDex::new(token_factory.clone());
         
-        // Setup tokens and pool
-        let token_a = token_factory.create_token(
+        // Setup tokens - alice creates both tokens so she can create the pool
+        let token_a = token_factory.create_token_internal(
             "sultan1alice",
             "Token A".to_string(),
             "TKNA".to_string(),
@@ -423,8 +565,8 @@ mod tests {
             None,
         ).await.unwrap();
         
-        let token_b = token_factory.create_token(
-            "sultan1bob",
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice",
             "Token B".to_string(),
             "TKNB".to_string(),
             6,
@@ -435,9 +577,9 @@ mod tests {
         ).await.unwrap();
         
         // Transfer some token_a to bob for swapping
-        token_factory.transfer(&token_a, "sultan1alice", "sultan1bob", 10_000).await.unwrap();
+        token_factory.transfer_internal(&token_a, "sultan1alice", "sultan1bob", 10_000).await.unwrap();
         
-        let pair_id = dex.create_pair(
+        let pair_id = dex.create_pair_internal(
             "sultan1alice",
             &token_a,
             &token_b,
@@ -446,7 +588,7 @@ mod tests {
         ).await.unwrap();
         
         // Bob swaps 1000 token_a for token_b
-        let amount_out = dex.swap(
+        let amount_out = dex.swap_internal(
             &pair_id,
             "sultan1bob",
             &token_a,
@@ -454,8 +596,381 @@ mod tests {
             0, // No slippage protection for test
         ).await.unwrap();
         
-        // Verify swap executed (should get ~997 token_b minus fees)
-        assert!(amount_out > 990);
-        assert!(amount_out < 1000);
+        // The constant product formula with 0.3% fee:
+        // amount_out = (reserve_out * amount_in_after_fee) / (reserve_in + amount_in_after_fee)
+        // fee = 1000 * 30 / 10000 = 3
+        // amount_in_after_fee = 1000 - 3 = 997
+        // amount_out = (100000 * 997) / (100000 + 997) = 99700000 / 100997 = 986
+        // So we should expect ~986, not 990+
+        assert!(amount_out > 980, "amount_out should be > 980, got {}", amount_out);
+        assert!(amount_out < 1000, "amount_out should be < 1000, got {}", amount_out);
+    }
+
+    #[tokio::test]
+    async fn test_add_and_remove_liquidity() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        // Create tokens
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TKNA".to_string(),
+            6, 10_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TKNB".to_string(),
+            6, 10_000_000, None, None, None,
+        ).await.unwrap();
+        
+        // Create pool
+        let pair_id = dex.create_pair_internal(
+            "sultan1alice", &token_a, &token_b, 100_000, 200_000,
+        ).await.unwrap();
+        
+        // Get initial LP balance
+        let initial_lp = dex.get_lp_balance(&pair_id, "sultan1alice").await;
+        assert!(initial_lp > 0);
+        
+        // Add more liquidity
+        let (lp_tokens, _, _) = dex.add_liquidity_internal(
+            &pair_id, "sultan1alice", 50_000, 100_000, 0, 0,
+        ).await.unwrap();
+        assert!(lp_tokens > 0);
+        
+        // Remove some liquidity
+        let (amount_a, amount_b) = dex.remove_liquidity_internal(
+            &pair_id, "sultan1alice", lp_tokens / 2, 0, 0,
+        ).await.unwrap();
+        assert!(amount_a > 0);
+        assert!(amount_b > 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_price() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TKNA".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TKNB".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let pair_id = dex.create_pair_internal(
+            "sultan1alice", &token_a, &token_b, 100_000, 200_000,
+        ).await.unwrap();
+        
+        let price = dex.get_price(&pair_id).await.unwrap();
+        // Price of A in terms of B = reserve_b / reserve_a = 200000 / 100000 = 2.0
+        assert!((price - 2.0).abs() < 0.01);
+    }
+
+    #[tokio::test]
+    async fn test_slippage_protection() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TKNA".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TKNB".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        // Transfer some to bob
+        token_factory.transfer_internal(&token_a, "sultan1alice", "sultan1bob", 10_000).await.unwrap();
+        
+        let pair_id = dex.create_pair_internal(
+            "sultan1alice", &token_a, &token_b, 100_000, 100_000,
+        ).await.unwrap();
+        
+        // Try to swap with unrealistic slippage expectation
+        let result = dex.swap_internal(
+            &pair_id, "sultan1bob", &token_a, 1000, 999, // expect 999 but will get ~986
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Slippage tolerance exceeded"));
+    }
+
+    #[tokio::test]
+    async fn test_statistics() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TKNA".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TKNB".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        dex.create_pair_internal(
+            "sultan1alice", &token_a, &token_b, 100_000, 100_000,
+        ).await.unwrap();
+        
+        let stats = dex.get_statistics().await;
+        assert_eq!(stats.total_pools, 1);
+        assert_eq!(stats.total_liquidity, 200_000);
+        assert_eq!(stats.default_fee_rate, 30);
+    }
+
+    #[test]
+    fn test_integer_sqrt() {
+        assert_eq!(integer_sqrt(0), 0);
+        assert_eq!(integer_sqrt(1), 1);
+        assert_eq!(integer_sqrt(4), 2);
+        assert_eq!(integer_sqrt(100), 10);
+        assert_eq!(integer_sqrt(10000), 100);
+        // sqrt(100 * 200) = sqrt(20000) = 141 (rounded down)
+        assert_eq!(integer_sqrt(20000), 141);
+    }
+
+    #[tokio::test]
+    async fn test_create_pair_with_signature_rejects_invalid() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TKNA".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TKNB".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let pubkey = [1u8; 32]; // Non-zero to trigger signature verification
+        let invalid_sig = vec![0u8; 64];
+        
+        let result = dex.create_pair_with_signature(
+            "sultan1alice", &token_a, &token_b, 100_000, 100_000,
+            &invalid_sig, &pubkey,
+        ).await;
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid Ed25519 signature"));
+    }
+
+    #[tokio::test]
+    async fn test_swap_with_signature_rejects_invalid() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TKNA".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TKNB".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        // Create pair first
+        dex.create_pair_internal(
+            "sultan1alice", &token_a, &token_b, 100_000, 100_000,
+        ).await.unwrap();
+        
+        let pair_id = format!("pair/{}/{}", token_a, token_b);
+        // Use non-zero pubkey to ensure signature verification runs and fails
+        let pubkey = [1u8; 32];
+        let invalid_sig = vec![0u8; 64];
+        
+        let result = dex.swap_with_signature(
+            &pair_id, "sultan1bob", &token_a, 1000, 0,
+            &invalid_sig, &pubkey,
+        ).await;
+        
+        assert!(result.is_err(), "Expected error");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Ed25519 signature"), "Expected sig error, got: {}", err_msg);
+    }
+
+    #[tokio::test]
+    async fn test_add_liquidity_with_signature_rejects_invalid() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TKNA".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TKNB".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        // Create pair first
+        dex.create_pair_internal(
+            "sultan1alice", &token_a, &token_b, 100_000, 100_000,
+        ).await.unwrap();
+        
+        let pair_id = format!("pair/{}/{}", token_a, token_b);
+        let pubkey = [1u8; 32]; // Non-zero to trigger signature verification
+        let invalid_sig = vec![0u8; 64];
+        
+        let result = dex.add_liquidity_with_signature(
+            &pair_id, "sultan1bob", 10_000, 10_000, 0, 0,
+            &invalid_sig, &pubkey,
+        ).await;
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid Ed25519 signature"));
+    }
+
+    #[tokio::test]
+    async fn test_remove_liquidity_with_signature_rejects_invalid() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TKNA".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TKNB".to_string(),
+            6, 1_000_000, None, None, None,
+        ).await.unwrap();
+        
+        // Create pair first (this gives LP tokens to alice)
+        dex.create_pair_internal(
+            "sultan1alice", &token_a, &token_b, 100_000, 100_000,
+        ).await.unwrap();
+        
+        let pair_id = format!("pair/{}/{}", token_a, token_b);
+        let pubkey = [1u8; 32]; // Non-zero to trigger signature verification
+        let invalid_sig = vec![0u8; 64];
+        
+        let result = dex.remove_liquidity_with_signature(
+            &pair_id, "sultan1alice", 1000, 0, 0,
+            &invalid_sig, &pubkey,
+        ).await;
+        
+        assert!(result.is_err(), "Expected error");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Ed25519 signature"), "Expected sig error, got: {}", err_msg);
+    }
+
+    #[tokio::test]
+    async fn test_dex_statistics_comprehensive() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        // Create tokens
+        let token_a = token_factory.create_token_internal(
+            "sultan1alice", "Token A".to_string(), "TOKA".to_string(),
+            6, 10_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1alice", "Token B".to_string(), "TOKB".to_string(),
+            6, 10_000_000, None, None, None,
+        ).await.unwrap();
+        
+        // Initial stats - no pools
+        let stats = dex.get_statistics().await;
+        assert_eq!(stats.total_pools, 0);
+        assert_eq!(stats.total_volume, 0);
+        assert_eq!(stats.total_liquidity, 0);
+        assert_eq!(stats.default_fee_rate, 30); // 0.3% = 30 basis points
+        
+        // Create pair (pool)
+        dex.create_pair_internal(
+            "sultan1alice", &token_a, &token_b, 100_000, 100_000,
+        ).await.unwrap();
+        
+        // Stats after pair creation
+        let stats = dex.get_statistics().await;
+        assert_eq!(stats.total_pools, 1);
+        assert_eq!(stats.total_liquidity, 200_000); // 100k + 100k
+        
+        // Transfer tokens to bob so he can swap
+        token_factory.transfer_internal(&token_a, "sultan1alice", "sultan1bob", 10_000).await.unwrap();
+        
+        // Perform swap - swap_internal takes (pair_id, user, token_in, amount_in, min_amount_out)
+        let pair_id = format!("pair/{}/{}", token_a, token_b);
+        dex.swap_internal(
+            &pair_id, "sultan1bob", &token_a, 1000, 1,
+        ).await.unwrap();
+        
+        // Stats after swap - volume increased
+        let stats = dex.get_statistics().await;
+        assert!(stats.total_volume > 0, "Volume should increase after swap");
+        
+        // Add more liquidity
+        dex.add_liquidity_internal(
+            &pair_id,
+            "sultan1alice", 50_000, 50_000, 0, 0,
+        ).await.unwrap();
+        
+        // Stats after adding liquidity
+        let stats = dex.get_statistics().await;
+        assert!(stats.total_liquidity > 200_000, "Liquidity should increase");
+        
+        // Remove liquidity - use get_lp_balance method
+        let lp_balance = dex.get_lp_balance(&pair_id, "sultan1alice").await;
+        dex.remove_liquidity_internal(
+            &pair_id, "sultan1alice", lp_balance / 4, 0, 0,
+        ).await.unwrap();
+        
+        // Final stats - liquidity decreased after removal
+        let stats = dex.get_statistics().await;
+        assert_eq!(stats.total_pools, 1);
+        assert!(stats.total_volume > 0, "Volume persists");
+    }
+
+    #[tokio::test]
+    async fn test_multiple_pools_stats() {
+        let token_factory = Arc::new(TokenFactory::new());
+        let dex = NativeDex::new(token_factory.clone());
+        
+        // Create 3 tokens
+        let token_a = token_factory.create_token_internal(
+            "sultan1creator", "Token A".to_string(), "AAA".to_string(),
+            6, 10_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_b = token_factory.create_token_internal(
+            "sultan1creator", "Token B".to_string(), "BBB".to_string(),
+            6, 10_000_000, None, None, None,
+        ).await.unwrap();
+        
+        let token_c = token_factory.create_token_internal(
+            "sultan1creator", "Token C".to_string(), "CCC".to_string(),
+            6, 10_000_000, None, None, None,
+        ).await.unwrap();
+        
+        // Create 3 pairs: A-B, A-C, B-C
+        dex.create_pair_internal("sultan1creator", &token_a, &token_b, 100_000, 100_000).await.unwrap();
+        dex.create_pair_internal("sultan1creator", &token_a, &token_c, 200_000, 200_000).await.unwrap();
+        dex.create_pair_internal("sultan1creator", &token_b, &token_c, 300_000, 300_000).await.unwrap();
+        
+        let stats = dex.get_statistics().await;
+        assert_eq!(stats.total_pools, 3);
+        
+        // Total liquidity = (100k+100k) + (200k+200k) + (300k+300k) = 1.2M
+        assert_eq!(stats.total_liquidity, 1_200_000);
+        
+        // Verify each pool exists
+        let pair_ab = format!("pair/{}/{}", token_a, token_b);
+        let pair_ac = format!("pair/{}/{}", token_a, token_c);
+        let pair_bc = format!("pair/{}/{}", token_b, token_c);
+        
+        assert!(dex.get_pool(&pair_ab).await.is_some());
+        assert!(dex.get_pool(&pair_ac).await.is_some());
+        assert!(dex.get_pool(&pair_bc).await.is_some());
     }
 }

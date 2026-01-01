@@ -1,8 +1,0 @@
-{
-  "name": "sultan-chain-api-mainnet",
-  "version": "1.0.0",
-  "main": "sultan_api.js",
-  "scripts": {
-    "start": "node sultan_api.js"
-  }
-}

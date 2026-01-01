@@ -1,3 +1,0 @@
-        .with_method("token_transfer", token_transfer)
-        .with_method("calculate_rewards", calculate_rewards)
-        .with_method("claim_rewards", claim_rewards)

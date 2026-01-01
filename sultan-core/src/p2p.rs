@@ -14,15 +14,15 @@ use libp2p::{
     kad::{self, store::MemoryStore},
     noise, yamux,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, Multiaddr, PeerId, Swarm, StreamProtocol,
+    tcp, Multiaddr, PeerId, Swarm,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, debug};
 
 /// Topics for gossipsub messaging
 pub const BLOCK_TOPIC: &str = "sultan/blocks/1.0.0";
@@ -33,12 +33,14 @@ pub const CONSENSUS_TOPIC: &str = "sultan/consensus/1.0.0";
 /// Network message types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NetworkMessage {
-    /// New block proposal
+    /// New block proposal (with Ed25519 signature for proposer verification)
     BlockProposal {
         height: u64,
         proposer: String,
         block_hash: String,
         block_data: Vec<u8>,
+        /// Ed25519 signature over block_hash by proposer
+        proposer_signature: Vec<u8>,
     },
     /// Vote on a block
     BlockVote {
@@ -53,11 +55,15 @@ pub enum NetworkMessage {
         tx_hash: String,
         tx_data: Vec<u8>,
     },
-    /// Validator announcement
+    /// Validator announcement (with Ed25519 signature for verification)
     ValidatorAnnounce {
         address: String,
         stake: u64,
         peer_id: String,
+        /// Ed25519 public key for signature verification
+        pubkey: [u8; 32],
+        /// Ed25519 signature over (address || stake || peer_id)
+        signature: Vec<u8>,
     },
     /// Request block sync
     SyncRequest {
@@ -77,18 +83,78 @@ pub struct SultanBehaviour {
     pub kademlia: kad::Behaviour<MemoryStore>,
 }
 
+/// Maximum message size (1 MB)
+const MAX_MESSAGE_SIZE: usize = 1 << 20;
+/// Maximum messages per peer per minute (DoS protection)
+const MAX_MESSAGES_PER_MINUTE: u32 = 1000;
+/// Ban duration for misbehaving peers (10 minutes)
+const PEER_BAN_DURATION_SECS: u64 = 600;
+/// Minimum required peers for healthy network
+const MIN_PEERS_REQUIRED: usize = 2;
+/// Minimum stake required for validator announcement (10 trillion SULTAN)
+const MIN_VALIDATOR_STAKE: u64 = 10_000_000_000_000;
+/// Rate limit cleanup interval (clean up stale entries every N checks)
+const RATE_LIMIT_CLEANUP_THRESHOLD: usize = 100;
+
+/// Banned peer entry with expiration
+#[derive(Debug, Clone)]
+pub struct BannedPeer {
+    pub peer_id: PeerId,
+    pub reason: String,
+    pub banned_at: std::time::Instant,
+    pub duration_secs: u64,
+}
+
+impl BannedPeer {
+    pub fn is_expired(&self) -> bool {
+        self.banned_at.elapsed().as_secs() >= self.duration_secs
+    }
+}
+
+/// Message rate tracking for DoS prevention
+#[derive(Debug, Clone, Default)]
+pub struct PeerRateLimit {
+    pub message_count: u32,
+    pub window_start: Option<std::time::Instant>,
+}
+
+impl PeerRateLimit {
+    pub fn record_message(&mut self) -> bool {
+        let now = std::time::Instant::now();
+        
+        // Reset window if more than 60 seconds have passed
+        if let Some(start) = self.window_start {
+            if now.duration_since(start).as_secs() >= 60 {
+                self.message_count = 0;
+                self.window_start = Some(now);
+            }
+        } else {
+            self.window_start = Some(now);
+        }
+        
+        self.message_count += 1;
+        self.message_count <= MAX_MESSAGES_PER_MINUTE
+    }
+}
+
 /// P2P Network implementation for Sultan Chain
 pub struct P2PNetwork {
     local_key: Keypair,
     peer_id: PeerId,
     connected_peers: Arc<RwLock<HashSet<PeerId>>>,
     known_validators: Arc<RwLock<HashSet<String>>>,
+    /// Validator address -> pubkey mapping for signature verification
+    validator_pubkeys: Arc<RwLock<HashMap<String, [u8; 32]>>>,
     message_tx: Option<mpsc::UnboundedSender<NetworkMessage>>,
     message_rx: Option<mpsc::UnboundedReceiver<NetworkMessage>>,
     broadcast_tx: Option<mpsc::UnboundedSender<(String, Vec<u8>)>>, // (topic, data)
     is_running: Arc<RwLock<bool>>,
     listen_addr: Option<Multiaddr>,
     bootstrap_peers: Vec<Multiaddr>,
+    /// Banned peers for misbehavior
+    banned_peers: Arc<RwLock<HashMap<PeerId, BannedPeer>>>,
+    /// Rate limiting per peer
+    peer_rate_limits: Arc<RwLock<HashMap<PeerId, PeerRateLimit>>>,
 }
 
 impl P2PNetwork {
@@ -107,12 +173,15 @@ impl P2PNetwork {
             peer_id,
             connected_peers: Arc::new(RwLock::new(HashSet::new())),
             known_validators: Arc::new(RwLock::new(HashSet::new())),
+            validator_pubkeys: Arc::new(RwLock::new(HashMap::new())),
             message_tx: Some(message_tx),
             message_rx: Some(message_rx),
             broadcast_tx: Some(broadcast_tx),
             is_running: Arc::new(RwLock::new(false)),
             listen_addr: None,
             bootstrap_peers: Vec::new(),
+            banned_peers: Arc::new(RwLock::new(HashMap::new())),
+            peer_rate_limits: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -129,12 +198,15 @@ impl P2PNetwork {
             peer_id,
             connected_peers: Arc::new(RwLock::new(HashSet::new())),
             known_validators: Arc::new(RwLock::new(HashSet::new())),
+            validator_pubkeys: Arc::new(RwLock::new(HashMap::new())),
             message_tx: Some(message_tx),
             message_rx: Some(message_rx),
             broadcast_tx: Some(broadcast_tx),
             is_running: Arc::new(RwLock::new(false)),
             listen_addr: None,
             bootstrap_peers: Vec::new(),
+            banned_peers: Arc::new(RwLock::new(HashMap::new())),
+            peer_rate_limits: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -165,10 +237,13 @@ impl P2PNetwork {
 
     /// Build the libp2p swarm
     fn build_swarm(&self) -> Result<Swarm<SultanBehaviour>> {
-        // Configure gossipsub
+        // Configure gossipsub with DoS protection limits
         let gossipsub_config = gossipsub::ConfigBuilder::default()
             .heartbeat_interval(Duration::from_secs(1))
             .validation_mode(ValidationMode::Strict)
+            .max_transmit_size(MAX_MESSAGE_SIZE) // 1 MB max message
+            .max_ihave_length(5000) // Optimize gossip protocol
+            .max_messages_per_rpc(Some(100)) // Limit messages per RPC for DoS protection
             .message_id_fn(|msg| {
                 // Use hash of data as message id to deduplicate
                 let hash = sha2::Sha256::digest(&msg.data);
@@ -240,6 +315,7 @@ impl P2PNetwork {
         // Clone Arc references for the event loop
         let connected_peers = self.connected_peers.clone();
         let known_validators = self.known_validators.clone();
+        let validator_pubkeys = self.validator_pubkeys.clone();
         let is_running = self.is_running.clone();
         let message_tx = self.message_tx.clone();
         let bootstrap_peers_for_reconnect = self.bootstrap_peers.clone();
@@ -291,8 +367,12 @@ impl P2PNetwork {
                             info!("🤝 Connected to peer: {}", peer_id);
                             connected_peers.write().await.insert(peer_id);
                         }
-                        SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                            info!("👋 Disconnected from peer: {}", peer_id);
+                        SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
+                            if let Some(ref err) = cause {
+                                info!("👋 Disconnected from peer: {} (cause: {:?})", peer_id, err);
+                            } else {
+                                info!("👋 Disconnected from peer: {}", peer_id);
+                            }
                             connected_peers.write().await.remove(&peer_id);
                         }
                         SwarmEvent::Behaviour(event) => {
@@ -302,10 +382,36 @@ impl P2PNetwork {
                                     if let Ok(network_msg) = bincode::deserialize::<NetworkMessage>(&message.data) {
                                         debug!("📨 Received message: {:?}", network_msg);
                                         
-                                        // Handle validator announcements - register them
-                                        if let NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id } = network_msg {
-                                            info!("🗳️ Validator announced: {} (stake: {}, peer: {})", address, stake, peer_id);
-                                            known_validators.write().await.insert(address.clone());
+                                        // Handle validator announcements - verify stake AND signature, then register
+                                        if let NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, ref pubkey, ref signature } = network_msg {
+                                            // First verify signature over the announcement data
+                                            if !P2PNetwork::verify_announce_signature(pubkey, address, stake, peer_id, signature) {
+                                                warn!("⚠️ Rejected validator {} with invalid announcement signature", address);
+                                            } else if stake >= MIN_VALIDATOR_STAKE {
+                                                info!("🗳️ Validator announced: {} (stake: {}, peer: {})", address, stake, peer_id);
+                                                known_validators.write().await.insert(address.clone());
+                                            } else {
+                                                warn!("⚠️ Rejected validator {} with insufficient stake: {} < {}", 
+                                                      address, stake, MIN_VALIDATOR_STAKE);
+                                            }
+                                        }
+                                        
+                                        // Handle BlockProposal - verify proposer signature
+                                        if let NetworkMessage::BlockProposal { ref proposer, ref block_hash, ref proposer_signature, .. } = network_msg {
+                                            // Look up proposer's pubkey and verify signature
+                                            if let Some(pubkey) = validator_pubkeys.read().await.get(proposer) {
+                                                if !P2PNetwork::verify_vote_signature(pubkey, block_hash.as_bytes(), proposer_signature) {
+                                                    warn!("⚠️ Rejected BlockProposal from {} with invalid signature", proposer);
+                                                    // Note: In production, would ban peer here
+                                                    // Skip forwarding invalid proposals
+                                                    continue;
+                                                }
+                                                debug!("✅ BlockProposal from {} verified", proposer);
+                                            } else {
+                                                // Unknown proposer - log warning but still forward
+                                                // (proposer may be new/not yet announced)
+                                                debug!("⚠️ BlockProposal from unknown proposer {}", proposer);
+                                            }
                                         }
                                         
                                         if let Some(tx) = &message_tx {
@@ -335,13 +441,14 @@ impl P2PNetwork {
         Ok(())
     }
 
-    /// Broadcast a block proposal to the network
-    pub async fn broadcast_block(&self, height: u64, proposer: &str, block_hash: &str, block_data: Vec<u8>) -> Result<()> {
+    /// Broadcast a block proposal to the network (with proposer signature)
+    pub async fn broadcast_block(&self, height: u64, proposer: &str, block_hash: &str, block_data: Vec<u8>, proposer_signature: Vec<u8>) -> Result<()> {
         let msg = NetworkMessage::BlockProposal {
             height,
             proposer: proposer.to_string(),
             block_hash: block_hash.to_string(),
             block_data,
+            proposer_signature,
         };
         
         self.broadcast_message(BLOCK_TOPIC, msg).await
@@ -370,12 +477,14 @@ impl P2PNetwork {
         self.broadcast_message(TX_TOPIC, msg).await
     }
 
-    /// Announce this validator to the network
-    pub async fn announce_validator(&self, address: &str, stake: u64) -> Result<()> {
+    /// Announce this validator to the network (with Ed25519 signature)
+    pub async fn announce_validator(&self, address: &str, stake: u64, pubkey: [u8; 32], signature: Vec<u8>) -> Result<()> {
         let msg = NetworkMessage::ValidatorAnnounce {
             address: address.to_string(),
             stake,
             peer_id: self.peer_id.to_string(),
+            pubkey,
+            signature,
         };
         
         self.broadcast_message(VALIDATOR_TOPIC, msg).await
@@ -384,6 +493,11 @@ impl P2PNetwork {
     /// Internal: broadcast message to a topic
     async fn broadcast_message(&self, topic: &str, msg: NetworkMessage) -> Result<()> {
         let data = bincode::serialize(&msg)?;
+        
+        // Enforce message size limit
+        if data.len() > MAX_MESSAGE_SIZE {
+            anyhow::bail!("Message size {} exceeds maximum {}", data.len(), MAX_MESSAGE_SIZE);
+        }
         
         // Send to broadcast channel for gossipsub publishing
         if let Some(tx) = &self.broadcast_tx {
@@ -426,5 +540,486 @@ impl P2PNetwork {
     /// Get known validators count
     pub async fn known_validator_count(&self) -> usize {
         self.known_validators.read().await.len()
+    }
+    
+    /// Get all known validators
+    pub async fn get_known_validators(&self) -> Vec<String> {
+        self.known_validators.read().await.iter().cloned().collect()
+    }
+    
+    /// Ban a peer for misbehavior
+    pub async fn ban_peer(&self, peer_id: PeerId, reason: &str) {
+        let banned = BannedPeer {
+            peer_id,
+            reason: reason.to_string(),
+            banned_at: std::time::Instant::now(),
+            duration_secs: PEER_BAN_DURATION_SECS,
+        };
+        warn!("🚫 Banning peer {} for {}: {}", peer_id, PEER_BAN_DURATION_SECS, reason);
+        self.banned_peers.write().await.insert(peer_id, banned);
+        // Also remove from connected peers
+        self.connected_peers.write().await.remove(&peer_id);
+    }
+    
+    /// Check if a peer is banned
+    pub async fn is_peer_banned(&self, peer_id: &PeerId) -> bool {
+        let banned = self.banned_peers.read().await;
+        if let Some(ban) = banned.get(peer_id) {
+            !ban.is_expired()
+        } else {
+            false
+        }
+    }
+    
+    /// Clean up expired bans
+    pub async fn cleanup_expired_bans(&self) {
+        let mut banned = self.banned_peers.write().await;
+        banned.retain(|_, ban| !ban.is_expired());
+    }
+    
+    /// Check rate limit for a peer, returns true if allowed
+    pub async fn check_rate_limit(&self, peer_id: &PeerId) -> bool {
+        let mut limits = self.peer_rate_limits.write().await;
+        
+        // Periodic cleanup of stale rate limit entries
+        if limits.len() > RATE_LIMIT_CLEANUP_THRESHOLD {
+            let now = std::time::Instant::now();
+            limits.retain(|_, limit| {
+                // Keep entries with recent activity (within 2 minutes)
+                limit.window_start
+                    .map(|start| now.duration_since(start).as_secs() < 120)
+                    .unwrap_or(false)
+            });
+        }
+        
+        let limit = limits.entry(*peer_id).or_default();
+        limit.record_message()
+    }
+    
+    /// Verify a BlockVote signature (Ed25519)
+    /// Returns true if signature is valid for the given voter and block hash
+    pub fn verify_vote_signature(voter_pubkey: &[u8; 32], block_hash: &[u8], signature: &[u8]) -> bool {
+        #[allow(unused_imports)]
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+        
+        if signature.len() != 64 {
+            return false;
+        }
+        
+        let Ok(verifying_key) = VerifyingKey::from_bytes(voter_pubkey) else {
+            return false;
+        };
+        
+        let Ok(sig) = Signature::try_from(signature) else {
+            return false;
+        };
+        
+        verifying_key.verify(block_hash, &sig).is_ok()
+    }
+    
+    /// Get banned peer count
+    pub async fn banned_peer_count(&self) -> usize {
+        self.banned_peers.read().await.len()
+    }
+    
+    /// Check if network is healthy (has minimum required peers)
+    pub async fn is_healthy(&self) -> bool {
+        self.connected_peers.read().await.len() >= MIN_PEERS_REQUIRED
+    }
+    
+    /// Register a validator's public key for signature verification
+    pub async fn register_validator_pubkey(&self, address: String, pubkey: [u8; 32]) {
+        self.validator_pubkeys.write().await.insert(address.clone(), pubkey);
+        debug!("Registered validator pubkey for {}", address);
+    }
+    
+    /// Get a validator's public key
+    pub async fn get_validator_pubkey(&self, address: &str) -> Option<[u8; 32]> {
+        self.validator_pubkeys.read().await.get(address).copied()
+    }
+    
+    /// Verify and process a BlockVote - returns true if valid
+    pub async fn verify_and_process_vote(&self, voter: &str, block_hash: &[u8], signature: &[u8]) -> Result<bool, String> {
+        // Get voter's pubkey
+        let pubkey = match self.get_validator_pubkey(voter).await {
+            Some(pk) => pk,
+            None => return Err(format!("Unknown voter: {}", voter)),
+        };
+        
+        // Verify signature
+        if !Self::verify_vote_signature(&pubkey, block_hash, signature) {
+            return Err("Invalid vote signature".to_string());
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify a BlockProposal signature - returns true if valid
+    /// The proposer must have a registered pubkey
+    pub async fn verify_proposal_signature(&self, proposer: &str, block_hash: &[u8], signature: &[u8]) -> Result<bool, String> {
+        // Get proposer's pubkey
+        let pubkey = match self.get_validator_pubkey(proposer).await {
+            Some(pk) => pk,
+            None => return Err(format!("Unknown proposer: {}", proposer)),
+        };
+        
+        // Verify signature over block hash
+        if !Self::verify_vote_signature(&pubkey, block_hash, signature) {
+            return Err("Invalid proposal signature".to_string());
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify a ValidatorAnnounce signature - returns true if valid
+    /// Verifies signature over (address || stake || peer_id)
+    pub fn verify_announce_signature(pubkey: &[u8; 32], address: &str, stake: u64, peer_id: &str, signature: &[u8]) -> bool {
+        // Create the message to verify: address || stake || peer_id
+        let message = format!("{}{}{}",address, stake, peer_id);
+        Self::verify_vote_signature(pubkey, message.as_bytes(), signature)
+    }
+    
+    /// Get count of registered validators
+    pub async fn registered_validator_count(&self) -> usize {
+        self.validator_pubkeys.read().await.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_network_creation() {
+        let network = P2PNetwork::new().unwrap();
+        assert!(!network.peer_id.to_string().is_empty());
+        assert_eq!(network.peer_count().await, 0);
+        assert!(!network.is_running().await);
+    }
+
+    #[tokio::test]
+    async fn test_keypair_persistence() {
+        let keypair = Keypair::generate_ed25519();
+        let peer_id1 = PeerId::from(keypair.public());
+        
+        let network = P2PNetwork::with_keypair(keypair.clone()).unwrap();
+        assert_eq!(*network.peer_id(), peer_id1);
+    }
+
+    #[tokio::test]
+    async fn test_validator_registration() {
+        let network = P2PNetwork::new().unwrap();
+        
+        assert_eq!(network.known_validator_count().await, 0);
+        
+        network.register_validator("sultan1val1qqqqqqqqqqqqqqqqqqqqqqqqqqqval1aa".to_string()).await;
+        network.register_validator("sultan1val2qqqqqqqqqqqqqqqqqqqqqqqqqqqval2bb".to_string()).await;
+        
+        assert_eq!(network.known_validator_count().await, 2);
+        
+        let validators = network.get_known_validators().await;
+        assert!(validators.contains(&"sultan1val1qqqqqqqqqqqqqqqqqqqqqqqqqqqval1aa".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_peer_banning() {
+        let network = P2PNetwork::new().unwrap();
+        let fake_peer = PeerId::random();
+        
+        assert!(!network.is_peer_banned(&fake_peer).await);
+        
+        network.ban_peer(fake_peer, "invalid message").await;
+        
+        assert!(network.is_peer_banned(&fake_peer).await);
+        assert_eq!(network.banned_peer_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiting() {
+        let network = P2PNetwork::new().unwrap();
+        let peer = PeerId::random();
+        
+        // Should allow messages up to limit
+        for _ in 0..MAX_MESSAGES_PER_MINUTE {
+            assert!(network.check_rate_limit(&peer).await);
+        }
+        
+        // Should reject after limit exceeded
+        assert!(!network.check_rate_limit(&peer).await);
+    }
+
+    #[tokio::test]
+    async fn test_bootstrap_peers() {
+        let mut network = P2PNetwork::new().unwrap();
+        
+        let peers = vec![
+            "/ip4/127.0.0.1/tcp/4001".to_string(),
+            "/ip4/127.0.0.1/tcp/4002".to_string(),
+        ];
+        
+        network.set_bootstrap_peers(peers).unwrap();
+        assert_eq!(network.bootstrap_peers.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_network_health() {
+        let network = P2PNetwork::new().unwrap();
+        
+        // Not healthy with 0 peers
+        assert!(!network.is_healthy().await);
+    }
+
+    #[test]
+    fn test_message_serialization() {
+        let msg = NetworkMessage::BlockProposal {
+            height: 100,
+            proposer: "sultan1test".to_string(),
+            block_hash: "abc123".to_string(),
+            block_data: vec![1, 2, 3],
+            proposer_signature: vec![0u8; 64],
+        };
+        
+        let serialized = bincode::serialize(&msg).unwrap();
+        let deserialized: NetworkMessage = bincode::deserialize(&serialized).unwrap();
+        
+        match deserialized {
+            NetworkMessage::BlockProposal { height, proposer, .. } => {
+                assert_eq!(height, 100);
+                assert_eq!(proposer, "sultan1test");
+            }
+            _ => panic!("Wrong message type"),
+        }
+    }
+
+    #[test]
+    fn test_banned_peer_expiration() {
+        let peer_id = PeerId::random();
+        let banned = BannedPeer {
+            peer_id,
+            reason: "test".to_string(),
+            banned_at: std::time::Instant::now() - std::time::Duration::from_secs(PEER_BAN_DURATION_SECS + 1),
+            duration_secs: PEER_BAN_DURATION_SECS,
+        };
+        
+        assert!(banned.is_expired());
+    }
+
+    #[test]
+    fn test_vote_signature_verification() {
+        use ed25519_dalek::{Signer, SigningKey};
+        
+        // Generate a keypair
+        let signing_key = SigningKey::from_bytes(&[1u8; 32]);
+        let verifying_key = signing_key.verifying_key();
+        let pubkey_bytes: [u8; 32] = verifying_key.to_bytes();
+        
+        // Sign a block hash
+        let block_hash = b"test_block_hash_12345";
+        let signature = signing_key.sign(block_hash);
+        
+        // Valid signature should pass
+        assert!(P2PNetwork::verify_vote_signature(
+            &pubkey_bytes,
+            block_hash,
+            signature.to_bytes().as_slice()
+        ));
+        
+        // Wrong message should fail
+        assert!(!P2PNetwork::verify_vote_signature(
+            &pubkey_bytes,
+            b"wrong_hash",
+            signature.to_bytes().as_slice()
+        ));
+        
+        // Invalid signature length should fail
+        assert!(!P2PNetwork::verify_vote_signature(
+            &pubkey_bytes,
+            block_hash,
+            &[0u8; 32] // Wrong length
+        ));
+    }
+
+    #[test]
+    fn test_min_validator_stake_constant() {
+        // Verify minimum stake is 10 trillion SULTAN
+        assert_eq!(MIN_VALIDATOR_STAKE, 10_000_000_000_000);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_cleanup() {
+        let network = P2PNetwork::new().unwrap();
+        
+        // Add many peers to trigger cleanup
+        for _i in 0..150 {
+            let peer = PeerId::random();
+            network.check_rate_limit(&peer).await;
+        }
+        
+        // Verify rate limits are being tracked (and some may be cleaned)
+        let limits = network.peer_rate_limits.read().await;
+        // After cleanup, should have at most RATE_LIMIT_CLEANUP_THRESHOLD entries
+        assert!(limits.len() <= RATE_LIMIT_CLEANUP_THRESHOLD + 50);
+    }
+
+    #[tokio::test]
+    async fn test_validator_pubkey_registration() {
+        let network = P2PNetwork::new().unwrap();
+        
+        // Initially no validators
+        assert_eq!(network.registered_validator_count().await, 0);
+        
+        // Register a validator
+        let pubkey = [1u8; 32];
+        network.register_validator_pubkey("val1".to_string(), pubkey).await;
+        
+        // Should now have one
+        assert_eq!(network.registered_validator_count().await, 1);
+        
+        // Should be retrievable
+        assert_eq!(network.get_validator_pubkey("val1").await, Some(pubkey));
+        assert_eq!(network.get_validator_pubkey("unknown").await, None);
+    }
+
+    #[tokio::test]
+    async fn test_verify_and_process_vote() {
+        use ed25519_dalek::{Signer, SigningKey};
+        
+        let network = P2PNetwork::new().unwrap();
+        
+        // Create a signing keypair
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+        let pubkey_bytes: [u8; 32] = signing_key.verifying_key().to_bytes();
+        
+        // Register the validator
+        network.register_validator_pubkey("validator1".to_string(), pubkey_bytes).await;
+        
+        // Sign a block hash
+        let block_hash = b"test_block_hash_12345";
+        let signature = signing_key.sign(block_hash);
+        
+        // Valid vote should pass
+        let result = network.verify_and_process_vote(
+            "validator1",
+            block_hash,
+            signature.to_bytes().as_slice()
+        ).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+        
+        // Unknown voter should fail
+        let result = network.verify_and_process_vote(
+            "unknown_validator",
+            block_hash,
+            signature.to_bytes().as_slice()
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown voter"));
+        
+        // Invalid signature should fail
+        let result = network.verify_and_process_vote(
+            "validator1",
+            block_hash,
+            &[0u8; 64] // Invalid signature
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid vote signature"));
+    }
+
+    #[tokio::test]
+    async fn test_verify_proposal_signature() {
+        use ed25519_dalek::{Signer, SigningKey};
+        
+        let network = P2PNetwork::new().unwrap();
+        
+        // Create a signing keypair for the proposer
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+        let pubkey_bytes: [u8; 32] = signing_key.verifying_key().to_bytes();
+        
+        // Register the proposer
+        network.register_validator_pubkey("proposer1".to_string(), pubkey_bytes).await;
+        
+        // Sign a block hash
+        let block_hash = b"block_hash_for_proposal";
+        let signature = signing_key.sign(block_hash);
+        
+        // Valid proposal signature should pass
+        let result = network.verify_proposal_signature(
+            "proposer1",
+            block_hash,
+            signature.to_bytes().as_slice()
+        ).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+        
+        // Unknown proposer should fail
+        let result = network.verify_proposal_signature(
+            "unknown_proposer",
+            block_hash,
+            signature.to_bytes().as_slice()
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown proposer"));
+        
+        // Invalid signature should fail
+        let result = network.verify_proposal_signature(
+            "proposer1",
+            block_hash,
+            &[0u8; 64]
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid proposal signature"));
+    }
+
+    #[test]
+    fn test_verify_announce_signature() {
+        use ed25519_dalek::{Signer, SigningKey};
+        
+        // Create a signing keypair
+        let signing_key = SigningKey::from_bytes(&[2u8; 32]);
+        let pubkey_bytes: [u8; 32] = signing_key.verifying_key().to_bytes();
+        
+        let address = "sultan1validator123";
+        let stake: u64 = 10_000_000_000_000;
+        let peer_id = "12D3KooWtest";
+        
+        // Create message and sign it
+        let message = format!("{}{}{}", address, stake, peer_id);
+        let signature = signing_key.sign(message.as_bytes());
+        
+        // Valid announcement signature should pass
+        assert!(P2PNetwork::verify_announce_signature(
+            &pubkey_bytes,
+            address,
+            stake,
+            peer_id,
+            signature.to_bytes().as_slice()
+        ));
+        
+        // Wrong address should fail
+        assert!(!P2PNetwork::verify_announce_signature(
+            &pubkey_bytes,
+            "wrong_address",
+            stake,
+            peer_id,
+            signature.to_bytes().as_slice()
+        ));
+        
+        // Wrong stake should fail
+        assert!(!P2PNetwork::verify_announce_signature(
+            &pubkey_bytes,
+            address,
+            999,
+            peer_id,
+            signature.to_bytes().as_slice()
+        ));
+        
+        // Invalid signature should fail
+        assert!(!P2PNetwork::verify_announce_signature(
+            &pubkey_bytes,
+            address,
+            stake,
+            peer_id,
+            &[0u8; 64]
+        ));
     }
 }

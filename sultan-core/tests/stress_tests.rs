@@ -31,6 +31,8 @@ async fn stress_test_10_percent_capacity() {
             timestamp: i as u64,
             nonce: (i / 1000) as u64 + 1,
             signature: Some("test_sig".to_string()),
+            public_key: None,
+            memo: None,
         });
     }
 
@@ -60,6 +62,8 @@ async fn stress_test_50_percent_capacity() {
             timestamp: i as u64,
             nonce: (i / 5000) as u64 + 1,
             signature: Some("test_sig".to_string()),
+            public_key: None,
+            memo: None,
         });
     }
 
@@ -87,6 +91,8 @@ async fn stress_test_full_capacity() {
             timestamp: i as u64,
             nonce: (i / 10000) as u64 + 1,
             signature: Some("test_sig".to_string()),
+            public_key: None,
+            memo: None,
         });
     }
 
@@ -114,6 +120,8 @@ async fn stress_test_shard_distribution() {
             timestamp: i as u64,
             nonce: 1,
             signature: Some("test_sig".to_string()),
+            public_key: None,
+            memo: None,
         });
     }
 
@@ -155,6 +163,8 @@ async fn stress_test_expansion_under_load() {
             timestamp: i as u64,
             nonce: (i / 5000) as u64 + 1,
             signature: Some("test_sig".to_string()),
+            public_key: None,
+            memo: None,
         });
     }
     

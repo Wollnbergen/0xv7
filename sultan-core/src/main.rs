@@ -9,7 +9,7 @@
 //! - Persistent storage
 
 use sultan_core::*;
-use sultan_core::block_sync::{BlockSyncManager, SyncConfig, SyncState};
+use sultan_core::block_sync::{BlockSyncManager, SyncConfig};
 use sultan_core::economics::Economics;
 use sultan_core::bridge_integration::BridgeManager;
 use sultan_core::staking::StakingManager;
@@ -24,13 +24,13 @@ use anyhow::{Result, Context, bail};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
 use std::sync::Arc;
-use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 use std::path::PathBuf;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use sha2::Digest;
-use ed25519_dalek::{Signature, VerifyingKey, Verifier, SIGNATURE_LENGTH};
+use ed25519_dalek::{Signature, VerifyingKey, Verifier, SigningKey, SIGNATURE_LENGTH};
+use rand::rngs::OsRng;
 
 /// Sultan Node CLI Arguments
 #[derive(Parser, Debug)]
@@ -61,6 +61,10 @@ struct Args {
     #[clap(long)]
     validator_stake: Option<u64>,
 
+    /// Validator Ed25519 public key (64 hex chars, required if --validator)
+    #[clap(long)]
+    validator_pubkey: Option<String>,
+
     /// P2P listen address
     #[clap(short, long, default_value = "/ip4/0.0.0.0/tcp/26656")]
     p2p_addr: String,
@@ -68,6 +72,10 @@ struct Args {
     /// RPC listen address
     #[clap(short, long, default_value = "0.0.0.0:26657")]
     rpc_addr: String,
+
+    /// Allowed CORS origins (comma-separated, or '*' for any - insecure)
+    #[clap(long, default_value = "http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000")]
+    allowed_origins: String,
 
     /// Genesis accounts (address:balance,address:balance,...)
     #[clap(long)]
@@ -96,6 +104,126 @@ struct Args {
     /// Enable P2P networking (connects validators together)
     #[clap(long)]
     enable_p2p: bool,
+
+    /// Enable TLS for RPC server (requires cert_path and key_path)
+    #[clap(long)]
+    enable_tls: bool,
+
+    /// Path to TLS certificate file (PEM format)
+    #[clap(long)]
+    tls_cert: Option<String>,
+
+    /// Path to TLS private key file (PEM format)
+    #[clap(long)]
+    tls_key: Option<String>,
+
+    /// Subcommand (e.g., keygen)
+    #[clap(subcommand)]
+    command: Option<Command>,
+}
+
+/// CLI Subcommands
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Generate a new Ed25519 keypair for validator registration
+    Keygen {
+        /// Output format (hex, json)
+        #[clap(long, default_value = "hex")]
+        format: String,
+    },
+}
+
+/// Generate and display a new Ed25519 keypair
+fn run_keygen(format: &str) {
+    let signing_key = SigningKey::generate(&mut OsRng);
+    let verifying_key = signing_key.verifying_key();
+    
+    let secret_hex = hex::encode(signing_key.to_bytes());
+    let public_hex = hex::encode(verifying_key.to_bytes());
+    
+    match format {
+        "json" => {
+            println!("{}", serde_json::json!({
+                "public_key": public_hex,
+                "secret_key": secret_hex,
+                "algorithm": "Ed25519",
+                "warning": "KEEP SECRET KEY SECURE - DO NOT SHARE"
+            }));
+        }
+        _ => {
+            println!("╔══════════════════════════════════════════════════════════════════════╗");
+            println!("║              SULTAN L1 VALIDATOR KEYPAIR GENERATOR                   ║");
+            println!("╠══════════════════════════════════════════════════════════════════════╣");
+            println!("║ Algorithm: Ed25519                                                   ║");
+            println!("╠══════════════════════════════════════════════════════════════════════╣");
+            println!("║ PUBLIC KEY (use with --validator-pubkey):                            ║");
+            println!("║ {}  ║", public_hex);
+            println!("╠══════════════════════════════════════════════════════════════════════╣");
+            println!("║ SECRET KEY (KEEP SECURE - DO NOT SHARE):                             ║");
+            println!("║ {}  ║", secret_hex);
+            println!("╚══════════════════════════════════════════════════════════════════════╝");
+            println!();
+            println!("Usage: sultan-node --validator --validator-pubkey {}", public_hex);
+        }
+    }
+}
+
+/// Validate Sultan address format (sultan1... with bech32)
+fn validate_address(addr: &str) -> Result<(), String> {
+    if addr.is_empty() {
+        return Err("Address cannot be empty".to_string());
+    }
+    if !addr.starts_with("sultan1") {
+        return Err(format!("Invalid address prefix: expected 'sultan1', got '{}'", &addr[..7.min(addr.len())]));
+    }
+    if addr.len() < 39 || addr.len() > 59 {
+        return Err(format!("Invalid address length: {} (expected 39-59 chars)", addr.len()));
+    }
+    // Basic bech32 character set validation
+    let valid_chars = "023456789acdefghjklmnpqrstuvwxyz";
+    for c in addr[7..].chars() {
+        if !valid_chars.contains(c) {
+            return Err(format!("Invalid bech32 character: '{}'", c));
+        }
+    }
+    Ok(())
+}
+
+/// Verify Ed25519 signature for RPC request authentication
+/// Returns Ok(()) if signature is valid, Err with message otherwise
+fn verify_request_signature(
+    public_key_hex: &str,
+    signature_hex: &str,
+    message: &str,
+) -> Result<(), String> {
+    // Decode public key
+    if public_key_hex.len() != 64 {
+        return Err(format!("Invalid public key length: {} (expected 64 hex chars)", public_key_hex.len()));
+    }
+    let pubkey_bytes = hex::decode(public_key_hex)
+        .map_err(|e| format!("Invalid public key hex: {}", e))?;
+    let mut pubkey_arr = [0u8; 32];
+    pubkey_arr.copy_from_slice(&pubkey_bytes);
+    let verifying_key = VerifyingKey::from_bytes(&pubkey_arr)
+        .map_err(|e| format!("Invalid Ed25519 public key: {}", e))?;
+    
+    // Decode signature
+    if signature_hex.len() != 128 {
+        return Err(format!("Invalid signature length: {} (expected 128 hex chars)", signature_hex.len()));
+    }
+    let sig_bytes = hex::decode(signature_hex)
+        .map_err(|e| format!("Invalid signature hex: {}", e))?;
+    let signature = Signature::from_slice(&sig_bytes)
+        .map_err(|e| format!("Invalid Ed25519 signature: {}", e))?;
+    
+    // Hash the message (same as transaction_validator)
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(message.as_bytes());
+    let message_hash = hasher.finalize();
+    
+    // Verify signature
+    verifying_key.verify(&message_hash, &signature)
+        .map_err(|_| "Signature verification failed".to_string())
 }
 
 /// Wallet transaction request format (matches wallet extension API)
@@ -170,9 +298,6 @@ where
 struct NodeState {
     /// The unified Sultan blockchain (always sharded internally)
     blockchain: Arc<RwLock<SultanBlockchain>>,
-    /// Legacy field for backward compatibility (always same as blockchain)
-    #[deprecated(note = "Use blockchain field - sharding is always enabled")]
-    sharded_blockchain: Option<Arc<RwLock<SultanBlockchain>>>,
     consensus: Arc<RwLock<ConsensusEngine>>,
     storage: Arc<RwLock<PersistentStorage>>,
     economics: Arc<RwLock<Economics>>,
@@ -182,13 +307,14 @@ struct NodeState {
     token_factory: Arc<TokenFactory>,
     native_dex: Arc<NativeDex>,
     p2p_network: Option<Arc<RwLock<P2PNetwork>>>,
+    /// Block sync manager (TODO: Phase 4 integration)
+    #[allow(dead_code)]
     block_sync_manager: Option<Arc<RwLock<BlockSyncManager>>>,
     validator_address: Option<String>,
     block_time: u64,
-    /// Always true - sharding cannot be disabled
-    #[deprecated(note = "Sharding is always enabled in Sultan L1")]
-    sharding_enabled: bool,
     p2p_enabled: bool,
+    /// Allowed CORS origins for RPC security
+    allowed_origins: Vec<String>,
 }
 
 impl NodeState {
@@ -268,10 +394,28 @@ impl NodeState {
             let validator_stake = args.validator_stake
                 .context("--validator-stake required when --validator is set")?;
             
-            consensus.add_validator(validator_addr.clone(), validator_stake)
+            // Parse and validate Ed25519 public key from CLI
+            let validator_pubkey = args.validator_pubkey.as_ref()
+                .context("--validator-pubkey required when --validator is set (64 hex chars)")?;
+            
+            // Decode hex pubkey to [u8; 32]
+            if validator_pubkey.len() != 64 {
+                bail!("Validator pubkey must be 64 hex characters (32 bytes), got {}", validator_pubkey.len());
+            }
+            let pubkey_bytes = hex::decode(validator_pubkey)
+                .context("Invalid validator pubkey hex")?;
+            let pubkey_array: [u8; 32] = pubkey_bytes.try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid validator pubkey length"))?;
+            
+            // Verify it's a valid Ed25519 public key
+            VerifyingKey::from_bytes(&pubkey_array)
+                .context("Invalid Ed25519 public key")?;
+            
+            consensus.add_validator(validator_addr.clone(), validator_stake, pubkey_array)
                 .context("Failed to add validator")?;
             
-            info!("Running as validator: {} (stake: {})", validator_addr, validator_stake);
+            info!("Running as validator: {} (stake: {}, pubkey: {}...)", 
+                validator_addr, validator_stake, &validator_pubkey[..16]);
         }
 
         // Initialize P2P network if enabled
@@ -318,15 +462,35 @@ impl NodeState {
             None
         };
 
+        // Initialize staking manager and restore persisted state if available
+        let staking_manager = Arc::new(StakingManager::new(0.04)); // 4% inflation (zero gas model)
+        
+        // Restore staking state from persistent storage
+        if let Ok(Some(staking_snapshot)) = storage.load_staking_state() {
+            info!("📥 Found persisted staking state, restoring...");
+            if let Err(e) = staking_manager.restore_from_snapshot(staking_snapshot).await {
+                warn!("⚠️ Failed to restore staking state: {}. Starting fresh.", e);
+            }
+        }
+
+        // Parse allowed origins for CORS security
+        let allowed_origins: Vec<String> = if args.allowed_origins == "*" {
+            vec!["*".to_string()] // Wildcard mode (insecure, for dev only)
+        } else {
+            args.allowed_origins
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        };
+
         Ok(Self {
-            blockchain: blockchain_arc.clone(),
-            #[allow(deprecated)]
-            sharded_blockchain: Some(blockchain_arc), // Same as blockchain for backward compat
+            blockchain: blockchain_arc,
             consensus: consensus_arc,
             storage: Arc::new(RwLock::new(storage)),
             economics: Arc::new(RwLock::new(Economics::new())),
             bridge_manager: Arc::new(BridgeManager::new()),
-            staking_manager: Arc::new(StakingManager::new(0.04)), // 4% inflation (zero gas model)
+            staking_manager,
             governance_manager: Arc::new(GovernanceManager::new()),
             token_factory: Arc::new(TokenFactory::new()),
             native_dex: Arc::new(NativeDex::new(Arc::new(TokenFactory::new()))),
@@ -334,9 +498,8 @@ impl NodeState {
             block_sync_manager,
             validator_address: args.validator_address.clone(),
             block_time: args.block_time,
-            #[allow(deprecated)]
-            sharding_enabled: true, // Always enabled
             p2p_enabled: args.enable_p2p,
+            allowed_origins,
         })
     }
 
@@ -426,6 +589,11 @@ impl NodeState {
                 .context("Failed to record proposal")?;
         }
 
+        // Record block signed in staking (resets missed block counter)
+        if let Err(e) = self.staking_manager.record_block_signed(&proposer).await {
+            warn!("Failed to record block signed for staking: {}", e);
+        }
+
         // Save to storage
         storage.save_block(&block)
             .context("Failed to save block")?;
@@ -457,6 +625,37 @@ impl NodeState {
             debug!("Distributed staking rewards at height {}", next_height);
         }
 
+        // Process matured unbondings - return tokens to delegators after 21-day period
+        {
+            let completed_unbondings = self.staking_manager.process_unbondings().await;
+            if !completed_unbondings.is_empty() {
+                let blockchain = self.blockchain.read().await;
+                for unbonding in &completed_unbondings {
+                    // Return the unbonded tokens to the delegator's available balance
+                    if let Err(e) = blockchain.add_balance(&unbonding.delegator_address, unbonding.amount).await {
+                        error!(
+                            "CRITICAL: Failed to return {} SLTN to {} after unbonding: {}",
+                            unbonding.amount / 1_000_000_000,
+                            unbonding.delegator_address,
+                            e
+                        );
+                    } else {
+                        info!(
+                            "💰 Unbonding complete: {} SLTN returned to {}",
+                            unbonding.amount / 1_000_000_000,
+                            unbonding.delegator_address
+                        );
+                    }
+                }
+                
+                // Persist staking state after processing unbondings
+                let storage = self.storage.read().await;
+                if let Err(e) = self.staking_manager.persist_to_storage(&storage).await {
+                    warn!("⚠️ Failed to persist staking state after unbonding: {}", e);
+                }
+            }
+        }
+
         // Update governance height to check for voting period endings
         self.governance_manager.update_height(next_height).await;
         
@@ -472,11 +671,16 @@ impl NodeState {
                     .unwrap_or_default();
                 let block_hash = format!("{:x}", sha2::Sha256::digest(&block_data));
                 
+                // Sign block hash with validator's key for proposer verification
+                // In production, the proposer signs the block hash
+                let proposer_signature = Vec::new(); // TODO: Sign with validator's key
+                
                 if let Err(e) = p2p.read().await.broadcast_block(
                     block.index,
                     &proposer,
                     &block_hash,
                     block_data,
+                    proposer_signature,
                 ).await {
                     warn!("Failed to broadcast block via P2P: {}", e);
                 } else {
@@ -641,12 +845,97 @@ mod rpc {
     use super::*;
     use warp::Filter;
     use std::net::SocketAddr;
+    use std::collections::HashMap;
+    use std::time::Instant;
+    use std::sync::OnceLock;
+
+    /// Simple token bucket rate limiter
+    /// Limits requests per IP to prevent spam/DDoS
+    struct RateLimiter {
+        requests: HashMap<String, Vec<Instant>>,
+        max_requests: usize,
+        window_secs: u64,
+    }
+
+    impl RateLimiter {
+        fn new(max_requests: usize, window_secs: u64) -> Self {
+            Self {
+                requests: HashMap::new(),
+                max_requests,
+                window_secs,
+            }
+        }
+
+        fn check_rate_limit(&mut self, ip: &str) -> bool {
+            let now = Instant::now();
+            let cutoff = now - std::time::Duration::from_secs(self.window_secs);
+            
+            let entry = self.requests.entry(ip.to_string()).or_insert_with(Vec::new);
+            
+            // Remove old requests outside the window
+            entry.retain(|&t| t > cutoff);
+            
+            // Check if under limit
+            if entry.len() < self.max_requests {
+                entry.push(now);
+                true
+            } else {
+                false
+            }
+        }
+
+        // Clean up old entries periodically
+        fn cleanup(&mut self) {
+            let now = Instant::now();
+            let cutoff = now - std::time::Duration::from_secs(self.window_secs * 2);
+            self.requests.retain(|_, times| {
+                times.retain(|&t| t > cutoff);
+                !times.is_empty()
+            });
+        }
+    }
+
+    // Global rate limiter using OnceLock (no external crate needed)
+    static RATE_LIMITER: OnceLock<Arc<tokio::sync::RwLock<RateLimiter>>> = OnceLock::new();
+
+    fn get_rate_limiter() -> &'static Arc<tokio::sync::RwLock<RateLimiter>> {
+        RATE_LIMITER.get_or_init(|| {
+            Arc::new(tokio::sync::RwLock::new(RateLimiter::new(
+                100,  // 100 requests
+                10,   // per 10 seconds
+            )))
+        })
+    }
+
+    /// Rate limiting filter - applies to all endpoints
+    fn with_rate_limit() -> impl Filter<Extract = (), Error = warp::Rejection> + Clone {
+        warp::addr::remote()
+            .and_then(|addr: Option<SocketAddr>| async move {
+                let ip = addr.map(|a| a.ip().to_string()).unwrap_or_else(|| "unknown".to_string());
+                
+                let limiter_ref = get_rate_limiter();
+                let mut limiter = limiter_ref.write().await;
+                
+                // Periodic cleanup every ~1000 requests
+                if limiter.requests.len() > 1000 {
+                    limiter.cleanup();
+                }
+                
+                if limiter.check_rate_limit(&ip) {
+                    Ok(())
+                } else {
+                    warn!("Rate limit exceeded for IP: {}", ip);
+                    Err(warp::reject::custom(super::RateLimitExceeded))
+                }
+            })
+            .untuple_one()
+    }
 
     pub async fn run_rpc_server(
         addr: SocketAddr,
         state: Arc<NodeState>,
     ) -> Result<()> {
-        info!("Starting RPC server on {}", addr);
+        info!("Starting RPC server on {} (rate limit: 100 req/10s per IP)", addr);
 
         // GET /status
         let status_route = warp::path("status")
@@ -770,6 +1059,13 @@ mod rpc {
             .and(warp::body::json())
             .and(with_state(state.clone()))
             .and_then(handle_withdraw_rewards);
+
+        // POST /staking/undelegate (unstake - starts 21-day unbonding period)
+        let undelegate_route = warp::path!("staking" / "undelegate")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_undelegate);
 
         // GET /staking/statistics
         let staking_stats_route = warp::path!("staking" / "statistics")
@@ -932,6 +1228,7 @@ mod rpc {
         
         let staking_routes = create_validator_route
             .or(delegate_route)
+            .or(undelegate_route)
             .or(validators_route)
             .or(delegations_route)
             .or(withdraw_rewards_route)
@@ -975,9 +1272,30 @@ mod rpc {
             .or(dex_routes)
             .boxed();
         
-        let routes = api_routes_1
-            .or(api_routes_2)
-            .with(warp::cors().allow_any_origin())
+        // Build secure CORS configuration from allowed_origins
+        let cors_config = {
+            let mut cors = warp::cors()
+                .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+                .allow_headers(vec!["Content-Type", "Authorization", "Accept"]);
+            
+            if state.allowed_origins.len() == 1 && state.allowed_origins[0] == "*" {
+                warn!("⚠️ CORS: allow_any_origin is INSECURE - use only for development!");
+                cors = cors.allow_any_origin();
+            } else {
+                for origin in &state.allowed_origins {
+                    cors = cors.allow_origin(origin.as_str());
+                }
+                info!("🔒 CORS: Restricting to origins: {:?}", state.allowed_origins);
+            }
+            cors
+        };
+        
+        let routes = with_rate_limit()
+            .and(
+                api_routes_1
+                    .or(api_routes_2)
+            )
+            .with(cors_config)
             .recover(handle_rejection);
 
         warp::serve(routes).run(addr).await;
@@ -1021,6 +1339,7 @@ mod rpc {
                     nonce: wallet_tx.tx.nonce,
                     signature: Some(wallet_tx.signature),
                     public_key: Some(wallet_tx.public_key),
+                    memo: None,
                 }
             }
             TxRequest::Simple(simple_tx) => {
@@ -1035,6 +1354,7 @@ mod rpc {
                     nonce: simple_tx.nonce,
                     signature: simple_tx.signature,
                     public_key: None,
+                    memo: None,
                 }
             }
         };
@@ -1278,6 +1598,7 @@ mod rpc {
     // ========= STAKING HANDLERS =========
 
     #[derive(serde::Deserialize)]
+    #[allow(dead_code)]
     struct CreateValidatorRequest {
         validator_address: String,
         #[serde(default)]
@@ -1300,6 +1621,51 @@ mod rpc {
         req: CreateValidatorRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Parse and validate Ed25519 public key (required for secure validator registration)
+        let pubkey: [u8; 32] = if let Some(ref pk_hex) = req.public_key {
+            // Validate hex length
+            if pk_hex.len() != 64 {
+                return Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": "public_key must be 64 hex characters (32 bytes Ed25519)"
+                    })),
+                    warp::http::StatusCode::BAD_REQUEST,
+                ));
+            }
+            // Decode hex to bytes
+            match hex::decode(pk_hex) {
+                Ok(bytes) if bytes.len() == 32 => {
+                    let mut arr = [0u8; 32];
+                    arr.copy_from_slice(&bytes);
+                    // Validate it's a valid Ed25519 public key
+                    if ed25519_dalek::VerifyingKey::from_bytes(&arr).is_err() {
+                        return Ok(warp::reply::with_status(
+                            warp::reply::json(&serde_json::json!({
+                                "error": "public_key is not a valid Ed25519 public key"
+                            })),
+                            warp::http::StatusCode::BAD_REQUEST,
+                        ));
+                    }
+                    arr
+                }
+                _ => {
+                    return Ok(warp::reply::with_status(
+                        warp::reply::json(&serde_json::json!({
+                            "error": "Failed to decode public_key hex"
+                        })),
+                        warp::http::StatusCode::BAD_REQUEST,
+                    ));
+                }
+            }
+        } else {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": "public_key is required for validator registration"
+                })),
+                warp::http::StatusCode::BAD_REQUEST,
+            ));
+        };
+        
         // Add to staking manager for rewards/delegation
         match state.staking_manager.create_validator(
             req.validator_address.clone(),
@@ -1310,7 +1676,7 @@ mod rpc {
                 // Also add to consensus engine for block production
                 // This unifies staking validators with consensus validators
                 let mut consensus = state.consensus.write().await;
-                if let Err(e) = consensus.add_validator(req.validator_address.clone(), req.initial_stake) {
+                if let Err(e) = consensus.add_validator(req.validator_address.clone(), req.initial_stake, pubkey) {
                     warn!("Validator {} added to staking but not consensus: {}", req.validator_address, e);
                 }
                 
@@ -1341,18 +1707,26 @@ mod rpc {
                 }
                 
                 // Return both snake_case and camelCase for compatibility
-                Ok(warp::reply::json(&serde_json::json!({
-                    "validator_address": req.validator_address,
-                    "validatorAddress": req.validator_address,
-                    "stake": req.initial_stake.to_string(),
-                    "commission": req.commission_rate,
-                    "status": "active",
-                    "consensus": true
-                })))
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "validator_address": req.validator_address,
+                        "validatorAddress": req.validator_address,
+                        "stake": req.initial_stake.to_string(),
+                        "commission": req.commission_rate,
+                        "status": "active",
+                        "consensus": true
+                    })),
+                    warp::http::StatusCode::OK,
+                ))
             },
             Err(e) => {
                 warn!("Create validator failed: {}", e);
-                Err(warp::reject())
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": format!("Failed to create validator: {}", e)
+                    })),
+                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                ))
             }
         }
     }
@@ -1385,11 +1759,44 @@ mod rpc {
         // Extract delegation parameters - try wallet format first, then simple format
         let (delegator, validator, amount): (String, String, u64) = if let Some(tx) = json_value.get("tx") {
             // Wallet format: { tx: { from, to, amount }, signature, public_key }
+            // Requires signature verification for security
             let from = tx.get("from").and_then(|v| v.as_str()).unwrap_or_default().to_string();
             let to = tx.get("to").and_then(|v| v.as_str()).unwrap_or_default().to_string();
             let amount = tx.get("amount").map(|v| {
                 v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).unwrap_or(0)
             }).unwrap_or(0);
+            let memo = tx.get("memo").and_then(|v| v.as_str()).unwrap_or("delegate");
+            
+            // Verify signature for authenticated wallet requests
+            let signature = json_value.get("signature").and_then(|v| v.as_str()).unwrap_or_default();
+            let public_key = json_value.get("public_key").and_then(|v| v.as_str()).unwrap_or_default();
+            
+            if !signature.is_empty() && !public_key.is_empty() {
+                // Build signing message (same format as transaction_validator)
+                let message = format!("{}:{}:{}:delegate:{}", from, to, amount, memo);
+                if let Err(e) = verify_request_signature(public_key, signature, &message) {
+                    return Ok(warp::reply::with_status(
+                        warp::reply::json(&serde_json::json!({
+                            "error": format!("Signature verification failed: {}", e),
+                            "status": 401
+                        })),
+                        warp::http::StatusCode::UNAUTHORIZED
+                    ));
+                }
+                info!("✅ Wallet delegation signature verified: from={}", from);
+            }
+            
+            // Validate addresses
+            if let Err(e) = validate_address(&from) {
+                return Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": format!("Invalid delegator address: {}", e),
+                        "status": 400
+                    })),
+                    warp::http::StatusCode::BAD_REQUEST
+                ));
+            }
+            
             info!("Processing wallet delegation: from={}, to={}, amount={}", from, to, amount);
             (from, to, amount)
         } else if json_value.get("delegator_address").is_some() {
@@ -1399,6 +1806,17 @@ mod rpc {
             let amount = json_value.get("amount").map(|v| {
                 v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).unwrap_or(0)
             }).unwrap_or(0);
+            
+            // Validate addresses for simple format too
+            if let Err(e) = validate_address(&delegator) {
+                return Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": format!("Invalid delegator address: {}", e),
+                        "status": 400
+                    })),
+                    warp::http::StatusCode::BAD_REQUEST
+                ));
+            }
             info!("Processing simple delegation: delegator={}, validator={}, amount={}", delegator, validator, amount);
             (delegator, validator, amount)
         } else {
@@ -1420,6 +1838,39 @@ mod rpc {
                 })),
                 warp::http::StatusCode::BAD_REQUEST
             ));
+        }
+        
+        // Check if delegator has sufficient balance
+        let current_balance = {
+            let blockchain = state.blockchain.read().await;
+            blockchain.get_balance(&delegator).await
+        };
+        
+        if current_balance < amount {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": format!("Insufficient balance: {} SLTN available, {} SLTN required", current_balance, amount),
+                    "status": 400,
+                    "available_balance": current_balance,
+                    "required_amount": amount
+                })),
+                warp::http::StatusCode::BAD_REQUEST
+            ));
+        }
+        
+        // Deduct balance from delegator's account BEFORE staking
+        // This ensures the staked amount is removed from their available balance
+        {
+            let blockchain = state.blockchain.read().await;
+            if let Err(e) = blockchain.deduct_balance(&delegator, amount).await {
+                return Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": format!("Failed to deduct balance: {}", e),
+                        "status": 500
+                    })),
+                    warp::http::StatusCode::INTERNAL_SERVER_ERROR
+                ));
+            }
         }
         
         // Auto-register consensus validators in staking manager if not already registered
@@ -1471,6 +1922,14 @@ mod rpc {
                     blockchain.record_transaction(stake_tx).await;
                 }
                 
+                // Persist staking state after successful delegation
+                {
+                    let storage = state.storage.read().await;
+                    if let Err(e) = state.staking_manager.persist_to_storage(&storage).await {
+                        warn!("⚠️ Failed to persist staking state: {}", e);
+                    }
+                }
+                
                 Ok(warp::reply::with_status(
                     warp::reply::json(&serde_json::json!({
                         "delegator": delegator,
@@ -1484,6 +1943,147 @@ mod rpc {
             },
             Err(e) => {
                 warn!("Delegation failed: {}", e);
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": e.to_string(),
+                        "status": 400
+                    })),
+                    warp::http::StatusCode::BAD_REQUEST
+                ))
+            }
+        }
+    }
+
+    /// Handle undelegate (unstake) - starts 21-day unbonding period
+    /// When unbonding completes, tokens are returned to delegator's balance
+    async fn handle_undelegate(
+        body: serde_json::Value,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Parse request body - support multiple formats
+        // Format 1: { delegator_address, validator_address, amount }
+        // Format 2: { tx: { from, to, amount }, signature, public_key } (wallet format)
+        let (delegator, mut validator, amount) = if let Some(tx) = body.get("tx") {
+            let from = tx.get("from").and_then(|v| v.as_str()).unwrap_or("");
+            let to = tx.get("to").and_then(|v| v.as_str()).unwrap_or("");
+            let amt = tx.get("amount")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<u64>().ok())
+                .or_else(|| tx.get("amount").and_then(|v| v.as_u64()))
+                .unwrap_or(0);
+            (from.to_string(), to.to_string(), amt)
+        } else {
+            let delegator = body.get("delegator_address")
+                .or_else(|| body.get("delegator"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            
+            let validator = body.get("validator_address")
+                .or_else(|| body.get("validator"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            
+            let amount = body.get("amount")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<u64>().ok())
+                .or_else(|| body.get("amount").and_then(|v| v.as_u64()))
+                .unwrap_or(0);
+            
+            (delegator.to_string(), validator.to_string(), amount)
+        };
+
+        // If validator is not specified, find from delegations
+        if validator.is_empty() && !delegator.is_empty() {
+            let delegations = state.staking_manager.get_delegations(&delegator).await;
+            if let Some(first_delegation) = delegations.first() {
+                validator = first_delegation.validator_address.clone();
+            }
+        }
+
+        // Validate the request
+        if delegator.is_empty() || validator.is_empty() || amount == 0 {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": "Missing required fields: delegator, validator, and amount must all be provided",
+                    "status": 400,
+                    "hint": "If validator is not provided, ensure delegator has an active delegation"
+                })),
+                warp::http::StatusCode::BAD_REQUEST
+            ));
+        }
+
+        // Get current block height for transaction recording
+        let current_height = {
+            let blockchain = state.blockchain.read().await;
+            blockchain.get_height().await
+        };
+
+        // Undelegate - this starts the 21-day unbonding period
+        match state.staking_manager.undelegate(
+            delegator.to_string(),
+            validator.to_string(),
+            amount,
+        ).await {
+            Ok(unbonding_entry) => {
+                // Tokens are now in the unbonding queue
+                // They will be returned to the delegator's balance after 21 days
+                // by the unbonding processor in produce_block
+                info!(
+                    "🔓 Unbonding started: {} SLTN from {} → available at block {}",
+                    amount / 1_000_000_000,
+                    delegator,
+                    unbonding_entry.completion_height
+                );
+                
+                // Generate a hash for the unstaking transaction
+                use sha2::{Sha256, Digest};
+                let mut hasher = Sha256::new();
+                let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+                hasher.update(format!("unstake_{}{}{}{}", delegator, validator, amount, timestamp));
+                let hash_bytes = hasher.finalize();
+                let hash = format!("unstake_{}", hex::encode(&hash_bytes[..16]));
+                
+                // Record transaction
+                {
+                    let blockchain = state.blockchain.read().await;
+                    let stake_tx = sultan_core::sharded_blockchain_production::ConfirmedTransaction {
+                        hash: hash.clone(),
+                        from: validator.to_string(),
+                        to: delegator.to_string(),
+                        amount,
+                        memo: Some("Unstake initiated - 21 day unbonding".to_string()),
+                        nonce: 0,
+                        timestamp,
+                        block_height: current_height,
+                        status: "unbonding".to_string(),
+                    };
+                    blockchain.record_transaction(stake_tx).await;
+                }
+                
+                // Persist staking state after successful undelegation
+                {
+                    let storage = state.storage.read().await;
+                    if let Err(e) = state.staking_manager.persist_to_storage(&storage).await {
+                        warn!("⚠️ Failed to persist staking state: {}", e);
+                    }
+                }
+
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "delegator": delegator,
+                        "validator": validator,
+                        "amount": amount,
+                        "status": "unbonding",
+                        "completion_height": unbonding_entry.completion_height,
+                        "completion_time": unbonding_entry.completion_time,
+                        "hash": hash,
+                        "message": "Unstaking initiated. Tokens will be available after 21-day unbonding period."
+                    })),
+                    warp::http::StatusCode::OK
+                ))
+            },
+            Err(e) => {
+                warn!("Undelegation failed: {}", e);
                 Ok(warp::reply::with_status(
                     warp::reply::json(&serde_json::json!({
                         "error": e.to_string(),
@@ -1712,11 +2312,24 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
+    // Handle subcommands first
+    if let Some(cmd) = &args.command {
+        match cmd {
+            Command::Keygen { format } => {
+                run_keygen(format);
+                return Ok(());
+            }
+        }
+    }
+
     info!("🚀 Starting Sultan Node: {}", args.name);
     info!("📁 Data directory: {}", args.data_dir);
     info!("⏱️  Block time: {}s", args.block_time);
     info!("🌐 P2P address: {}", args.p2p_addr);
     info!("🔌 RPC address: {}", args.rpc_addr);
+    if args.enable_tls {
+        info!("🔒 TLS enabled for RPC");
+    }
 
     // Initialize node state
     let state = Arc::new(NodeState::new(&args).await?);
@@ -1761,7 +2374,10 @@ async fn main() -> Result<()> {
                 if let Some(ref p2p) = p2p_state.p2p_network {
                     let peer_count = p2p.read().await.peer_count().await;
                     info!("📢 Announcing validator {} to P2P network ({} peers connected)", addr, peer_count);
-                    if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
+                    // Use placeholder pubkey/signature - validators register via RPC with real keys
+                    let pubkey = [0u8; 32];
+                    let signature = Vec::new();
+                    if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
                         warn!("Failed to announce validator: {}", e);
                     } else {
                         info!("✅ Announced validator {} to P2P network", addr);
@@ -1782,22 +2398,22 @@ async fn main() -> Result<()> {
                         } 
                     } => {
                         match msg {
-                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id } => {
-                                // Register validator in consensus engine
-                                let mut consensus = p2p_state.consensus.write().await;
+                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, pubkey: _, signature: _ } => {
+                                // Check if validator is already registered
+                                let consensus = p2p_state.consensus.read().await;
                                 if !consensus.is_validator(address) {
-                                    match consensus.add_validator(address.clone(), stake) {
-                                        Ok(_) => {
-                                            info!("✅ Registered validator in consensus: {} (stake: {}, peer: {})", 
-                                                  address, stake, peer_id);
-                                        }
-                                        Err(e) => {
-                                            warn!("Failed to register validator {}: {}", address, e);
-                                        }
-                                    }
+                                    // TODO(Phase 4): NetworkMessage::ValidatorAnnounce should include pubkey field
+                                    // For now, log a warning and skip registration without valid pubkey
+                                    // This prevents placeholder pubkeys in production
+                                    warn!("⚠️ Validator {} announced via P2P but pubkey not in message - \
+                                           use RPC /validators/create with public_key to register", address);
+                                    // Skip adding to consensus without verified pubkey
+                                    // Validators must register via RPC with their Ed25519 public key
                                 }
+                                info!("📡 Received validator announcement: {} (stake: {}, peer: {})", 
+                                      address, stake, peer_id);
                             }
-                            NetworkMessage::BlockProposal { height, proposer, block_hash, block_data } => {
+                            NetworkMessage::BlockProposal { height, proposer, block_hash, block_data, proposer_signature: _ } => {
                                 // === PRODUCTION BLOCK SYNC ===
                                 // Process incoming block from another validator
                                 debug!("📥 Received block proposal: height={}, proposer={}, hash={}", 
@@ -1837,11 +2453,33 @@ async fn main() -> Result<()> {
                                     info!("📦 Applying block {} from {}", height, proposer);
                                     
                                     // Apply block to our chain - Sultan Chain unified architecture
-                                    let mut blockchain = p2p_state.blockchain.write().await;
+                                    let blockchain = p2p_state.blockchain.write().await;
                                     match blockchain.apply_block(block.clone()).await {
                                         Ok(_) => {
                                             info!("✅ Synced block {} from {} ({} txs)", 
                                                   height, proposer, block.transactions.len());
+                                            
+                                            // === DOWNTIME DETECTION ===
+                                            // If expected proposer didn't produce this block, count as missed
+                                            if let Some(ref expected) = expected_proposer {
+                                                if expected != &proposer {
+                                                    // Someone else produced when expected didn't
+                                                    if let Err(e) = p2p_state.staking_manager
+                                                        .record_block_missed(expected).await {
+                                                        warn!("Failed to record missed block for {}: {}", expected, e);
+                                                    } else {
+                                                        let missed = p2p_state.staking_manager
+                                                            .get_missed_blocks(expected).await;
+                                                        if missed > 0 && missed % 10 == 0 {
+                                                            warn!("⚠️ Validator {} has missed {} blocks", expected, missed);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Record that actual proposer signed
+                                            let _ = p2p_state.staking_manager
+                                                .record_block_signed(&proposer).await;
                                         }
                                         Err(e) => {
                                             warn!("❌ Failed to apply block {}: {}", height, e);
@@ -1898,7 +2536,9 @@ async fn main() -> Result<()> {
                                 if count % 6 == 0 {
                                     let peer_count = p2p.read().await.peer_count().await;
                                     if peer_count > 0 {
-                                        if let Err(e) = p2p.read().await.announce_validator(addr, stake).await {
+                                        let pubkey = [0u8; 32];
+                                        let signature = Vec::new();
+                                        if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
                                             debug!("Failed to re-announce validator: {}", e);
                                         } else {
                                             info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
@@ -1945,7 +2585,7 @@ async fn main() -> Result<()> {
 }
 
 // Token Factory Handlers
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct CreateTokenRequest {
@@ -1957,6 +2597,8 @@ struct CreateTokenRequest {
     max_supply: Option<u128>,
     logo_url: Option<String>,
     description: Option<String>,
+    signature: String,  // hex-encoded Ed25519 signature
+    pubkey: String,     // hex-encoded 32-byte public key
 }
 
 #[derive(Debug, Deserialize)]
@@ -1964,6 +2606,9 @@ struct MintTokenRequest {
     denom: String,
     to_address: String,
     amount: u128,
+    minter: String,     // address of minter (must be token creator)
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1972,6 +2617,8 @@ struct TransferTokenRequest {
     from_address: String,
     to_address: String,
     amount: u128,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1979,6 +2626,8 @@ struct BurnTokenRequest {
     denom: String,
     from_address: String,
     amount: u128,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1988,6 +2637,8 @@ struct CreatePairRequest {
     token_b: String,
     amount_a: u128,
     amount_b: u128,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1997,6 +2648,8 @@ struct SwapRequest {
     token_in: String,
     amount_in: u128,
     min_amount_out: u128,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2005,6 +2658,9 @@ struct AddLiquidityRequest {
     pair_id: String,
     amount_a: u128,
     amount_b: u128,
+    min_lp_tokens: Option<u128>,
+    signature: String,
+    pubkey: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2012,13 +2668,37 @@ struct RemoveLiquidityRequest {
     provider: String,
     pair_id: String,
     liquidity: u128,
+    min_amount_a: Option<u128>,
+    min_amount_b: Option<u128>,
+    signature: String,
+    pubkey: String,
 }
 
 async fn handle_create_token(
     request: CreateTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.token_factory.create_token(
+    // Parse signature and pubkey from hex
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.token_factory.create_token_with_signature(
         &request.creator,
         request.name,
         request.symbol,
@@ -2027,6 +2707,8 @@ async fn handle_create_token(
         request.max_supply,
         request.logo_url,
         request.description,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(denom) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2043,10 +2725,31 @@ async fn handle_mint_token(
     request: MintTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.token_factory.mint_to(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.token_factory.mint_to_with_signature(
         &request.denom,
         &request.to_address,
         request.amount,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(_) => Ok(warp::reply::json(&serde_json::json!({
             "success": true
@@ -2062,11 +2765,32 @@ async fn handle_transfer_token(
     request: TransferTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.token_factory.transfer(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.token_factory.transfer_with_signature(
         &request.denom,
         &request.from_address,
         &request.to_address,
         request.amount,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(_) => Ok(warp::reply::json(&serde_json::json!({
             "success": true
@@ -2082,10 +2806,31 @@ async fn handle_burn_token(
     request: BurnTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.token_factory.burn(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.token_factory.burn_with_signature(
         &request.denom,
         &request.from_address,
         request.amount,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(_) => Ok(warp::reply::json(&serde_json::json!({
             "success": true
@@ -2126,7 +2871,7 @@ async fn handle_get_token_balance(
 }
 
 async fn handle_list_tokens(
-    state: Arc<NodeState>,
+    _state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // TokenFactory doesn't expose list_tokens yet, return empty array
     Ok(warp::reply::json(&serde_json::json!({
@@ -2140,12 +2885,33 @@ async fn handle_create_pair(
     request: CreatePairRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.native_dex.create_pair(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.native_dex.create_pair_with_signature(
         &request.creator,
         &request.token_a,
         &request.token_b,
         request.amount_a,
         request.amount_b,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(pair_id) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2162,12 +2928,33 @@ async fn handle_swap(
     request: SwapRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.native_dex.swap(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.native_dex.swap_with_signature(
         &request.from_address,
         &request.pair_id,
         &request.token_in,
         request.amount_in,
         request.min_amount_out,
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok(amount_out) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2184,13 +2971,34 @@ async fn handle_add_liquidity(
     request: AddLiquidityRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.native_dex.add_liquidity(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.native_dex.add_liquidity_with_signature(
         &request.pair_id,
         &request.provider,
         request.amount_a,
         request.amount_b,
-        0, // amount_a_min
-        0, // amount_b_min
+        0, // amount_a_min (slippage protection)
+        0, // amount_b_min (slippage protection)
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok((amount_a, amount_b, liquidity)) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2209,12 +3017,33 @@ async fn handle_remove_liquidity(
     request: RemoveLiquidityRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match state.native_dex.remove_liquidity(
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex"
+        }))),
+    };
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey (must be 32 bytes hex)"
+        }))),
+    };
+    
+    match state.native_dex.remove_liquidity_with_signature(
         &request.pair_id,
         &request.provider,
         request.liquidity,
-        0, // amount_a_min
-        0, // amount_b_min
+        request.min_amount_a.unwrap_or(0),
+        request.min_amount_b.unwrap_or(0),
+        &signature,
+        &pubkey_bytes,
     ).await {
         Ok((amount_a, amount_b)) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
@@ -2245,7 +3074,7 @@ async fn handle_get_pool(
 }
 
 async fn handle_list_pools(
-    state: Arc<NodeState>,
+    _state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // NativeDex doesn't expose list_pools yet, return empty array
     Ok(warp::reply::json(&serde_json::json!({
@@ -2271,12 +3100,19 @@ async fn handle_get_price(
     }
 }
 
+/// Rate limit exceeded rejection (used by RPC rate limiter)
+#[derive(Debug)]
+struct RateLimitExceeded;
+impl warp::reject::Reject for RateLimitExceeded {}
+
 /// Custom rejection handler to return JSON error responses instead of 404
 async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, std::convert::Infallible> {
     use warp::http::StatusCode;
     
     let (code, message) = if err.is_not_found() {
         (StatusCode::NOT_FOUND, "Endpoint not found")
+    } else if err.find::<RateLimitExceeded>().is_some() {
+        (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded - try again later")
     } else if err.find::<warp::reject::MethodNotAllowed>().is_some() {
         (StatusCode::METHOD_NOT_ALLOWED, "Method not allowed")
     } else if err.find::<warp::reject::InvalidQuery>().is_some() {

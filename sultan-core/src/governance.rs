@@ -46,6 +46,45 @@ const MAX_UNBONDING_DAYS: u64 = 28; // Max 28 day unbonding
 // Discussion requirements
 const DISCUSSION_PERIOD_BLOCKS: u64 = 86_400; // ~2 days for Telegram discussion before voting (2*24*60*60/2)
 
+// Address validation
+const SULTAN_ADDRESS_PREFIX: &str = "sultan1";
+const MIN_ADDRESS_LENGTH: usize = 39;
+const MAX_ADDRESS_LENGTH: usize = 64;
+
+/// Validate a Sultan address format
+/// Checks for bech32-like format with sultan1 prefix
+fn validate_address(address: &str) -> Result<()> {
+    if address.is_empty() {
+        bail!("Address cannot be empty");
+    }
+    
+    if !address.starts_with(SULTAN_ADDRESS_PREFIX) {
+        bail!("Invalid address: must start with '{}'", SULTAN_ADDRESS_PREFIX);
+    }
+    
+    if address.len() < MIN_ADDRESS_LENGTH || address.len() > MAX_ADDRESS_LENGTH {
+        bail!("Invalid address length: must be between {} and {} characters", 
+              MIN_ADDRESS_LENGTH, MAX_ADDRESS_LENGTH);
+    }
+    
+    // Check that remaining characters are valid bech32 (alphanumeric, lowercase, no 1,b,i,o)
+    let suffix = &address[SULTAN_ADDRESS_PREFIX.len()..];
+    for c in suffix.chars() {
+        if !c.is_ascii_alphanumeric() {
+            bail!("Invalid address: contains non-alphanumeric character");
+        }
+        if c.is_uppercase() {
+            bail!("Invalid address: bech32 addresses must be lowercase");
+        }
+        // bech32 doesn't use 1, b, i, o in the data part
+        if matches!(c, '1' | 'b' | 'i' | 'o') {
+            bail!("Invalid address: contains invalid bech32 character '{}'", c);
+        }
+    }
+    
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ProposalType {
     ParameterChange,
@@ -54,6 +93,9 @@ pub enum ProposalType {
     TextProposal,
     /// Emergency action requiring validator multi-sig
     EmergencyAction,
+    /// Slashing proposal to penalize misbehaving validators
+    /// Requires validator address and slash percentage in parameters
+    SlashingProposal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -229,6 +271,10 @@ impl GovernanceManager {
         telegram_discussion_url: Option<String>,
         discord_discussion_url: Option<String>,
     ) -> Result<u64> {
+        // === Address validation ===
+        validate_address(&proposer)
+            .context("Invalid proposer address")?;
+        
         // === Input validation ===
         if title.is_empty() || title.len() > 140 {
             bail!("Title must be between 1 and 140 characters");
@@ -356,6 +402,37 @@ impl GovernanceManager {
 
         Ok(proposal_id)
     }
+    
+    /// Submit a proposal with auto-persist to storage
+    /// Use this when storage is available for automatic durability
+    pub async fn submit_proposal_with_storage(
+        &self,
+        proposer: String,
+        title: String,
+        description: String,
+        proposal_type: ProposalType,
+        initial_deposit: u64,
+        parameters: Option<HashMap<String, String>>,
+        telegram_discussion_url: Option<String>,
+        discord_discussion_url: Option<String>,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<u64> {
+        let proposal_id = self.submit_proposal(
+            proposer,
+            title,
+            description,
+            proposal_type,
+            initial_deposit,
+            parameters,
+            telegram_discussion_url,
+            discord_discussion_url,
+        ).await?;
+        
+        // Auto-persist after successful submit
+        self.persist_to_storage(storage).await?;
+        
+        Ok(proposal_id)
+    }
 
     /// Cast a vote on a proposal
     /// 
@@ -368,6 +445,10 @@ impl GovernanceManager {
         option: VoteOption,
         voting_power: u64,
     ) -> Result<()> {
+        // Validate voter address
+        validate_address(&voter)
+            .context("Invalid voter address")?;
+        
         let proposals = self.proposals.read().await;
         let proposal = proposals.get(&proposal_id)
             .context("Proposal not found")?;
@@ -443,6 +524,23 @@ impl GovernanceManager {
 
         Ok(())
     }
+    
+    /// Cast a vote with auto-persist to storage
+    pub async fn vote_with_storage(
+        &self,
+        proposal_id: u64,
+        voter: String,
+        option: VoteOption,
+        voting_power: u64,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<()> {
+        self.vote(proposal_id, voter, option, voting_power).await?;
+        
+        // Auto-persist after successful vote
+        self.persist_to_storage(storage).await?;
+        
+        Ok(())
+    }
 
     /// Update staking snapshot for a height (called by staking module)
     /// This should be called at regular intervals (e.g., every 100 blocks)
@@ -505,6 +603,22 @@ impl GovernanceManager {
 
         Ok(sig_count)
     }
+    
+    /// Sign upgrade proposal with auto-persist to storage
+    pub async fn sign_upgrade_proposal_with_storage(
+        &self,
+        proposal_id: u64,
+        validator_address: String,
+        signature: String,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<usize> {
+        let sig_count = self.sign_upgrade_proposal(proposal_id, validator_address, signature).await?;
+        
+        // Auto-persist after successful signature
+        self.persist_to_storage(storage).await?;
+        
+        Ok(sig_count)
+    }
 
     /// Emergency pause a proposal (validator action)
     /// If 67% of validators vote to pause, proposal is halted
@@ -552,6 +666,22 @@ impl GovernanceManager {
         }
 
         Ok(false)
+    }
+    
+    /// Emergency pause vote with auto-persist to storage
+    pub async fn emergency_pause_vote_with_storage(
+        &self,
+        proposal_id: u64,
+        validator_address: String,
+        total_validators: usize,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<bool> {
+        let paused = self.emergency_pause_vote(proposal_id, validator_address, total_validators).await?;
+        
+        // Auto-persist after successful pause vote
+        self.persist_to_storage(storage).await?;
+        
+        Ok(paused)
     }
 
     /// Advance proposals from discussion to voting period
@@ -619,7 +749,7 @@ impl GovernanceManager {
         };
 
         let vetoed = if total_voting_power > 0 {
-            (no_with_veto as f64 / total_voting_power as f64) > 0.334
+            (no_with_veto as f64 / total_voting_power as f64) > VETO_THRESHOLD
         } else {
             false
         };
@@ -668,10 +798,44 @@ impl GovernanceManager {
 
         Ok(tally)
     }
+    
+    /// Tally votes with auto-persist to storage
+    pub async fn tally_proposal_with_storage(
+        &self, 
+        proposal_id: u64,
+        storage: &crate::storage::PersistentStorage,
+    ) -> Result<TallyResult> {
+        let tally = self.tally_proposal(proposal_id).await?;
+        
+        // Auto-persist after successful tally
+        self.persist_to_storage(storage).await?;
+        
+        Ok(tally)
+    }
 
-    /// Execute a passed proposal
+    /// Execute a passed proposal (standalone, no external integrations)
     /// CRITICAL: This function can hot-activate features without chain restart
+    /// For parameter changes that affect staking, use execute_proposal_with_staking instead.
     pub async fn execute_proposal(&self, proposal_id: u64) -> Result<()> {
+        self.execute_proposal_internal(proposal_id, None).await
+    }
+    
+    /// Execute a passed proposal with staking integration
+    /// This allows governance to update staking parameters (inflation_rate, etc.)
+    pub async fn execute_proposal_with_staking(
+        &self, 
+        proposal_id: u64,
+        staking: &crate::staking::StakingManager,
+    ) -> Result<()> {
+        self.execute_proposal_internal(proposal_id, Some(staking)).await
+    }
+    
+    /// Internal execution logic with optional staking integration
+    async fn execute_proposal_internal(
+        &self, 
+        proposal_id: u64,
+        staking: Option<&crate::staking::StakingManager>,
+    ) -> Result<()> {
         let mut proposals = self.proposals.write().await;
         let proposal = proposals.get_mut(&proposal_id)
             .context("Proposal not found")?;
@@ -686,6 +850,22 @@ impl GovernanceManager {
                 if let Some(params) = &proposal.parameters {
                     for (key, value) in params {
                         info!("🔧 Executing parameter change: {} = {}", key, value);
+                        
+                        // === Staking parameter changes ===
+                        // These require staking module integration
+                        match key.as_str() {
+                            "inflation_rate" => {
+                                let rate: f64 = value.parse()
+                                    .context("Invalid inflation rate value")?;
+                                if let Some(staking_mgr) = staking {
+                                    staking_mgr.update_inflation_rate(rate).await?;
+                                    info!("✅ Inflation rate updated to {}%", rate * 100.0);
+                                } else {
+                                    warn!("⚠️  Staking not available, inflation rate change deferred");
+                                }
+                            }
+                            _ => {}
+                        }
                         
                         // Hot-activation of features via governance
                         // This allows enabling smart contracts, IBC, etc. without chain restart
@@ -737,6 +917,42 @@ impl GovernanceManager {
                 // Emergency actions are processed by the emergency pause mechanism
                 // This type bypasses normal voting when 67% of validators agree
             }
+            ProposalType::SlashingProposal => {
+                // Slashing proposals require validator_address and slash_percentage parameters
+                if let Some(params) = &proposal.parameters {
+                    let validator_address = params.get("validator_address")
+                        .context("Slashing proposal missing validator_address parameter")?;
+                    let slash_percentage: f64 = params.get("slash_percentage")
+                        .context("Slashing proposal missing slash_percentage parameter")?
+                        .parse()
+                        .context("Invalid slash_percentage value")?;
+                    
+                    // Validate slash percentage bounds (0.1% to 100%)
+                    if slash_percentage < 0.001 || slash_percentage > 1.0 {
+                        bail!("Slash percentage must be between 0.1% (0.001) and 100% (1.0)");
+                    }
+                    
+                    info!("⚔️ Executing slashing proposal: {} - slashing {} by {:.2}%", 
+                          proposal.title, validator_address, slash_percentage * 100.0);
+                    
+                    if let Some(staking_mgr) = staking {
+                        // Governance slashing uses SlashReason::Governance with default jail of ~1 day
+                        let jail_duration = 43200; // ~1 day at 2 seconds per block
+                        staking_mgr.slash_validator(
+                            validator_address, 
+                            crate::staking::SlashReason::Governance,
+                            slash_percentage, 
+                            jail_duration
+                        ).await?;
+                        info!("✅ Validator {} slashed {:.2}% and jailed for {} blocks via governance",
+                              validator_address, slash_percentage * 100.0, jail_duration);
+                    } else {
+                        warn!("⚠️  Staking not available, slashing deferred");
+                    }
+                } else {
+                    bail!("Slashing proposal missing required parameters");
+                }
+            }
         }
 
         proposal.status = ProposalStatus::Executed;
@@ -776,6 +992,104 @@ impl GovernanceManager {
     pub async fn update_total_bonded(&self, amount: u64) {
         let mut total_bonded = self.total_bonded_tokens.write().await;
         *total_bonded = amount;
+    }
+    
+    // ============ Persistence Methods ============
+    
+    /// Save governance state to persistent storage
+    /// Call this after every governance operation
+    pub async fn persist_to_storage(&self, storage: &crate::storage::PersistentStorage) -> Result<()> {
+        // Save all proposals
+        let proposals = self.proposals.read().await;
+        for proposal in proposals.values() {
+            storage.save_proposal(proposal)?;
+        }
+        
+        // Save all votes
+        let votes = self.votes.read().await;
+        for (proposal_id, vote_list) in votes.iter() {
+            storage.save_proposal_votes(*proposal_id, vote_list)?;
+        }
+        
+        // Save governance state
+        let state = self.create_state_snapshot().await;
+        storage.save_governance_state(&state)?;
+        
+        Ok(())
+    }
+    
+    /// Create a snapshot of governance state for persistence
+    pub async fn create_state_snapshot(&self) -> crate::storage::GovernanceStateSnapshot {
+        let next_proposal_id = *self.next_proposal_id.read().await;
+        let current_height = *self.current_height.read().await;
+        let total_bonded_tokens = *self.total_bonded_tokens.read().await;
+        let last_proposal_by_address = self.last_proposal_by_address.read().await.clone();
+        
+        let snapshot_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        crate::storage::GovernanceStateSnapshot {
+            next_proposal_id,
+            current_height,
+            total_bonded_tokens,
+            last_proposal_by_address,
+            snapshot_time,
+        }
+    }
+    
+    /// Restore governance state from persistent storage
+    /// Called during node startup if state exists
+    pub async fn restore_from_storage(&self, storage: &crate::storage::PersistentStorage) -> Result<()> {
+        // Load governance state
+        if let Some(state) = storage.load_governance_state()? {
+            info!("🔄 Restoring governance state (next_proposal_id={})", state.next_proposal_id);
+            
+            {
+                let mut next_id = self.next_proposal_id.write().await;
+                *next_id = state.next_proposal_id;
+            }
+            
+            {
+                let mut height = self.current_height.write().await;
+                *height = state.current_height;
+            }
+            
+            {
+                let mut bonded = self.total_bonded_tokens.write().await;
+                *bonded = state.total_bonded_tokens;
+            }
+            
+            {
+                let mut last_proposals = self.last_proposal_by_address.write().await;
+                *last_proposals = state.last_proposal_by_address;
+            }
+        }
+        
+        // Load all proposals
+        let stored_proposals = storage.load_all_proposals()?;
+        {
+            let mut proposals = self.proposals.write().await;
+            let mut votes = self.votes.write().await;
+            
+            for proposal in stored_proposals {
+                let proposal_id = proposal.id;
+                proposals.insert(proposal_id, proposal);
+                
+                // Load votes for this proposal
+                let proposal_votes = storage.load_proposal_votes(proposal_id)?;
+                votes.insert(proposal_id, proposal_votes);
+            }
+        }
+        
+        let proposals = self.proposals.read().await;
+        info!(
+            "✅ Governance state restored: {} proposals",
+            proposals.len()
+        );
+        
+        Ok(())
     }
 
     /// Get governance statistics
@@ -830,12 +1144,22 @@ impl Default for GovernanceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    // Test addresses (valid bech32 format - data part excludes 1, b, i, o)
+    // Using 'prps' for proposer, 'vtr' for voter, 'vld' for validator
+    const PROPOSER1: &str = "sultan1prps2qqqqqqqqqqqqqqqqqqqqqqqqqqqprpsaa";
+    const PROPOSER2: &str = "sultan1prps3qqqqqqqqqqqqqqqqqqqqqqqqqqqprpscc";
+    const VOTER1: &str = "sultan1vter2qqqqqqqqqqqqqqqqqqqqqqqqqqqqvteraa";
+    const VOTER2: &str = "sultan1vter3qqqqqqqqqqqqqqqqqqqqqqqqqqqqvtercc";
+    const VOTER3: &str = "sultan1vter4qqqqqqqqqqqqqqqqqqqqqqqqqqqqvterdd";
+    const VALIDATOR1: &str = "sultan1vld2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqvldaa";
+    const VALIDATOR2: &str = "sultan1vld3qqqqqqqqqqqqqqqqqqqqqqqqqqqqqvldcc";
 
     #[tokio::test]
     async fn test_submit_proposal() {
         let gov = GovernanceManager::new();
         let result = gov.submit_proposal(
-            "proposer1".to_string(),
+            PROPOSER1.to_string(),
             "Test Proposal".to_string(),
             "This is a test proposal".to_string(),
             ProposalType::TextProposal,
@@ -846,6 +1170,58 @@ mod tests {
         ).await;
         assert!(result.is_ok());
     }
+    
+    #[tokio::test]
+    async fn test_submit_proposal_invalid_address() {
+        let gov = GovernanceManager::new();
+        let result = gov.submit_proposal(
+            "invalid_address".to_string(),
+            "Test Proposal".to_string(),
+            "This is a test proposal".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/123".to_string()),
+            None,
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid"));
+    }
+    
+    #[tokio::test]
+    async fn test_submit_proposal_requires_discussion() {
+        let gov = GovernanceManager::new();
+        // Should fail without discussion link
+        let result = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Test Proposal".to_string(),
+            "This is a test proposal".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            None,
+            None,
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("discussion"));
+    }
+    
+    #[tokio::test]
+    async fn test_submit_proposal_deposit_too_low() {
+        let gov = GovernanceManager::new();
+        let result = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Test Proposal".to_string(),
+            "This is a test proposal".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT - 1, // Too low
+            None,
+            Some("https://t.me/SultanChain/123".to_string()),
+            None,
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("deposit"));
+    }
 
     #[tokio::test]
     async fn test_vote() {
@@ -853,7 +1229,7 @@ mod tests {
         gov.update_total_bonded(10_000_000_000_000).await;
         
         let proposal_id = gov.submit_proposal(
-            "proposer1".to_string(),
+            PROPOSER1.to_string(),
             "Test Proposal".to_string(),
             "This is a test proposal".to_string(),
             ProposalType::TextProposal,
@@ -869,11 +1245,39 @@ mod tests {
 
         let result = gov.vote(
             proposal_id,
-            "voter1".to_string(),
+            VOTER1.to_string(),
             VoteOption::Yes,
             1_000_000_000_000,
         ).await;
         assert!(result.is_ok());
+    }
+    
+    #[tokio::test]
+    async fn test_vote_invalid_address() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Test Proposal".to_string(),
+            "This is a test proposal".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/123".to_string()),
+            None,
+        ).await.unwrap();
+
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+
+        let result = gov.vote(
+            proposal_id,
+            "bad_voter".to_string(),
+            VoteOption::Yes,
+            1_000_000_000_000,
+        ).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -882,7 +1286,7 @@ mod tests {
         gov.update_total_bonded(10_000_000_000_000).await;
         
         let proposal_id = gov.submit_proposal(
-            "proposer1".to_string(),
+            PROPOSER1.to_string(),
             "Test Proposal".to_string(),
             "This is a test proposal".to_string(),
             ProposalType::TextProposal,
@@ -897,8 +1301,8 @@ mod tests {
         gov.advance_proposal_phases().await;
 
         // Vote
-        gov.vote(proposal_id, "voter1".to_string(), VoteOption::Yes, 4_000_000_000_000).await.unwrap();
-        gov.vote(proposal_id, "voter2".to_string(), VoteOption::No, 1_000_000_000_000).await.unwrap();
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 4_000_000_000_000).await.unwrap();
+        gov.vote(proposal_id, VOTER2.to_string(), VoteOption::No, 1_000_000_000_000).await.unwrap();
 
         // End voting period
         gov.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 1).await;
@@ -906,5 +1310,610 @@ mod tests {
         let tally = gov.tally_proposal(proposal_id).await.unwrap();
         assert!(tally.quorum_reached);
         assert!(tally.passed);
+    }
+    
+    #[tokio::test]
+    async fn test_veto_threshold() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Controversial Proposal".to_string(),
+            "This proposal might get vetoed".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/123".to_string()),
+            None,
+        ).await.unwrap();
+
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+
+        // Vote with >33.4% NoWithVeto
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 3_000_000_000_000).await.unwrap();
+        gov.vote(proposal_id, VOTER2.to_string(), VoteOption::NoWithVeto, 3_500_000_000_000).await.unwrap();
+
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 1).await;
+
+        let tally = gov.tally_proposal(proposal_id).await.unwrap();
+        assert!(tally.vetoed, "Proposal should be vetoed (>33.4% NoWithVeto)");
+        assert!(!tally.passed, "Vetoed proposal should not pass");
+        
+        // Check proposal status is Failed
+        let proposal = gov.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Failed);
+    }
+    
+    #[tokio::test]
+    async fn test_parameter_bounds_validation() {
+        let gov = GovernanceManager::new();
+        
+        // Test inflation rate bounds
+        let mut params = HashMap::new();
+        params.insert("inflation_rate".to_string(), "0.25".to_string()); // >20% max
+        
+        let result = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Increase Inflation".to_string(),
+            "Increase inflation to 25%".to_string(),
+            ProposalType::ParameterChange,
+            PROPOSAL_DEPOSIT,
+            Some(params),
+            Some("https://t.me/SultanChain/123".to_string()),
+            None,
+        ).await;
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Inflation rate"));
+        
+        // Test unbonding days bounds
+        let mut params2 = HashMap::new();
+        params2.insert("unbonding_days".to_string(), "3".to_string()); // <7 day min
+        
+        let result2 = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Decrease Unbonding".to_string(),
+            "Decrease unbonding to 3 days".to_string(),
+            ProposalType::ParameterChange,
+            PROPOSAL_DEPOSIT,
+            Some(params2),
+            Some("https://t.me/SultanChain/123".to_string()),
+            None,
+        ).await;
+        
+        assert!(result2.is_err());
+        assert!(result2.unwrap_err().to_string().contains("Unbonding period"));
+    }
+    
+    #[tokio::test]
+    async fn test_emergency_pause() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Normal Proposal".to_string(),
+            "This might need to be paused".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/123".to_string()),
+            None,
+        ).await.unwrap();
+
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        // 10 validators with 67% threshold - ceil(10 * 0.67) = 7 votes needed
+        let total_validators = 10;
+        
+        // First 6 votes - not enough (60%)
+        for i in 0..6 {
+            let addr = format!("sultan1emrg{}qqqqqqqqqqqqqqqqqqqqqqqqqqqqemrg{:02}", i, i);
+            let paused = gov.emergency_pause_vote(proposal_id, addr, total_validators).await.unwrap();
+            assert!(!paused, "Should not pause with {}/10 votes", i + 1);
+        }
+        
+        // 7th vote - reaches threshold (70% > 67%)
+        let paused = gov.emergency_pause_vote(
+            proposal_id, 
+            "sultan1emrg7qqqqqqqqqqqqqqqqqqqqqqqqqqqqemrg07".to_string(), 
+            total_validators
+        ).await.unwrap();
+        assert!(paused, "Should pause with 7/10 votes (70%)");
+        
+        // Check proposal is paused
+        let proposal = gov.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::EmergencyPaused);
+    }
+    
+    #[tokio::test]
+    async fn test_rate_limiting() {
+        let gov = GovernanceManager::new();
+        
+        // Submit first proposal
+        let result1 = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "First Proposal".to_string(),
+            "This is proposal 1".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/1".to_string()),
+            None,
+        ).await;
+        assert!(result1.is_ok());
+        
+        // Try to submit another immediately (should fail due to cooldown)
+        let result2 = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Second Proposal".to_string(),
+            "This should be rate limited".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/2".to_string()),
+            None,
+        ).await;
+        assert!(result2.is_err());
+        assert!(result2.unwrap_err().to_string().contains("Rate limit"));
+    }
+    
+    #[tokio::test]
+    async fn test_address_validation() {
+        assert!(validate_address("").is_err());
+        assert!(validate_address("short").is_err());
+        assert!(validate_address("cosmos1abcdef").is_err());
+        assert!(validate_address("SULTAN1UPPER").is_err());
+        
+        assert!(validate_address(PROPOSER1).is_ok());
+        assert!(validate_address(VOTER1).is_ok());
+    }
+    
+    #[tokio::test]
+    async fn test_statistics() {
+        let gov = GovernanceManager::new();
+        
+        let stats = gov.get_statistics().await;
+        assert_eq!(stats.total_proposals, 0);
+        assert_eq!(stats.min_deposit, PROPOSAL_DEPOSIT);
+        assert_eq!(stats.voting_period, VOTING_PERIOD_BLOCKS);
+        assert!((stats.quorum - MIN_QUORUM).abs() < 0.001);
+        assert!((stats.pass_threshold - PASS_THRESHOLD).abs() < 0.001);
+    }
+    
+    #[tokio::test]
+    async fn test_upgrade_multisig_threshold() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Submit upgrade proposal
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Software Upgrade v2.0".to_string(),
+            "Major protocol upgrade requiring validator consensus".to_string(),
+            ProposalType::SoftwareUpgrade,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/upgrade".to_string()),
+            None,
+        ).await.unwrap();
+        
+        // Advance to voting period
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        // Vote to pass
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        // End voting and tally
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 1).await;
+        let tally = gov.tally_proposal(proposal_id).await.unwrap();
+        assert!(tally.passed);
+        
+        // Sign with validators (need 5 for threshold)
+        for i in 0..4 {
+            let addr = format!("sultan1sgn{}qqqqqqqqqqqqqqqqqqqqqqqqqqqqqsgn{:02}", i, i);
+            let sig_count = gov.sign_upgrade_proposal(
+                proposal_id, 
+                addr, 
+                format!("signature_{}", i)
+            ).await.unwrap();
+            assert_eq!(sig_count, i + 1);
+            
+            // Not yet executed (need 5)
+            let proposal = gov.get_proposal(proposal_id).await.unwrap();
+            assert_eq!(proposal.status, ProposalStatus::Passed);
+        }
+        
+        // 5th signature triggers execution
+        let sig_count = gov.sign_upgrade_proposal(
+            proposal_id,
+            "sultan1sgn5qqqqqqqqqqqqqqqqqqqqqqqqqqqqqsgn05".to_string(),
+            "signature_5".to_string(),
+        ).await.unwrap();
+        assert_eq!(sig_count, 5);
+        
+        // Now should be executed
+        let proposal = gov.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Executed);
+    }
+    
+    #[tokio::test]
+    async fn test_snapshot_prevents_flash_stake() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Create snapshot at height 0 with only VOTER1 having stake
+        let mut snapshot = HashMap::new();
+        snapshot.insert(VOTER1.to_string(), 5_000_000_000_000u64);
+        // VOTER2 not in snapshot (simulates staking after proposal)
+        gov.update_staking_snapshot(0, snapshot).await;
+        
+        // Submit proposal (captures snapshot at height 0)
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Anti-Flash Test".to_string(),
+            "Testing flash stake prevention".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/test".to_string()),
+            None,
+        ).await.unwrap();
+        
+        // Advance to voting period
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        // VOTER1 can vote (was in snapshot)
+        let result1 = gov.vote(
+            proposal_id, 
+            VOTER1.to_string(), 
+            VoteOption::Yes, 
+            5_000_000_000_000
+        ).await;
+        assert!(result1.is_ok());
+        
+        // VOTER2 cannot vote (not in snapshot - flash staker)
+        let result2 = gov.vote(
+            proposal_id, 
+            VOTER2.to_string(), 
+            VoteOption::Yes, 
+            5_000_000_000_000
+        ).await;
+        assert!(result2.is_err());
+        assert!(result2.unwrap_err().to_string().contains("Flash staking"));
+    }
+    
+    #[tokio::test]
+    async fn test_voting_power_capped_to_snapshot() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Snapshot: VOTER1 had 2T when proposal started
+        let mut snapshot = HashMap::new();
+        snapshot.insert(VOTER1.to_string(), 2_000_000_000_000u64);
+        gov.update_staking_snapshot(0, snapshot).await;
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Power Cap Test".to_string(),
+            "Testing voting power is capped to snapshot".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/test".to_string()),
+            None,
+        ).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        // Try to vote with 5T (more than snapshot)
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        // Check actual voting power was capped to snapshot (2T)
+        let votes = gov.get_proposal_votes(proposal_id).await;
+        assert_eq!(votes.len(), 1);
+        assert_eq!(votes[0].voting_power, 2_000_000_000_000); // Capped to snapshot
+    }
+    
+    #[tokio::test]
+    async fn test_execute_param_change() {
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Submit valid parameter change
+        let mut params = HashMap::new();
+        params.insert("inflation_rate".to_string(), "0.05".to_string()); // Valid 5%
+        params.insert("unbonding_days".to_string(), "14".to_string()); // Valid 14 days
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Update Parameters".to_string(),
+            "Adjust inflation and unbonding".to_string(),
+            ProposalType::ParameterChange,
+            PROPOSAL_DEPOSIT,
+            Some(params),
+            Some("https://t.me/SultanChain/params".to_string()),
+            None,
+        ).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 1).await;
+        let tally = gov.tally_proposal(proposal_id).await.unwrap();
+        assert!(tally.passed);
+        
+        // Execute
+        let result = gov.execute_proposal(proposal_id).await;
+        assert!(result.is_ok());
+        
+        let proposal = gov.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Executed);
+    }
+    
+    #[tokio::test]
+    async fn test_execute_with_staking_integration() {
+        use crate::staking::StakingManager;
+        
+        let gov = GovernanceManager::new();
+        let staking = StakingManager::new(0.04); // Initial 4% inflation
+        
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Submit inflation rate change
+        let mut params = HashMap::new();
+        params.insert("inflation_rate".to_string(), "0.08".to_string()); // Change to 8%
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Increase Inflation".to_string(),
+            "Increase inflation rate to 8%".to_string(),
+            ProposalType::ParameterChange,
+            PROPOSAL_DEPOSIT,
+            Some(params),
+            Some("https://t.me/SultanChain/inflation".to_string()),
+            None,
+        ).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 1).await;
+        let tally = gov.tally_proposal(proposal_id).await.unwrap();
+        assert!(tally.passed);
+        
+        // Verify initial inflation
+        let stats_before = staking.get_statistics().await;
+        assert!((stats_before.inflation_rate - 0.04).abs() < 0.001);
+        
+        // Execute with staking integration
+        let result = gov.execute_proposal_with_staking(proposal_id, &staking).await;
+        assert!(result.is_ok());
+        
+        // Verify inflation was updated
+        let stats_after = staking.get_statistics().await;
+        assert!((stats_after.inflation_rate - 0.08).abs() < 0.001, 
+            "Inflation should be updated to 8%, got {}", stats_after.inflation_rate);
+        
+        let proposal = gov.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Executed);
+    }
+    
+    #[tokio::test]
+    async fn test_governance_persistence_roundtrip() {
+        use tempfile::tempdir;
+        use crate::storage::PersistentStorage;
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // Create governance manager and submit proposal
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        gov.update_height(100).await;
+        
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "Persistence Test".to_string(),
+            "Testing governance state persistence".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/persist".to_string()),
+            None,
+        ).await.unwrap();
+        
+        // Advance and vote
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 101).await;
+        gov.advance_proposal_phases().await;
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 5_000_000_000_000).await.unwrap();
+        
+        // Persist to storage
+        gov.persist_to_storage(&storage).await.unwrap();
+        
+        // Create new governance manager and restore
+        let gov2 = GovernanceManager::new();
+        gov2.restore_from_storage(&storage).await.unwrap();
+        
+        // Verify state was restored
+        let proposal = gov2.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.title, "Persistence Test");
+        assert_eq!(proposal.status, ProposalStatus::VotingPeriod);
+        
+        let votes = gov2.get_proposal_votes(proposal_id).await;
+        assert_eq!(votes.len(), 1);
+        assert_eq!(votes[0].voter, VOTER1);
+        
+        // Verify next proposal ID was restored
+        let stats = gov2.get_statistics().await;
+        assert_eq!(stats.total_proposals, 1);
+    }
+    
+    #[tokio::test]
+    async fn test_e2e_full_restart_recovery() {
+        // E2E test: Staking + Governance persist and recover after simulated restart
+        use tempfile::tempdir;
+        use crate::storage::PersistentStorage;
+        use crate::staking::StakingManager;
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        // === Phase 1: Create initial state ===
+        let staking = StakingManager::new(0.04);
+        let gov = GovernanceManager::new();
+        
+        // Create validator in staking
+        staking.create_validator(
+            VALIDATOR1.to_string(),
+            10_000_000_000_000,
+            0.10, // 10% commission as f64
+        ).await.unwrap();
+        
+        // Delegate to validator
+        staking.delegate(
+            VOTER1.to_string(),
+            VALIDATOR1.to_string(),
+            5_000_000_000_000,
+        ).await.unwrap();
+        
+        // Get staking stats for governance
+        let staking_stats = staking.get_statistics().await;
+        gov.update_total_bonded(staking_stats.total_staked).await; // 15T total
+        gov.update_height(100).await;
+        
+        // Create staking snapshot for governance voting
+        // Need enough voting power to meet quorum (33.4% of 15T = ~5T)
+        let mut snapshot = std::collections::HashMap::new();
+        snapshot.insert(VOTER1.to_string(), 10_000_000_000_000u64); // 10T voting power
+        gov.update_staking_snapshot(100, snapshot).await;
+        
+        // Submit proposal
+        let proposal_id = gov.submit_proposal(
+            PROPOSER1.to_string(),
+            "E2E Recovery Test".to_string(),
+            "Testing full staking + governance recovery".to_string(),
+            ProposalType::ParameterChange,
+            PROPOSAL_DEPOSIT,
+            Some({
+                let mut params = std::collections::HashMap::new();
+                params.insert("inflation_rate".to_string(), "0.06".to_string());
+                params
+            }),
+            Some("https://t.me/SultanChain/e2e".to_string()),
+            None,
+        ).await.unwrap();
+        
+        // Advance to voting and cast vote with full voting power
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 101).await;
+        gov.advance_proposal_phases().await;
+        gov.vote(proposal_id, VOTER1.to_string(), VoteOption::Yes, 10_000_000_000_000).await.unwrap();
+        
+        // Persist everything
+        staking.persist_to_storage(&storage).await.unwrap();
+        gov.persist_to_storage(&storage).await.unwrap();
+        
+        // === Phase 2: Simulate restart - create new managers and restore ===
+        let staking2 = StakingManager::new(0.04);
+        let gov2 = GovernanceManager::new();
+        
+        // Restore from storage
+        staking2.restore_from_snapshot(storage.load_staking_state().unwrap().unwrap()).await.unwrap();
+        gov2.restore_from_storage(&storage).await.unwrap();
+        
+        // === Phase 3: Verify all state recovered ===
+        // Check staking state
+        let staking_stats2 = staking2.get_statistics().await;
+        assert_eq!(staking_stats2.total_validators, 1, "Validator should be recovered");
+        assert_eq!(staking_stats2.total_staked, 15_000_000_000_000, "Total stake should be recovered");
+        
+        // Check governance state
+        let proposal = gov2.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.title, "E2E Recovery Test");
+        assert_eq!(proposal.status, ProposalStatus::VotingPeriod);
+        
+        let votes = gov2.get_proposal_votes(proposal_id).await;
+        assert_eq!(votes.len(), 1);
+        assert_eq!(votes[0].voter, VOTER1);
+        assert_eq!(votes[0].voting_power, 10_000_000_000_000); // Verify voting power restored
+        
+        // === Phase 4: Continue operations after recovery ===
+        // End voting and tally
+        gov2.update_height(DISCUSSION_PERIOD_BLOCKS + VOTING_PERIOD_BLOCKS + 101).await;
+        let tally = gov2.tally_proposal(proposal_id).await.unwrap();
+        
+        // Verify tally results
+        assert!(tally.quorum_reached, "Quorum should be reached (10T / 15T = 66.7% > 33.4%)");
+        assert!(tally.passed, "Proposal should pass after recovery");
+        
+        // Execute with staking integration
+        gov2.execute_proposal_with_staking(proposal_id, &staking2).await.unwrap();
+        
+        // Verify inflation was updated
+        let final_stats = staking2.get_statistics().await;
+        assert!((final_stats.inflation_rate - 0.06).abs() < 0.001, 
+            "Inflation should be 6% after execution, got {}", final_stats.inflation_rate);
+        
+        // Verify proposal is executed
+        let final_proposal = gov2.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(final_proposal.status, ProposalStatus::Executed);
+    }
+    
+    #[tokio::test]
+    async fn test_auto_persist_methods() {
+        use tempfile::tempdir;
+        use crate::storage::PersistentStorage;
+        
+        let dir = tempdir().unwrap();
+        let storage = PersistentStorage::new(dir.path().to_str().unwrap()).unwrap();
+        
+        let gov = GovernanceManager::new();
+        gov.update_total_bonded(10_000_000_000_000).await;
+        
+        // Use auto-persist submit
+        let proposal_id = gov.submit_proposal_with_storage(
+            PROPOSER1.to_string(),
+            "Auto Persist Test".to_string(),
+            "Testing auto-persist on submit".to_string(),
+            ProposalType::TextProposal,
+            PROPOSAL_DEPOSIT,
+            None,
+            Some("https://t.me/SultanChain/auto".to_string()),
+            None,
+            &storage,
+        ).await.unwrap();
+        
+        // Verify immediately persisted (new manager should see it)
+        let gov2 = GovernanceManager::new();
+        gov2.restore_from_storage(&storage).await.unwrap();
+        let proposal = gov2.get_proposal(proposal_id).await.unwrap();
+        assert_eq!(proposal.title, "Auto Persist Test");
+        
+        // Advance and use auto-persist vote
+        gov.update_height(DISCUSSION_PERIOD_BLOCKS + 1).await;
+        gov.advance_proposal_phases().await;
+        gov.vote_with_storage(
+            proposal_id, 
+            VOTER1.to_string(), 
+            VoteOption::Yes, 
+            5_000_000_000_000,
+            &storage,
+        ).await.unwrap();
+        
+        // Verify vote persisted
+        let gov3 = GovernanceManager::new();
+        gov3.restore_from_storage(&storage).await.unwrap();
+        let votes = gov3.get_proposal_votes(proposal_id).await;
+        assert_eq!(votes.len(), 1);
     }
 }

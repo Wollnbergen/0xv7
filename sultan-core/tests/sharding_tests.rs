@@ -49,6 +49,8 @@ async fn test_transaction_classification() {
             timestamp: 1,
             nonce: 1,
             signature: Some("sig1".to_string()),
+            public_key: None,
+            memo: None,
         },
         Transaction {
             from: "charlie".to_string(),
@@ -58,6 +60,8 @@ async fn test_transaction_classification() {
             timestamp: 2,
             nonce: 1,
             signature: Some("sig2".to_string()),
+            public_key: None,
+            memo: None,
         },
     ];
 
@@ -102,6 +106,8 @@ fn test_idempotency_key_generation() {
         timestamp: 1,
         nonce: 1,
         signature: Some("sig".to_string()),
+        public_key: None,
+        memo: None,
     };
     
     let ctx1 = CrossShardTransaction::new(0, 1, tx1.clone());

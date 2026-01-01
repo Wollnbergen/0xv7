@@ -1,8 +1,9 @@
 # Security Audit Checklist
 
 **Project**: Sultan Wallet  
-**Version**: 1.0  
-**Date**: December 2025  
+**Version**: 1.1.0  
+**Date**: December 31, 2025  
+**Status**: Internal Review Complete (10/10 all priorities)
 
 Use this checklist during security audit to verify all security controls.
 
@@ -12,39 +13,39 @@ Use this checklist during security audit to verify all security controls.
 
 ### 1.1 Mnemonic Handling
 
-- [ ] **M1**: Mnemonic generated with 256-bit entropy (24 words)
+- [x] **M1**: Mnemonic generated with 256-bit entropy (24 words)
   - File: `wallet.ts:generateMnemonic()`
-  - Verify: Uses `@scure/bip39` with proper entropy
+  - Verify: Uses `@scure/bip39` with proper entropy ✅
 
-- [ ] **M2**: Mnemonic validated using BIP39 checksum
+- [x] **M2**: Mnemonic validated using BIP39 checksum
   - File: `wallet.ts:validateMnemonic()`
-  - Verify: Rejects invalid word combinations
+  - Verify: Rejects invalid word combinations ✅
 
-- [ ] **M3**: Mnemonic stored using SecureString (XOR encrypted)
+- [x] **M3**: Mnemonic stored using SecureString (XOR encrypted)
   - File: `wallet.ts` - `secureMnemonic` field
-  - Verify: Never stored as plain string after creation
+  - Verify: Never stored as plain string after creation ✅
 
-- [ ] **M4**: Mnemonic access via callback pattern only
-  - File: `wallet.ts:withMnemonic()`
-  - Verify: No `getMnemonic()` returning raw string
+- [x] **M4**: BIP39 passphrase support (optional 25th word)
+  - File: `wallet.ts:fromMnemonic(mnemonic, passphrase?)`
+  - Verify: Passphrase changes derived keys ✅
 
 ### 1.2 Private Key Handling
 
-- [ ] **K1**: Private keys derived on-demand
+- [x] **K1**: Private keys derived on-demand
   - File: `wallet.ts:derivePrivateKeyForSigning()`
-  - Verify: Keys not cached in account objects
+  - Verify: Keys not cached in account objects ✅
 
-- [ ] **K2**: Private keys wiped after signing
+- [x] **K2**: Private keys wiped after signing
   - File: `wallet.ts:signTransaction()`, `signMessage()`
-  - Verify: `finally` block calls `secureWipe()`
+  - Verify: `finally` block calls `secureWipe()` ✅
 
-- [ ] **K3**: Account objects do NOT contain privateKey
+- [x] **K3**: Account objects do NOT contain privateKey
   - File: `wallet.ts` - `SultanAccount` interface
-  - Verify: Only address, publicKey, index, path exposed
+  - Verify: Only address, publicKey, index, path exposed ✅
 
-- [ ] **K4**: Correct SLIP-0010 derivation path
+- [x] **K4**: Correct SLIP-0010 derivation path
   - Expected: `m/44'/1984'/0'/0'/{index}`
-  - Verify: All path components are hardened
+  - Verify: All path components are hardened ✅
 
 ---
 

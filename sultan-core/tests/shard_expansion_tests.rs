@@ -96,6 +96,8 @@ async fn test_expansion_concurrent_transactions() {
         timestamp: i as u64,
         nonce: 1,
         signature: Some("sig".to_string()),
+        public_key: None,
+        memo: None,
     }).collect();
     
     let (same_before, cross_before) = coordinator.classify_transactions(tx_before).await;
@@ -110,6 +112,8 @@ async fn test_expansion_concurrent_transactions() {
         timestamp: i as u64,
         nonce: 1,
         signature: Some("sig".to_string()),
+        public_key: None,
+        memo: None,
     }).collect();
     
     let (same_after, cross_after) = coordinator.classify_transactions(tx_after).await;
