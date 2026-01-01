@@ -30,10 +30,13 @@
 5. [Staking Endpoints](#staking-endpoints)
 6. [Governance Endpoints](#governance-endpoints)
 7. [Token Factory Endpoints](#token-factory-endpoints)
-8. [DEX Endpoints](#dex-endpoints)
-9. [Bridge Endpoints](#bridge-endpoints)
-10. [Error Handling](#error-handling)
-11. [Code Examples](#code-examples)
+8. [NFT Endpoints](#nft-endpoints)
+9. [DEX Endpoints](#dex-endpoints)
+10. [Bridge Endpoints](#bridge-endpoints)
+11. [Error Handling](#error-handling)
+12. [Code Examples](#code-examples)
+13. [End-to-End Examples](#end-to-end-examples)
+14. [WebSocket API](#websocket-api)
 
 ---
 
@@ -207,9 +210,11 @@ Get transaction history for an address.
 | `address` | string | Sultan address |
 
 **Query Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `limit` | integer | 50 | Max transactions to return |
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | integer | 50 | 100 | Max transactions to return |
+| `offset` | integer | 0 | - | Skip first N transactions |
+| `order` | string | `desc` | - | Sort order: `asc` or `desc` |
 
 **Response:**
 ```json
@@ -369,6 +374,13 @@ Claim staking rewards.
 
 List all active validators.
 
+**Query Parameters:**
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | integer | 100 | 100 | Max validators to return |
+| `offset` | integer | 0 | - | Skip first N validators |
+| `status` | string | `active` | - | Filter: `active`, `inactive`, `jailed`, `all` |
+
 **Response:**
 ```json
 {
@@ -502,6 +514,13 @@ Vote on an active proposal.
 ## GET /governance/proposals
 
 List all proposals.
+
+**Query Parameters:**
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | integer | 50 | 100 | Max proposals to return |
+| `offset` | integer | 0 | - | Skip first N proposals |
+| `status` | string | `all` | - | Filter: `voting`, `passed`, `rejected`, `all` |
 
 **Response:**
 ```json
@@ -763,6 +782,13 @@ Get token balance for an address.
 
 List all tokens.
 
+**Query Parameters:**
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | integer | 50 | 100 | Max tokens to return |
+| `offset` | integer | 0 | - | Skip first N tokens |
+| `creator` | string | - | - | Filter by creator address |
+
 **Response:**
 ```json
 {
@@ -772,6 +798,283 @@ List all tokens.
       "name": "My Token",
       "symbol": "MTK",
       "total_supply": 1450000000000
+    }
+  ],
+  "total": 156
+}
+```
+
+---
+
+# NFT Endpoints
+
+Native NFT support for collections, minting, and marketplaces.
+
+## POST /nft/collection/create
+
+Create a new NFT collection.
+
+**Request Body:**
+```json
+{
+  "creator": "sultan15g5e8...",
+  "name": "Sultan Punks",
+  "symbol": "SPUNK",
+  "description": "10,000 unique punks on Sultan L1",
+  "max_supply": 10000,
+  "royalty_bps": 500,
+  "base_uri": "ipfs://QmXyz.../",
+  "signature": "base64_encoded_signature",
+  "public_key": "base64_encoded_pubkey"
+}
+```
+
+**Response:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "name": "Sultan Punks",
+  "symbol": "SPUNK",
+  "creator": "sultan15g5e8...",
+  "max_supply": 10000,
+  "total_minted": 0,
+  "royalty_bps": 500
+}
+```
+
+> **Note:** `royalty_bps` is in basis points (500 = 5% royalty on secondary sales).
+
+---
+
+## POST /nft/mint
+
+Mint a new NFT in a collection.
+
+**Request Body:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "minter": "sultan15g5e8...",
+  "recipient": "sultan1abc123...",
+  "token_id": "1",
+  "name": "Sultan Punk #1",
+  "description": "The first Sultan Punk ever minted",
+  "image_uri": "ipfs://QmXyz.../1.png",
+  "metadata_uri": "ipfs://QmXyz.../1.json",
+  "attributes": [
+    { "trait_type": "Background", "value": "Blue" },
+    { "trait_type": "Eyes", "value": "Laser" },
+    { "trait_type": "Rarity", "value": "Legendary" }
+  ],
+  "signature": "base64_encoded_signature",
+  "public_key": "base64_encoded_pubkey"
+}
+```
+
+**Response:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "token_id": "1",
+  "owner": "sultan1abc123...",
+  "name": "Sultan Punk #1",
+  "image_uri": "ipfs://QmXyz.../1.png",
+  "tx_hash": "abc123..."
+}
+```
+
+> **Permissions:** Only collection creator can mint (or approved minters).
+
+---
+
+## POST /nft/transfer
+
+Transfer an NFT to another address.
+
+**Request Body:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "token_id": "1",
+  "from": "sultan1abc123...",
+  "to": "sultan1def456...",
+  "signature": "base64_encoded_signature",
+  "public_key": "base64_encoded_pubkey"
+}
+```
+
+**Response:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "token_id": "1",
+  "from": "sultan1abc123...",
+  "to": "sultan1def456...",
+  "tx_hash": "def456..."
+}
+```
+
+---
+
+## POST /nft/metadata/update
+
+Update NFT metadata (creator only, if mutable).
+
+**Request Body:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "token_id": "1",
+  "updater": "sultan15g5e8...",
+  "name": "Sultan Punk #1 (Evolved)",
+  "description": "This punk has evolved!",
+  "image_uri": "ipfs://QmNewImage.../1.png",
+  "attributes": [
+    { "trait_type": "Background", "value": "Gold" },
+    { "trait_type": "Eyes", "value": "Diamond" },
+    { "trait_type": "Rarity", "value": "Mythic" }
+  ],
+  "signature": "base64_encoded_signature",
+  "public_key": "base64_encoded_pubkey"
+}
+```
+
+**Response:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "token_id": "1",
+  "updated_fields": ["name", "description", "image_uri", "attributes"],
+  "tx_hash": "ghi789..."
+}
+```
+
+---
+
+## GET /nft/collection/{collection_id}
+
+Get collection details.
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `collection_id` | string | Collection ID (URL encoded) |
+
+**Response:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "name": "Sultan Punks",
+  "symbol": "SPUNK",
+  "description": "10,000 unique punks on Sultan L1",
+  "creator": "sultan15g5e8...",
+  "max_supply": 10000,
+  "total_minted": 2500,
+  "royalty_bps": 500,
+  "base_uri": "ipfs://QmXyz.../",
+  "floor_price": 50000000000
+}
+```
+
+---
+
+## GET /nft/{collection_id}/{token_id}
+
+Get NFT details.
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `collection_id` | string | Collection ID (URL encoded) |
+| `token_id` | string | Token ID within collection |
+
+**Response:**
+```json
+{
+  "collection_id": "nft/sultan15g5e8.../SPUNK",
+  "token_id": "1",
+  "name": "Sultan Punk #1",
+  "description": "The first Sultan Punk ever minted",
+  "image_uri": "ipfs://QmXyz.../1.png",
+  "metadata_uri": "ipfs://QmXyz.../1.json",
+  "owner": "sultan1def456...",
+  "creator": "sultan15g5e8...",
+  "attributes": [
+    { "trait_type": "Background", "value": "Blue" },
+    { "trait_type": "Eyes", "value": "Laser" },
+    { "trait_type": "Rarity", "value": "Legendary" }
+  ],
+  "royalty_bps": 500,
+  "minted_at": 1735689600,
+  "last_sale_price": 75000000000
+}
+```
+
+---
+
+## GET /nft/owner/{address}
+
+Get all NFTs owned by an address.
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `address` | string | Owner address |
+
+**Query Parameters:**
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | integer | 50 | 100 | Max NFTs to return |
+| `offset` | integer | 0 | - | Skip first N NFTs |
+| `collection` | string | - | - | Filter by collection ID |
+
+**Response:**
+```json
+{
+  "owner": "sultan1def456...",
+  "nfts": [
+    {
+      "collection_id": "nft/sultan15g5e8.../SPUNK",
+      "token_id": "1",
+      "name": "Sultan Punk #1",
+      "image_uri": "ipfs://QmXyz.../1.png"
+    },
+    {
+      "collection_id": "nft/sultan15g5e8.../SPUNK",
+      "token_id": "42",
+      "name": "Sultan Punk #42",
+      "image_uri": "ipfs://QmXyz.../42.png"
+    }
+  ],
+  "total": 2
+}
+```
+
+---
+
+## GET /nft/collections
+
+List all NFT collections.
+
+**Query Parameters:**
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | integer | 50 | 100 | Max collections to return |
+| `offset` | integer | 0 | - | Skip first N collections |
+| `creator` | string | - | - | Filter by creator address |
+| `sort_by` | string | `created_at` | - | Sort: `created_at`, `floor_price`, `volume` |
+
+**Response:**
+```json
+{
+  "collections": [
+    {
+      "collection_id": "nft/sultan15g5e8.../SPUNK",
+      "name": "Sultan Punks",
+      "symbol": "SPUNK",
+      "total_minted": 2500,
+      "floor_price": 50000000000,
+      "volume_24h": 1500000000000
     }
   ],
   "total": 156
@@ -936,6 +1239,13 @@ Get pool information.
 ## GET /dex/pools
 
 List all trading pools.
+
+**Query Parameters:**
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `limit` | integer | 50 | 100 | Max pools to return |
+| `offset` | integer | 0 | - | Skip first N pools |
+| `sort_by` | string | `volume_24h` | - | Sort: `volume_24h`, `reserve_a`, `created_at` |
 
 **Response:**
 ```json
@@ -1304,33 +1614,355 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ---
 
-## SDK Availability
+# End-to-End Examples
 
-| Language | Package | Status |
-|----------|---------|--------|
-| **Rust** | `sultan-sdk` | ✅ Available (native) |
-| **TypeScript** | `@sultan/sdk` | 🔄 In development |
-| **Python** | `sultan-py` | 📋 Planned Q2 2026 |
+Complete workflows for common integration scenarios.
 
-For SDK updates, visit: https://docs.sltn.io/sdk
-
----
-
-## WebSocket (Coming Soon)
-
-Real-time streaming at `wss://rpc.sltn.io/ws`:
+## E2E: Wallet Creation → Fund → Send
 
 ```javascript
-const ws = new WebSocket('wss://rpc.sltn.io/ws');
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('New block:', data.height);
-};
-ws.send(JSON.stringify({ subscribe: 'blocks' }));
+import * as ed25519 from '@noble/ed25519';
+import { bech32 } from 'bech32';
+
+const RPC = 'https://rpc.sltn.io';
+
+// Step 1: Create wallet
+async function createWallet() {
+  const privateKey = ed25519.utils.randomPrivateKey();
+  const publicKey = await ed25519.getPublicKey(privateKey);
+  
+  const hash = await crypto.subtle.digest('SHA-256', publicKey);
+  const addressBytes = new Uint8Array(hash).slice(0, 20);
+  const words = bech32.toWords(addressBytes);
+  const address = bech32.encode('sultan', words);
+  
+  return { privateKey, publicKey, address };
+}
+
+// Step 2: Check balance and nonce
+async function getAccountInfo(address) {
+  const res = await fetch(`${RPC}/balance/${address}`);
+  return res.json();
+}
+
+// Step 3: Send transaction
+async function sendTransaction(wallet, to, amountSltn) {
+  const { balance, nonce } = await getAccountInfo(wallet.address);
+  const amountAtomic = Math.floor(amountSltn * 1e9);
+  
+  if (balance < amountAtomic) {
+    throw new Error(`Insufficient balance: ${balance / 1e9} SLTN`);
+  }
+  
+  const tx = {
+    from: wallet.address,
+    to,
+    amount: amountAtomic,
+    timestamp: Math.floor(Date.now() / 1000),
+    nonce
+  };
+  
+  const message = new TextEncoder().encode(JSON.stringify(tx));
+  const signature = await ed25519.sign(message, wallet.privateKey);
+  
+  const res = await fetch(`${RPC}/tx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tx,
+      signature: btoa(String.fromCharCode(...signature)),
+      public_key: btoa(String.fromCharCode(...wallet.publicKey))
+    })
+  });
+  
+  return res.json();
+}
+
+// Step 4: Wait for confirmation
+async function waitForConfirmation(txHash, maxRetries = 30) {
+  for (let i = 0; i < maxRetries; i++) {
+    const res = await fetch(`${RPC}/tx/${txHash}`);
+    if (res.ok) {
+      const tx = await res.json();
+      if (tx.status === 'confirmed') return tx;
+    }
+    await new Promise(r => setTimeout(r, 2000)); // 2s blocks
+  }
+  throw new Error('Transaction not confirmed');
+}
+
+// Full flow
+async function main() {
+  const wallet = await createWallet();
+  console.log('Created wallet:', wallet.address);
+  
+  // Wait for funding (faucet or external transfer)
+  console.log('Fund this address and press enter...');
+  
+  const recipient = 'sultan1abc123...';
+  const { hash } = await sendTransaction(wallet, recipient, 10); // 10 SLTN
+  console.log('Submitted:', hash);
+  
+  const confirmed = await waitForConfirmation(hash);
+  console.log('Confirmed at block:', confirmed.block_height);
+}
 ```
 
 ---
 
-**Document Version:** 2.0  
+## E2E: Create Token → Mint → Transfer → Swap
+
+```javascript
+// Assumes wallet already created (see above)
+
+// Step 1: Create token
+async function createToken(wallet) {
+  const req = {
+    creator: wallet.address,
+    name: 'My Token',
+    symbol: 'MTK',
+    decimals: 6,
+    total_supply: 1000000_000000 // 1M tokens
+  };
+  
+  const signed = await signRequest(wallet, req);
+  const res = await fetch(`${RPC}/tokens/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(signed)
+  });
+  return res.json();
+}
+
+// Step 2: Create DEX pair
+async function createPair(wallet, denom) {
+  const req = {
+    creator: wallet.address,
+    token_a: 'sltn',
+    token_b: denom,
+    initial_a: 100000_000000000, // 100K SLTN
+    initial_b: 500000_000000     // 500K MTK
+  };
+  
+  const signed = await signRequest(wallet, req);
+  const res = await fetch(`${RPC}/dex/create_pair`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(signed)
+  });
+  return res.json();
+}
+
+// Step 3: Swap tokens
+async function swap(wallet, inputDenom, outputDenom, amount) {
+  // Get quote first
+  const pool = await fetch(`${RPC}/dex/pool/sltn-MTK`).then(r => r.json());
+  const expectedOut = calculateOutput(amount, pool);
+  const minOut = Math.floor(expectedOut * 0.99); // 1% slippage
+  
+  const req = {
+    user: wallet.address,
+    input_denom: inputDenom,
+    output_denom: outputDenom,
+    input_amount: amount,
+    min_output: minOut
+  };
+  
+  const signed = await signRequest(wallet, req);
+  const res = await fetch(`${RPC}/dex/swap`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(signed)
+  });
+  return res.json();
+}
+
+// Helper: AMM output calculation (x * y = k)
+function calculateOutput(amountIn, pool) {
+  const k = pool.reserve_a * pool.reserve_b;
+  const newReserveA = pool.reserve_a + amountIn;
+  const newReserveB = k / newReserveA;
+  return Math.floor(pool.reserve_b - newReserveB);
+}
+```
+
+---
+
+## E2E: NFT Collection → Mint → Transfer
+
+```javascript
+// Step 1: Create collection
+async function createCollection(wallet) {
+  const req = {
+    creator: wallet.address,
+    name: 'Sultan Punks',
+    symbol: 'SPUNK',
+    description: '10,000 unique punks',
+    max_supply: 10000,
+    royalty_bps: 500, // 5%
+    base_uri: 'ipfs://QmXyz.../'
+  };
+  
+  const signed = await signRequest(wallet, req);
+  const res = await fetch(`${RPC}/nft/collection/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(signed)
+  });
+  return res.json();
+}
+
+// Step 2: Mint NFT
+async function mintNFT(wallet, collectionId, tokenId, recipient) {
+  const req = {
+    collection_id: collectionId,
+    minter: wallet.address,
+    recipient,
+    token_id: tokenId,
+    name: `Sultan Punk #${tokenId}`,
+    description: 'A unique Sultan Punk',
+    image_uri: `ipfs://QmXyz.../${tokenId}.png`,
+    attributes: [
+      { trait_type: 'Background', value: 'Blue' },
+      { trait_type: 'Eyes', value: 'Laser' }
+    ]
+  };
+  
+  const signed = await signRequest(wallet, req);
+  const res = await fetch(`${RPC}/nft/mint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(signed)
+  });
+  return res.json();
+}
+
+// Step 3: Transfer NFT
+async function transferNFT(wallet, collectionId, tokenId, to) {
+  const req = {
+    collection_id: collectionId,
+    token_id: tokenId,
+    from: wallet.address,
+    to
+  };
+  
+  const signed = await signRequest(wallet, req);
+  const res = await fetch(`${RPC}/nft/transfer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(signed)
+  });
+  return res.json();
+}
+
+// Helper: Sign any request
+async function signRequest(wallet, req) {
+  const message = new TextEncoder().encode(JSON.stringify(req));
+  const signature = await ed25519.sign(message, wallet.privateKey);
+  return {
+    ...req,
+    signature: btoa(String.fromCharCode(...signature)),
+    public_key: btoa(String.fromCharCode(...wallet.publicKey))
+  };
+}
+```
+
+---
+
+## SDK Availability
+
+| Language | Package | Status | Install |
+|----------|---------|--------|---------|  
+| **Rust** | `sultan-sdk` | ✅ Stable | `cargo add sultan-sdk` |
+| **TypeScript** | `@sultan/sdk` | 🧪 Beta | `npm install @sultan/sdk@beta` |
+| **Python** | `sultan-py` | 📋 Planned Q2 2026 | - |
+
+```bash
+# TypeScript (beta)
+npm install @sultan/sdk@beta
+
+# Rust
+cargo add sultan-sdk
+```
+
+For SDK updates and full documentation: https://docs.sltn.io/sdk
+
+---
+
+# WebSocket API
+
+Real-time streaming for blocks, transactions, and DEX updates.
+
+### Connection URLs
+
+| Environment | URL |
+|-------------|-----|
+| **Mainnet** | `wss://rpc.sltn.io/ws` |
+| **Testnet** | `wss://testnet.sltn.io/ws` |
+
+### Subscribe to Events
+
+```javascript
+const ws = new WebSocket('wss://rpc.sltn.io/ws');
+
+ws.onopen = () => {
+  // Subscribe to new blocks
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'subscribe',
+    params: { channel: 'blocks' }
+  }));
+  
+  // Subscribe to address transactions
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'subscribe',
+    params: { channel: 'txs', address: 'sultan15g5e8...' }
+  }));
+  
+  // Subscribe to DEX pair updates
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'subscribe',
+    params: { channel: 'dex', pair_id: 'sltn-MTK' }
+  }));
+};
+
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.method === 'subscription') {
+    console.log(`${msg.params.channel}:`, msg.params.data);
+  }
+};
+
+// Keep-alive (required every 30s)
+setInterval(() => ws.send('ping'), 30000);
+```
+
+### Event Types
+
+| Channel | Event Data |
+|---------|------------|
+| `blocks` | `{ height, hash, timestamp, tx_count, proposer }` |
+| `txs` | `{ hash, from, to, amount, status, block_height }` |
+| `dex` | `{ pair_id, price_a_to_b, reserve_a, reserve_b, last_trade }` |
+| `validators` | `{ address, status, stake, voting_power }` |
+
+### Connection Limits
+
+| Parameter | Value |
+|-----------|-------|
+| Ping Interval | 30 seconds |
+| Max Subscriptions | 100 per connection |
+| Reconnect Backoff | 1s, 2s, 4s, 8s... max 60s |
+
+For full WebSocket specification, see [RPC_SPECIFICATION.md](RPC_SPECIFICATION.md#websocket-api-v21---q1-2026).
+
+---
+
+**Document Version:** 2.1  
 **Last Updated:** January 1, 2026  
-**Total Endpoints:** 38
+**Total Endpoints:** 46 (38 REST + 8 NFT)

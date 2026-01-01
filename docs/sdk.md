@@ -22,6 +22,299 @@ Build on Sultan L1 - a zero-fee, high-throughput blockchain with native token fa
 
 ---
 
+## TypeScript Interfaces
+
+All types for Sultan L1 integration. Copy these to your project for full type safety.
+
+```typescript
+// Core Types
+export interface Wallet {
+  privateKey: Uint8Array;
+  publicKey: Uint8Array;
+  address: string; // Bech32 "sultan1..." format
+}
+
+export interface Transaction {
+  hash: string;
+  from: string;
+  to: string;
+  amount: number; // atomic units (1 SLTN = 10^9)
+  timestamp: number;
+  nonce: number;
+  signature?: string; // base64 encoded
+  public_key?: string; // base64 encoded
+  status?: 'pending' | 'confirmed' | 'failed';
+  block_height?: number;
+  tx_type?: 'transfer' | 'stake' | 'vote' | 'token_create' | 'swap' | 'bridge';
+}
+
+export interface TransactionRequest {
+  tx: {
+    from: string;
+    to: string;
+    amount: number;
+    timestamp: number;
+    nonce: number;
+  };
+  signature: string; // base64 encoded Ed25519 signature
+  public_key: string; // base64 encoded Ed25519 public key
+}
+
+export interface Balance {
+  address: string;
+  balance: number; // atomic units
+  nonce: number;
+  tokens?: TokenBalance[];
+}
+
+export interface TokenBalance {
+  token_id: string;
+  symbol: string;
+  balance: number;
+  decimals: number;
+}
+
+// Staking Types
+export interface Validator {
+  operator_address: string; // "sultanvaloper1..."
+  moniker: string;
+  status: 'bonded' | 'unbonding' | 'unbonded';
+  tokens: number; // total stake
+  delegator_shares: number;
+  commission_rate: number; // 0.0 - 1.0
+  uptime: number; // percentage
+  voting_power: number;
+}
+
+export interface Delegation {
+  delegator: string;
+  validator: string;
+  amount: number;
+  shares: number;
+  rewards_pending: number;
+}
+
+export interface UnbondingEntry {
+  creation_height: number;
+  completion_time: number; // Unix timestamp
+  amount: number;
+}
+
+export interface StakingReward {
+  validator: string;
+  amount: number;
+  claimed_at?: number;
+}
+
+// Governance Types
+export interface Proposal {
+  id: number;
+  title: string;
+  description: string;
+  proposer: string;
+  status: 'voting' | 'passed' | 'rejected' | 'deposit_period';
+  submit_time: number;
+  voting_end_time: number;
+  total_deposit: number;
+  yes_votes: number;
+  no_votes: number;
+  abstain_votes: number;
+  veto_votes: number;
+}
+
+export interface Vote {
+  proposal_id: number;
+  voter: string;
+  option: 'yes' | 'no' | 'abstain' | 'no_with_veto';
+  weight: number;
+  timestamp: number;
+}
+
+// Token Factory Types
+export interface Token {
+  token_id: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  total_supply: number;
+  max_supply?: number;
+  creator: string;
+  mintable: boolean;
+  burnable: boolean;
+  metadata_uri?: string;
+}
+
+export interface TokenCreateRequest {
+  name: string;
+  symbol: string;
+  decimals: number;
+  initial_supply: number;
+  max_supply?: number;
+  mintable?: boolean;
+  burnable?: boolean;
+  metadata_uri?: string;
+}
+
+// NFT Types
+export interface NFT {
+  token_id: string;
+  collection: string;
+  name: string;
+  description?: string;
+  image_uri: string;
+  metadata_uri?: string;
+  owner: string;
+  creator: string;
+  royalty_bps?: number; // basis points (100 = 1%)
+  attributes?: NFTAttribute[];
+}
+
+export interface NFTAttribute {
+  trait_type: string;
+  value: string | number;
+}
+
+export interface NFTCollection {
+  collection_id: string;
+  name: string;
+  symbol: string;
+  creator: string;
+  total_supply: number;
+  max_supply?: number;
+  royalty_bps: number;
+}
+
+// DEX Types
+export interface LiquidityPool {
+  pair_id: string; // e.g., "sltn-MTK"
+  token_a: string;
+  token_b: string;
+  reserve_a: number;
+  reserve_b: number;
+  total_lp_tokens: number;
+  fee_bps: number; // basis points (30 = 0.3%)
+  volume_24h?: number;
+}
+
+export interface SwapQuote {
+  input_token: string;
+  output_token: string;
+  input_amount: number;
+  output_amount: number;
+  price_impact: number; // percentage
+  route: string[];
+  minimum_received?: number;
+}
+
+export interface SwapRequest {
+  pair_id: string;
+  direction: 'a_to_b' | 'b_to_a';
+  amount_in: number;
+  min_amount_out: number;
+  deadline?: number;
+}
+
+export interface LiquidityPosition {
+  pair_id: string;
+  owner: string;
+  lp_tokens: number;
+  share_of_pool: number; // percentage
+  token_a_value: number;
+  token_b_value: number;
+}
+
+// Bridge Types
+export interface BridgeTransaction {
+  tx_id: string;
+  source_chain: 'bitcoin' | 'ethereum' | 'solana' | 'ton';
+  source_tx: string;
+  destination: string; // Sultan address
+  amount: number;
+  status: 'pending' | 'confirming' | 'completed' | 'failed';
+  confirmations: number;
+  required_confirmations: number;
+  created_at: number;
+  completed_at?: number;
+}
+
+export interface BridgeQuote {
+  source_chain: string;
+  source_amount: number;
+  destination_amount: number;
+  fee: number;
+  estimated_time: number; // seconds
+  rate: number;
+}
+
+export interface BridgeProof {
+  proof_type: 'spv' | 'groth16' | 'solana' | 'ton';
+  proof_data: string; // base64 encoded
+  block_height: number;
+  merkle_root: string;
+}
+
+// API Response Types
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: ApiError;
+}
+
+export interface ApiError {
+  code: number;
+  message: string;
+  details?: string;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+// WebSocket Types
+export interface WSSubscription {
+  jsonrpc: '2.0';
+  id: number;
+  method: 'subscribe' | 'unsubscribe';
+  params: {
+    channel: 'blocks' | 'txs' | 'dex' | 'validators';
+    address?: string;
+    pair_id?: string;
+  };
+}
+
+export interface WSEvent<T = unknown> {
+  jsonrpc: '2.0';
+  method: 'subscription';
+  params: {
+    channel: string;
+    data: T;
+  };
+}
+
+export interface BlockEvent {
+  height: number;
+  hash: string;
+  timestamp: number;
+  tx_count: number;
+  proposer: string;
+}
+
+export interface TxEvent {
+  hash: string;
+  from: string;
+  to: string;
+  amount: number;
+  status: 'confirmed' | 'failed';
+  block_height: number;
+}
+```
+
+---
+
 ## Quick Start
 
 ### JavaScript/TypeScript

@@ -282,26 +282,69 @@ GET /transactions/sultan1...?limit=20&offset=40
 
 ### Proof Formats
 
-**Bitcoin SPV:**
+**Bitcoin SPV (Merkle Proof):**
 ```
-[tx_hash:32][branch_count:4][branches:32*n][tx_index:4][header:80]
+Binary Layout (minimum 120 bytes):
+┌────────────────────────────────────────────────────────────┐
+│ tx_hash        │ 32 bytes │ SHA256d of the transaction     │
+│ branch_count   │ 4 bytes  │ Little-endian uint32           │
+│ merkle_branches│ 32*n     │ Sibling hashes for merkle path │
+│ tx_index       │ 4 bytes  │ Transaction position in block  │
+│ block_header   │ 80 bytes │ Full Bitcoin block header      │
+└────────────────────────────────────────────────────────────┘
+
+Verification:
+1. Parse block_header bytes 36-68 for merkle_root
+2. Compute root from tx_hash + branches using tx_index bits
+3. Compare computed root == header merkle_root
 ```
 
 **Ethereum ZK-SNARK (Groth16):**
 ```
-[pi_a:64][pi_b:128][pi_c:64][public_inputs:variable]
-```
-Minimum: 256 bytes
+Binary Layout (minimum 256 bytes):
+┌────────────────────────────────────────────────────────────┐
+│ pi_a           │ 64 bytes │ G1 point (x,y coordinates)     │
+│ pi_b           │ 128 bytes│ G2 point (2x2 coordinates)     │
+│ pi_c           │ 64 bytes │ G1 point (x,y coordinates)     │
+│ public_inputs  │ variable │ 32 bytes per public input      │
+└────────────────────────────────────────────────────────────┘
 
-**Solana gRPC:**
+Validation Rules:
+- pi_a/pi_c: Non-zero 64-byte G1 points (reject all-zeros)
+- pi_b: Non-zero 128-byte G2 point (reject all-zeros)
+- Minimum total: 256 bytes (empty inputs)
+- Typical: 288-320 bytes (1-2 public inputs)
 ```
-[signature:64][slot:8][status:1]
-```
-Status: 0=failed, 1=confirmed, 2=pending
 
-**TON BOC:**
+**Solana gRPC Finality:**
 ```
-Magic: 0xb5ee9c72 or 0xb5ee9c73
+Binary Layout (73 bytes):
+┌────────────────────────────────────────────────────────────┐
+│ signature      │ 64 bytes │ Ed25519 transaction signature  │
+│ slot           │ 8 bytes  │ Little-endian uint64 slot num  │
+│ status         │ 1 byte   │ 0=failed, 1=confirmed, 2=pending│
+└────────────────────────────────────────────────────────────┘
+
+Status Codes:
+- 0x00: Transaction failed (do not credit)
+- 0x01: Transaction confirmed (safe to credit)
+- 0x02: Transaction pending (wait for confirmation)
+```
+
+**TON BOC (Bag of Cells):**
+```
+Binary Layout (variable):
+┌────────────────────────────────────────────────────────────┐
+│ magic          │ 4 bytes  │ 0xb5ee9c72 or 0xb5ee9c73       │
+│ flags_size     │ 1 byte   │ Serialization flags            │
+│ cell_count     │ 1-4 bytes│ Number of cells (varint)       │
+│ root_count     │ 1-4 bytes│ Number of roots (varint)       │
+│ cells_data     │ variable │ Serialized cell data           │
+└────────────────────────────────────────────────────────────┘
+
+Magic Bytes:
+- 0xb5ee9c72: Standard BOC
+- 0xb5ee9c73: BOC with CRC32
 ```
 
 ### Security Features
@@ -315,34 +358,188 @@ Magic: 0xb5ee9c72 or 0xb5ee9c73
 
 ---
 
-## WebSocket API (Planned v2.1)
+## WebSocket API (v2.1 - Q1 2026)
+
+Real-time streaming for dApps, wallets, and explorers.
 
 ### Connection
 
 ```
-wss://rpc.sltn.io/ws
+Mainnet:  wss://rpc.sltn.io/ws
+Testnet:  wss://testnet.sltn.io/ws
 ```
 
-### Subscriptions
+### Authentication
 
-| Event | Message |
-|-------|---------|
-| New Block | `{"subscribe": "blocks"}` |
-| Transactions | `{"subscribe": "txs", "address": "sultan1..."}` |
-| Validator Updates | `{"subscribe": "validators"}` |
+WebSocket connections are unauthenticated (read-only subscriptions). Write operations require REST API with signatures.
 
-### Event Format
+### Subscription Messages
+
+**Subscribe to New Blocks:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "subscribe",
+  "params": {
+    "channel": "blocks"
+  }
+}
+```
+
+**Subscribe to Address Transactions:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "subscribe",
+  "params": {
+    "channel": "txs",
+    "address": "sultan15g5e8..."
+  }
+}
+```
+
+**Subscribe to DEX Pool Updates:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "subscribe",
+  "params": {
+    "channel": "dex",
+    "pair_id": "sltn-MTK"
+  }
+}
+```
+
+**Subscribe to Validator Set Changes:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "subscribe",
+  "params": {
+    "channel": "validators"
+  }
+}
+```
+
+### Event Formats
+
+**New Block Event:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "subscription",
+  "params": {
+    "channel": "blocks",
+    "data": {
+      "height": 125000,
+      "hash": "abc123...",
+      "timestamp": 1735689600,
+      "tx_count": 25,
+      "proposer": "sultanvaloper1..."
+    }
+  }
+}
+```
+
+**Transaction Event:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "subscription",
+  "params": {
+    "channel": "txs",
+    "data": {
+      "hash": "def456...",
+      "from": "sultan15g5e8...",
+      "to": "sultan1abc...",
+      "amount": 1000000000,
+      "status": "confirmed",
+      "block_height": 125000
+    }
+  }
+}
+```
+
+**DEX Price Update Event:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "subscription",
+  "params": {
+    "channel": "dex",
+    "data": {
+      "pair_id": "sltn-MTK",
+      "price_a_to_b": 0.502,
+      "reserve_a": 1500500000000,
+      "reserve_b": 749750000000,
+      "last_trade": {
+        "type": "swap",
+        "input": 500000000,
+        "output": 249500000
+      }
+    }
+  }
+}
+```
+
+### Unsubscribe
 
 ```json
 {
-  "type": "new_block",
-  "data": {
-    "height": 12345,
-    "hash": "abc123...",
-    "timestamp": 1735689600,
-    "tx_count": 25
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "unsubscribe",
+  "params": {
+    "subscription_id": 1
   }
 }
+```
+
+### Connection Management
+
+| Parameter | Value |
+|-----------|-------|
+| Ping Interval | 30 seconds |
+| Pong Timeout | 10 seconds |
+| Max Subscriptions | 100 per connection |
+| Reconnect Backoff | Exponential (1s, 2s, 4s, 8s, max 60s) |
+
+### JavaScript Example
+
+```javascript
+const ws = new WebSocket('wss://rpc.sltn.io/ws');
+
+ws.onopen = () => {
+  // Subscribe to blocks
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'subscribe',
+    params: { channel: 'blocks' }
+  }));
+  
+  // Subscribe to my transactions
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'subscribe',
+    params: { channel: 'txs', address: 'sultan15g5e8...' }
+  }));
+};
+
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.method === 'subscription') {
+    console.log(`${msg.params.channel}:`, msg.params.data);
+  }
+};
+
+// Keep-alive ping
+setInterval(() => ws.send('ping'), 30000);
 ```
 
 ---
