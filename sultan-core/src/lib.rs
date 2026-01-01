@@ -24,6 +24,7 @@ pub mod staking;
 pub mod governance;
 pub mod token_factory;
 pub mod native_dex;
+pub mod wasm_runtime;
 
 // Re-export main types for convenience
 pub use blockchain::{Blockchain, Block, Transaction, Account};

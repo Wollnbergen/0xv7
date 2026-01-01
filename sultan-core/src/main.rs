@@ -20,6 +20,8 @@ use sultan_core::sharding_production::ShardConfig;
 use sultan_core::sharded_blockchain_production::ConfirmedTransaction;
 use sultan_core::SultanBlockchain;
 use sultan_core::p2p::{P2PNetwork, NetworkMessage};
+use sultan_core::config::Config;
+use sultan_core::wasm_runtime::{WasmRuntime, SharedWasmRuntime};
 use anyhow::{Result, Context, bail};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
@@ -315,6 +317,12 @@ struct NodeState {
     p2p_enabled: bool,
     /// Allowed CORS origins for RPC security
     allowed_origins: Vec<String>,
+    /// Chain configuration with feature flags (for hot-upgrades via governance)
+    config: Arc<RwLock<Config>>,
+    /// Path to config file for persistence
+    config_path: PathBuf,
+    /// WASM runtime for CosmWasm smart contracts (activated via governance)
+    wasm_runtime: SharedWasmRuntime,
 }
 
 impl NodeState {
@@ -484,6 +492,41 @@ impl NodeState {
                 .collect()
         };
 
+        // === HOT-UPGRADE INFRASTRUCTURE ===
+        // Load or create chain configuration with feature flags
+        let config_path = PathBuf::from(&args.data_dir).join("config.json");
+        let config = if config_path.exists() {
+            match Config::load(&config_path) {
+                Ok(cfg) => {
+                    info!("📋 Loaded chain config from {:?}", config_path);
+                    info!("   Feature flags: wasm={}, evm={}, ibc={}", 
+                          cfg.features.wasm_contracts_enabled,
+                          cfg.features.evm_contracts_enabled,
+                          cfg.features.ibc_enabled);
+                    cfg
+                }
+                Err(e) => {
+                    warn!("⚠️ Failed to load config: {}. Using defaults.", e);
+                    Config::default()
+                }
+            }
+        } else {
+            let cfg = Config::default();
+            if let Err(e) = cfg.save(&config_path) {
+                warn!("⚠️ Failed to save default config: {}", e);
+            } else {
+                info!("📋 Created default chain config at {:?}", config_path);
+            }
+            cfg
+        };
+        
+        // Initialize WASM runtime (enabled state matches config)
+        let wasm_runtime = Arc::new(RwLock::new(WasmRuntime::new()));
+        if config.features.wasm_contracts_enabled {
+            wasm_runtime.write().await.set_enabled(true);
+            info!("🚀 WASM runtime enabled from config");
+        }
+
         Ok(Self {
             blockchain: blockchain_arc,
             consensus: consensus_arc,
@@ -500,7 +543,82 @@ impl NodeState {
             block_time: args.block_time,
             p2p_enabled: args.enable_p2p,
             allowed_origins,
+            config: Arc::new(RwLock::new(config)),
+            config_path,
+            wasm_runtime,
         })
+    }
+
+    /// Activate or deactivate a feature flag via governance
+    /// 
+    /// This is the core hot-upgrade mechanism. When a governance proposal
+    /// with a `features.*` parameter change passes, this method is called
+    /// to actually activate the feature at runtime.
+    /// 
+    /// # Supported Features
+    /// - `wasm_contracts_enabled`: Enable CosmWasm smart contracts
+    /// - `evm_contracts_enabled`: Enable EVM smart contracts (future)
+    /// - `ibc_enabled`: Enable IBC protocol (future)
+    /// - `sharding_enabled`: Enable/disable sharding
+    /// - `governance_enabled`: Enable/disable governance
+    /// - `bridges_enabled`: Enable/disable cross-chain bridges
+    async fn activate_feature(&self, feature: &str, enabled: bool) -> Result<()> {
+        info!("🔧 Hot-upgrade: Activating feature {} = {}", feature, enabled);
+        
+        // Update config
+        {
+            let mut config = self.config.write().await;
+            config.update_feature(feature, enabled)
+                .context(format!("Failed to update feature: {}", feature))?;
+            
+            // Persist config to disk
+            if let Err(e) = config.save(&self.config_path) {
+                error!("⚠️ Failed to persist config: {}", e);
+                // Continue anyway - runtime state is updated
+            } else {
+                info!("💾 Config persisted to {:?}", self.config_path);
+            }
+        }
+        
+        // Activate runtime components based on feature
+        match feature {
+            "wasm_contracts_enabled" => {
+                let mut runtime = self.wasm_runtime.write().await;
+                runtime.set_enabled(enabled);
+                if enabled {
+                    info!("🚀 WASM runtime activated - CosmWasm contracts now available");
+                } else {
+                    warn!("⚠️  WASM runtime deactivated - Contract operations will fail");
+                }
+            }
+            "evm_contracts_enabled" => {
+                if enabled {
+                    info!("🚀 EVM contracts feature flag enabled (runtime pending implementation)");
+                    // TODO: Initialize EVM runtime when implemented
+                }
+            }
+            "ibc_enabled" => {
+                if enabled {
+                    info!("🚀 IBC protocol feature flag enabled (runtime pending implementation)");
+                    // TODO: Initialize IBC relayer when implemented
+                }
+            }
+            "bridges_enabled" => {
+                info!("🌉 Bridge feature flag updated: {}", enabled);
+                // Bridges are currently always available via BridgeManager
+                // This flag can be used for emergency disabling
+            }
+            _ => {
+                info!("📋 Feature flag {} updated to {}", feature, enabled);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Get current feature flags
+    async fn get_feature_flags(&self) -> sultan_core::config::FeatureFlags {
+        self.config.read().await.features.clone()
     }
 
     /// Block production loop
@@ -1113,6 +1231,18 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_governance_statistics);
 
+        // POST /governance/execute/:id - Execute a passed proposal (hot-activation)
+        let execute_route = warp::path!("governance" / "execute" / u64)
+            .and(warp::post())
+            .and(with_state(state.clone()))
+            .and_then(handle_execute_proposal);
+
+        // GET /governance/features - Get current feature flags
+        let features_route = warp::path!("governance" / "features")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_features);
+
         // Token Factory Routes
         // POST /tokens/create
         let create_token_route = warp::path!("tokens" / "create")
@@ -1241,6 +1371,8 @@ mod rpc {
             .or(proposal_route)
             .or(tally_route)
             .or(gov_stats_route)
+            .or(execute_route)
+            .or(features_route)
             .boxed();
         
         let token_routes = create_token_route
@@ -2298,6 +2430,116 @@ mod rpc {
     ) -> Result<impl warp::Reply, warp::Rejection> {
         let stats = state.governance_manager.get_statistics().await;
         Ok(warp::reply::json(&stats))
+    }
+
+    /// Execute a passed proposal - this is where hot-activation happens
+    /// 
+    /// When a ParameterChange proposal with `features.*` keys passes,
+    /// this endpoint will:
+    /// 1. Execute the proposal in governance
+    /// 2. Call NodeState::activate_feature() to actually enable the feature
+    /// 3. Persist the config change to disk
+    async fn handle_execute_proposal(
+        proposal_id: u64,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        use warp::http::StatusCode;
+        
+        // First, get the proposal to check for feature flags
+        let proposal = match state.governance_manager.get_proposal(proposal_id).await {
+            Some(p) => p,
+            None => {
+                return Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": "Proposal not found",
+                        "proposal_id": proposal_id
+                    })),
+                    StatusCode::NOT_FOUND
+                ));
+            }
+        };
+        
+        // Check if proposal has passed
+        if proposal.status != sultan_core::governance::ProposalStatus::Passed {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": "Proposal has not passed",
+                    "proposal_id": proposal_id,
+                    "status": format!("{:?}", proposal.status)
+                })),
+                StatusCode::BAD_REQUEST
+            ));
+        }
+        
+        // Execute the proposal with staking integration
+        if let Err(e) = state.governance_manager.execute_proposal_with_staking(
+            proposal_id,
+            &state.staking_manager,
+        ).await {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": format!("Execution failed: {}", e),
+                    "proposal_id": proposal_id
+                })),
+                StatusCode::INTERNAL_SERVER_ERROR
+            ));
+        }
+        
+        // Now handle feature flag activations
+        let mut activated_features = Vec::new();
+        if let Some(params) = &proposal.parameters {
+            for (key, value) in params {
+                if key.starts_with("features.") {
+                    let feature_name = key.strip_prefix("features.").unwrap();
+                    let enabled: bool = value.parse().unwrap_or(false);
+                    
+                    if let Err(e) = state.activate_feature(feature_name, enabled).await {
+                        warn!("Failed to activate feature {}: {}", feature_name, e);
+                    } else {
+                        activated_features.push(serde_json::json!({
+                            "feature": feature_name,
+                            "enabled": enabled
+                        }));
+                    }
+                }
+            }
+        }
+        
+        info!("✅ Proposal #{} executed successfully", proposal_id);
+        
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "success": true,
+                "proposal_id": proposal_id,
+                "title": proposal.title,
+                "activated_features": activated_features
+            })),
+            StatusCode::OK
+        ))
+    }
+
+    /// Get current feature flags configuration
+    async fn handle_get_features(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let features = state.get_feature_flags().await;
+        let wasm_stats = state.wasm_runtime.read().await.get_stats();
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "features": {
+                "sharding_enabled": features.sharding_enabled,
+                "governance_enabled": features.governance_enabled,
+                "bridges_enabled": features.bridges_enabled,
+                "wasm_contracts_enabled": features.wasm_contracts_enabled,
+                "evm_contracts_enabled": features.evm_contracts_enabled,
+                "ibc_enabled": features.ibc_enabled
+            },
+            "wasm_runtime": {
+                "enabled": wasm_stats.enabled,
+                "total_codes": wasm_stats.total_codes,
+                "total_contracts": wasm_stats.total_contracts
+            }
+        })))
     }
 }
 
