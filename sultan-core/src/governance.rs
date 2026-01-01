@@ -893,8 +893,9 @@ impl GovernanceManager {
                                 _ => {}
                             }
                             
-                            // NOTE: Actual feature activation happens in NodeState
-                            // via config update and runtime initialization
+                            // NOTE: Actual feature activation is triggered via the
+                            // POST /governance/execute/:id RPC endpoint in main.rs,
+                            // which calls NodeState::activate_feature() after this executes
                         }
                     }
                 }
