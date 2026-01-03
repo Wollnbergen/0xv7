@@ -51,7 +51,7 @@ Get current node and network status.
 {
   "node_id": "sultan-validator-1",
   "block_height": 125000,
-  "validators": 12,
+  "validators": 6,
   "uptime_seconds": 864000,
   "version": "1.0.0",
   "shard_count": 16,
@@ -395,7 +395,7 @@ List all active validators.
       "delegator_count": 150
     }
   ],
-  "total_validators": 12,
+  "total_validators": 6,
   "total_stake": 300000000000000
 }
 ```
@@ -437,7 +437,7 @@ Get network-wide staking statistics.
 {
   "total_staked": 300000000000000,
   "total_delegators": 5000,
-  "validator_count": 12,
+  "validator_count": 6,
   "average_commission": 0.05,
   "current_apy": 0.1333,
   "unbonding_period_days": 21
@@ -457,7 +457,7 @@ Submit a governance proposal. Requires 1,000 SLTN deposit.
 {
   "proposer": "sultan15g5e8...",
   "title": "Increase validator set to 21",
-  "description": "This proposal increases the active validator set from 12 to 21...",
+  "description": "This proposal increases the active validator set from 6 to 21...",
   "proposal_type": "parameter_change",
   "deposit": 1000000000000,
   "signature": "base64_encoded_signature",

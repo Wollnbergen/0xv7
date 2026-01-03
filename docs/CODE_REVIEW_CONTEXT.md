@@ -6,7 +6,7 @@ Use this summary when submitting files for external code review.
 
 ## What is Sultan?
 
-Sultan is a **native Rust L1 blockchain** built from scratch - NOT a fork of Cosmos SDK, Substrate, or any other framework. It's a zero-gas, sharded Proof-of-Stake chain.
+Sultan is a **native Rust L1 blockchain**. It's a zero-gas, sharded Proof-of-Stake chain.
 
 ## Core Technical Parameters
 

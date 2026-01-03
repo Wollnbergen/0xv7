@@ -66,9 +66,15 @@ Any Linux VPS works. Recommended providers:
 SSH into your server and run:
 
 ```bash
-# Download the latest binary
-wget https://github.com/Wollnbergen/DOCS/releases/latest/download/sultan-node
-chmod +x sultan-node
+# Download the latest binary (v0.1.0)
+wget https://github.com/SultanL1/sultan-node/releases/download/v0.1.0/sultan-node-linux-x86_64
+chmod +x sultan-node-linux-x86_64
+
+# Verify checksum
+echo "6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51  sultan-node-linux-x86_64" | sha256sum -c
+
+# Rename for convenience
+mv sultan-node-linux-x86_64 sultan-node
 ```
 
 ### Step 3: Open Firewall Ports
@@ -85,31 +91,37 @@ sudo firewall-cmd --permanent --add-port=26657/tcp
 sudo firewall-cmd --reload
 ```
 
-### Step 4: Start Your Validator
+### Step 4: Generate Validator Key
+
+```bash
+# Generate a new Ed25519 keypair
+./sultan-node --keygen
+
+# Output:
+# Public Key: 3b1234...
+# Secret Key: 7a9876... (KEEP THIS SAFE!)
+# Address: sultan1abc...
+```
+
+**IMPORTANT:** Back up your secret key securely. You'll need it to sign blocks.
+
+### Step 5: Start Your Validator
 
 ```bash
 ./sultan-node \
-  --name "YourValidatorName" \
   --validator \
-  --validator-address "YourValidatorName" \
-  --validator-stake 10000 \
-  --enable-sharding \
-  --shard-count 16 \
-  --enable-p2p \
-  --bootstrap-peers /ip4/206.189.224.142/tcp/26656 \
-  --rpc-addr 0.0.0.0:26657 \
-  --p2p-addr /ip4/0.0.0.0/tcp/26656 \
-  --data-dir ./sultan-data
+  --validator-secret YOUR_SECRET_KEY_HEX \
+  --rpc-port 26657 \
+  --p2p-port 26656 \
+  --bootstrap-peers /ip4/206.189.224.142/tcp/26656
 ```
 
 **Important flags:**
-- `--name`: Your validator display name
 - `--validator`: Enable validator mode
-- `--validator-stake`: Your stake amount (minimum 10,000)
+- `--validator-secret`: Your Ed25519 secret key (64 hex chars)
 - `--bootstrap-peers`: NYC bootstrap node IP
-- `--enable-sharding`: Required for mainnet (16 shards)
 
-### Step 5: Verify Connection
+### Step 6: Verify Connection
 
 Your validator is working when you see:
 ```
@@ -298,7 +310,7 @@ A: No, APY is variable based on network conditions. 13.33% is an estimate.
 
 - **Website**: [sltn.io](https://sltn.io)
 - **RPC Endpoint**: `https://rpc.sltn.io`
-- **Explorer**: Coming soon
+- **Explorer**: [x.sltn.io](https://x.sltn.io)
 
 ---
 

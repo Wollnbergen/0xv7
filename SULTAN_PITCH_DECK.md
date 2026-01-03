@@ -5,7 +5,7 @@
 **The Native Rust Blockchain**  
 *2-Second Finality | $0 Gas Fees | 64M TPS Scalability*
 
-**Version:** 3.2 | **Updated:** December 27, 2025
+**Version:** 3.3 | **Updated:** January 3, 2026
 
 ---
 
@@ -17,7 +17,7 @@
 
 ### Building the Next Generation of Blockchain Infrastructure
 
-**Native Rust | Instant Finality | Zero Fees | Quantum-Ready**
+**Native Rust | Instant Finality | Zero Fees**
 
 ---
 
@@ -28,7 +28,7 @@
 | **Gas Fees** | $0 |
 | **TPS Capacity** | 64,000 → 64M |
 | **Validator APY** | 13.33% |
-| **Active Validators** | 6 (globally distributed) |
+| **Active Validators** | Dynamic (6 at launch) |
 | **Active Shards** | 16 |
 | **Consensus** | Height-based PoS with synchronized leader election |
 | **Network Status** | ✅ **MAINNET LIVE (Dec 25, 2025)** |
@@ -69,15 +69,7 @@ The blockchain industry faces fundamental challenges that limit mainstream adopt
 
 ---
 
-**🔧 Framework Dependencies**
-- Most L1s build on Cosmos SDK, Substrate, or other frameworks
-- Inherit performance limitations and overhead
-- Cannot optimize at the lowest levels
-- Constrained by framework architecture decisions
-
----
-
-**📉 Poor Validator Economics**
+** Poor Validator Economics**
 - High hardware requirements ($10K-100K+ infrastructure)
 - Low staking APY (3-7%) versus inflation risk
 - Centralization pressure from capital requirements
@@ -118,10 +110,9 @@ We built a blockchain from first principles—no frameworks, no compromises.
 ---
 
 **🦀 Native Rust Architecture**
-- Built from scratch, not framework-dependent
 - 50-105µs block creation (500-1000x faster than typical)
 - Memory-safe without garbage collection pauses
-- 14MB optimized binary vs 500MB+ framework deployments
+- 14MB optimized binary
 
 ---
 
@@ -129,7 +120,6 @@ We built a blockchain from first principles—no frameworks, no compromises.
 - **Ed25519 strict signature verification** - All transactions cryptographically verified
 - Nonce-based replay protection - Prevents transaction replay attacks
 - SHA-256 message hashing - Industry-standard integrity
-- Post-quantum ready architecture (Dilithium3 upgrade path)
 - All security features **deployed and enforced in production**
 
 ---
@@ -187,7 +177,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 | **Networking** | libp2p | Battle-tested (ETH 2.0, Filecoin, Polkadot) |
 | **Storage** | RocksDB | LSM-tree optimized, write-heavy workloads |
 | **API** | Warp | Async, high-performance HTTP |
-| **Cryptography** | Ed25519 (Dilithium3 planned) | Current + quantum upgrade path |
+| **Cryptography** | Ed25519 + SHA3-256 | Fast, secure, battle-tested |
 
 ---
 
@@ -221,7 +211,7 @@ Sultan L1 is **live on mainnet** with verified metrics:
 | **Active Shards** | 16 | ✅ Live |
 | **Base TPS** | 64,000 | ✅ Capacity |
 | **Max TPS** | 64,000,000 | 🔄 With expansion |
-| **Validators** | 6 | ✅ Globally distributed |
+| **Validators** | Dynamic (6 at launch) | ✅ Globally distributed |
 | **Treasury** | 500M SLTN | ✅ Initialized |
 | **Launch Date** | December 25, 2025 | ✅ Christmas Day |
 
@@ -479,7 +469,7 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 - ✅ Zero fees (vs $0.01-50 elsewhere)
 - ✅ Competitive APY (13.33% vs 3-7% industry avg)
 - ✅ Lower validator requirements (1GB RAM)
-- ✅ Post-quantum ready (only major L1)
+- ✅ Native Rust performance (no framework overhead)
 
 ---
 
@@ -500,7 +490,6 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 ### Sultan's Competitive Advantages
 
 **1. Native Rust Architecture**
-- Only major L1 built from scratch (not Cosmos SDK, Substrate, etc.)
 - 1000x faster block creation
 - Lower resource requirements
 
@@ -509,12 +498,7 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 - Enables use cases impossible elsewhere
 - Mass adoption friendly
 
-**3. Post-Quantum Ready**
-- Dilithium3 upgrade path planned
-- Architecture designed for seamless transition
-- Proactive approach to quantum era
-
-**4. Superior Economics**
+**3. Superior Economics**
 - 40% ecosystem (largest in industry)
 - 8% team (lowest in industry)
 - $4M raise (leanest in industry)
@@ -529,7 +513,7 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 
 **✅ Mainnet Live**
 - Launched December 6, 2025
-- 9 globally distributed validators
+- 6 validators at launch (permissionless - anyone can join)
 - Zero downtime since launch
 - 16 shards operational
 
@@ -563,7 +547,7 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 
 | Metric | Current | 3 Mo | 6 Mo | 12 Mo |
 |--------|---------|------|------|-------|
-| **Validators** | 15 | 25 | 50 | 100+ |
+| **Validators** | 6 | 25 | 50 | 100+ |
 | **Daily Txs** | 1K | 100K | 1M | 10M |
 | **Active Wallets** | 100 | 10K | 100K | 500K |
 | **TVL** | $100K | $10M | $100M | $500M |
@@ -580,7 +564,7 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 
 **Q4 2025 ✅ Complete**
 - [x] Mainnet launch
-- [x] 15 global validators
+- [x] 6 validators at launch
 - [x] P2P networking (libp2p)
 - [x] RPC infrastructure
 - [x] SLTN Wallet v1.0
@@ -625,7 +609,6 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 
 **2027+ 📋 Vision**
 - [ ] 2,048+ shards (16M TPS)
-- [ ] Full quantum upgrade
 - [ ] 1B+ user capacity
 
 ---
@@ -787,7 +770,7 @@ We are raising **$4,000,000** in two rounds:
 
 ✅ **Strong fundamentals** — 40% ecosystem, 8% team
 
-✅ **Unique technology** — Only native Rust + post-quantum L1
+✅ **Unique technology** — Only native Rust L1 with zero fees
 
 ---
 
@@ -842,17 +825,15 @@ We are raising **$4,000,000** in two rounds:
 
 **We're building the next generation of blockchain infrastructure.**
 
-🦀 **Native Rust** — Built from scratch, not framework-limited
+🦀 **Native Rust** — Optimized performance
 
 ⚡ **2-Second Finality** — Instant, guaranteed settlement
 
 💸 **$0 Gas Fees** — Sustainable, mass-adoption ready
 
-🔐 **Quantum-Ready Architecture** — Dilithium3 upgrade path planned
+ **13.33% APY** — Sustainable validator economics
 
-📈 **13.33% APY** — Sustainable validator economics
-
-🌍 **9 Validators** — Distributed across 2 cloud providers
+🌍 **Dynamic Validators** — Permissionless, anyone can join with 10,000 SLTN
 
 ---
 
@@ -920,12 +901,6 @@ A: It's from 4% inflation divided by ~30% staking ratio. This APY is designed to
 
 ---
 
-**Q: Why not use Cosmos SDK like everyone else?**
-
-A: Framework overhead limits performance. Our native Rust approach achieves 50-105µs block creation vs 100-500ms for framework-based chains. That's 1000x faster at the core level.
-
----
-
 **Q: What about smart contracts?**
 
 A: WASM-based smart contracts planned for Q2 2026, with EVM compatibility in Q4 2026. Focus was on getting the foundation right first.
@@ -934,13 +909,13 @@ A: WASM-based smart contracts planned for Q2 2026, with EVM compatibility in Q4 
 
 **Q: How do you compete with Ethereum's network effects?**
 
-A: We don't compete directly. We target use cases that need: (1) instant finality, (2) zero fees, (3) post-quantum security. Different customer segment, complementary to Ethereum via bridges.
+A: We don't compete directly. We target use cases that need: (1) instant finality, (2) zero fees. Different customer segment, complementary to Ethereum via bridges.
 
 ---
 
 **Q: What's your moat?**
 
-A: (1) Native Rust architecture — can't be easily replicated. (2) Post-quantum security — no other L1 has this. (3) 40% ecosystem fund — strongest alignment in crypto. (4) Zero fees — sustainable economics most can't match.
+A: (1) Native Rust architecture — can't be easily replicated. (2) 40% ecosystem fund — strongest alignment in crypto. (3) Zero fees — sustainable economics most can't match. (4) Instant finality — 2-second confirmation.
 
 ---
 

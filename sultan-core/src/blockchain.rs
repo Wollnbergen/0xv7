@@ -134,7 +134,7 @@ impl Blockchain {
 
     /// Create new block with pending transactions
     pub fn create_block(&mut self, validator: String) -> Result<Block> {
-        let prev_block = self.get_latest_block();
+        let prev_block = self.get_latest_block()?;
         let prev_index = prev_block.index;
         let prev_hash = prev_block.hash.clone();
         
@@ -190,7 +190,7 @@ impl Blockchain {
 
     /// Validate block before acceptance
     pub fn validate_block(&self, block: &Block) -> Result<bool> {
-        let prev_block = self.get_latest_block();
+        let prev_block = self.get_latest_block()?;
         
         // Check index
         if block.index != prev_block.index + 1 {
@@ -321,13 +321,13 @@ impl Blockchain {
     fn current_timestamp() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("System time before UNIX epoch")
-            .as_secs()
+            .map(|d| d.as_secs())
+            .unwrap_or(0)  // Fallback to epoch on clock misconfiguration
     }
 
-    /// Get latest block
-    pub fn get_latest_block(&self) -> &Block {
-        self.chain.last().expect("Chain must have at least genesis block")
+    /// Get latest block (returns error if chain is empty)
+    pub fn get_latest_block(&self) -> Result<&Block> {
+        self.chain.last().ok_or_else(|| anyhow::anyhow!("Chain is empty - no genesis block"))
     }
 
     /// Get block by index
@@ -362,8 +362,8 @@ impl Transaction {
     pub fn new(from: String, to: String, amount: u64, nonce: u64) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("System time before UNIX epoch")
-            .as_secs();
+            .map(|d| d.as_secs())
+            .unwrap_or(0);  // Fallback to epoch on clock misconfiguration
             
         Transaction {
             from,

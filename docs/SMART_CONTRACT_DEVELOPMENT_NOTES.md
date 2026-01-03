@@ -32,10 +32,10 @@ Sultan is a **sovereign Layer 1 blockchain** built entirely in Rust from first p
 |---------------|-------|
 | Block Time | 2.00 seconds |
 | Finality | Immediate (single-block) |
-| Active Shards | 8 |
+| Active Shards | 16 |
 | Current TPS | 64,000 (base) |
 | Maximum TPS | 64,000,000 (8,000 shards) |
-| Validators | 15 (globally distributed) |
+| Validators | Dynamic (anyone can join with 10,000 SLTN) |
 | RPC Endpoint | `https://rpc.sltn.io` |
 | Transaction Fees | **$0 (zero-fee)** |
 

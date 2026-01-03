@@ -197,7 +197,8 @@ impl SultanBlockchain {
 
         // Create block
         let blocks = self.blocks.read().await;
-        let prev_block = blocks.last().unwrap();
+        let prev_block = blocks.last()
+            .ok_or_else(|| anyhow::anyhow!("No blocks in chain - genesis block missing"))?;
         let index = prev_block.index + 1;
         let prev_hash = prev_block.hash.clone();
         drop(blocks);
@@ -487,9 +488,11 @@ impl SultanBlockchain {
     }
 
     /// Get latest block
-    pub async fn get_latest_block(&self) -> Block {
+    pub async fn get_latest_block(&self) -> Result<Block> {
         let blocks = self.blocks.read().await;
-        blocks.last().unwrap().clone()
+        blocks.last()
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("No blocks in chain"))
     }
 
     /// Verify blockchain integrity
@@ -620,7 +623,8 @@ impl SultanBlockchain {
     /// - Full Ed25519 signature verification for all transactions
     pub async fn validate_block(&self, block: &Block) -> Result<bool> {
         let blocks = self.blocks.read().await;
-        let prev_block = blocks.last().unwrap();
+        let prev_block = blocks.last()
+            .ok_or_else(|| anyhow::anyhow!("No blocks in chain - cannot validate"))?;
 
         // Check index
         if block.index != prev_block.index + 1 {
@@ -730,8 +734,8 @@ impl SultanBlockchain {
 fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .expect("System time before UNIX epoch")
-        .as_secs()
+        .map(|d| d.as_secs())
+        .unwrap_or(0)  // Fallback to epoch on clock misconfiguration
 }
 
 #[cfg(test)]

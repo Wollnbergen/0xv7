@@ -10,7 +10,7 @@
 
 **New:**
 ```html
-<meta name="description" content="Sultan Chain: The first zero-fee blockchain with 13.33% validator APY. Built with Rust, secured by 9 global validators.">
+<meta name="description" content="Sultan Chain: The first zero-fee blockchain with 13.33% validator APY. Built with Rust, permissionless validator network.">
 ```
 
 ### 2. Update "View Manual Setup Instructions" Button

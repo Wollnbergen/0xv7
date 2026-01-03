@@ -3,19 +3,21 @@
 ## 🌐 Network Status: LIVE
 
 **Mainnet RPC:** https://rpc.sltn.io  
+**Wallet PWA:** https://wallet.sltn.io  
 **Block Time:** ~2 seconds  
-**Validators:** 4 active (join with 10,000 SLTN stake)  
-**Shards:** 16 active (expandable to 8,000)
+**Validators:** Dynamic (join with 10,000 SLTN stake)  
+**Shards:** 16 active (expandable to 8,000)  
+**Node Binary:** v0.1.0 ([Download](https://github.com/SultanL1/sultan-node/releases))
 
 ---
 
 ## ✅ What Sultan Is
 
-Sultan is a **native Rust L1 blockchain** built from scratch - NOT a fork of Cosmos SDK, Substrate, or any other framework.
+Sultan is a **native Rust L1 blockchain**.
 
 ### Key Features
 - **Zero Gas Fees** - Transactions are free, subsidized by 4% annual inflation
-- **Native Token Factory** - Create CW20/CW721 tokens without smart contracts
+- **Native Token Factory** - Create Sultan native tokens without smart contracts
 - **Native DEX** - Built-in AMM for token swaps at protocol level
 - **Cross-Chain Bridges** - BTC, ETH, SOL, TON support
 - **10,000 SLTN Minimum Stake** - Democratic validator participation
@@ -38,7 +40,7 @@ sultan-core/src/           # Production Rust blockchain
 ├── governance.rs          # On-chain proposals & voting
 ├── storage.rs             # RocksDB persistence layer
 ├── p2p.rs                 # libp2p networking
-├── token_factory.rs       # Native CW20/CW721 token creation
+├── token_factory.rs       # Sultan native token creation
 ├── native_dex.rs          # Built-in AMM/swap
 ├── bridge_integration.rs  # Cross-chain bridge coordination
 ├── bridge_fees.rs         # Bridge fee calculations
@@ -105,8 +107,9 @@ curl https://rpc.sltn.io/status
 ## 🔐 Security Features
 
 - **Rate Limiting** - DDoS protection on RPC endpoints
-- **Signature Verification** - Ed25519 for all transactions
-- **Quantum Resistance** - Dilithium post-quantum signatures (optional)
+- **Signature Verification** - Ed25519 (strict mode)
+- **Checked Arithmetic** - Overflow protection throughout
+- **Graceful Shutdown** - State persistence on SIGINT
 - **Slashing** - Economic penalties for validator misbehavior
 - **21-Day Unbonding** - Prevents quick exit attacks
 
@@ -143,4 +146,4 @@ The \`_archive/\` folder contains legacy/experimental code including:
 
 *Sultan L1 - The People's Blockchain*
 
-*Last updated: December 29, 2025*
+*Last updated: January 3, 2026 - v0.1.0 binary released, wallet v1.0.0 deployed*

@@ -73,7 +73,8 @@ impl ShardedBlockchain {
         // Process transactions in parallel across shards
         let processed = self.process_transactions(transactions).await?;
         
-        let prev_block = self.blocks.last().unwrap();
+        let prev_block = self.blocks.last()
+            .ok_or_else(|| anyhow::anyhow!("No blocks in chain - genesis missing"))?;
         
         // Create block with processed transactions
         let block = Block {
@@ -95,7 +96,8 @@ impl ShardedBlockchain {
     /// Add block to chain
     pub fn add_block(&mut self, block: Block) -> Result<()> {
         // Basic validation
-        let prev = self.blocks.last().unwrap();
+        let prev = self.blocks.last()
+            .ok_or_else(|| anyhow::anyhow!("No blocks in chain"))?;
         if block.index != prev.index + 1 {
             anyhow::bail!("Invalid block index");
         }

@@ -2,10 +2,11 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.5  
-**Date:** December 30, 2025  
+**Version:** 3.6  
+**Date:** January 3, 2026  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
+**Binary:** v0.1.0 (SHA256: `6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51`)
 
 ---
 
@@ -24,9 +25,12 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Validators** | Dynamic (anyone can join with 10,000 SLTN stake) |
 | **Consensus** | Custom Proof-of-Stake |
 | **Network Protocol** | libp2p |
-| **Cryptography** | Ed25519 + Dilithium3 (Post-Quantum) |
+| **Cryptography** | Ed25519 + SHA3-256 |
 | **Gas Fees** | $0 (zero-fee transactions) |
 | **Staking APY** | 13.33% |
+
+| **Binary** | 15MB (stripped, LTO-optimized) |
+| **DEX Swap Fee** | 0.3% (to Liquidity Providers) |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
 **Wallet PWA:** `https://wallet.sltn.io`  
@@ -56,7 +60,7 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 
 ### 1.1 Vision
 
-Sultan L1 was created to solve the blockchain trilemma—achieving scalability, security, and decentralization without compromise. Our approach: **build everything from scratch in Rust**, avoiding the limitations and overhead of existing frameworks.
+Sultan L1 was created to solve the blockchain trilemma—achieving scalability, security, and decentralization without compromise. Our approach: **build a native Rust implementation** optimized for Sultan's specific requirements.
 
 The result is a blockchain that processes transactions in microseconds, confirms blocks in 2 seconds, scales horizontally to millions of TPS, and operates with zero transaction fees for end users.
 
@@ -85,8 +89,7 @@ We made a deliberate architectural decision to build Sultan as a **pure Rust imp
 2. **libp2p Networking** - Battle-tested P2P with Kademlia DHT and GossipSub
 3. **Dynamic Sharding** - Horizontal scaling from 16 to 8,000+ shards
 4. **Zero Gas Fees** - Sustainable economics through inflation-based validator rewards
-5. **Post-Quantum Security** - Dilithium3 signatures for future-proof protection
-6. **Instant Finality** - No confirmation wait times, single-block settlement
+5. **Instant Finality** - No confirmation wait times, single-block settlement
 
 ---
 
@@ -173,7 +176,6 @@ Global peer-to-peer connectivity:
 | **Serialization** | Bincode + Serde | Efficient wire format |
 | **Hashing** | SHA3-256 | Block and transaction hashes |
 | **Signatures** | Ed25519-dalek | Transaction signing |
-| **Post-Quantum** | Dilithium3 | Future-proof validator keys |
 
 ---
 
@@ -474,36 +476,40 @@ Sultan uses **libp2p**, the battle-tested peer-to-peer networking stack used by 
 **Current Production Network (December 2025):**
 
 ```
-                    ┌─────────────────┐
-                    │   Bootstrap     │
-                    │ rpc.sltn.io     │
-                    │ 5.161.225.96    │
-                    └────────┬────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-   ┌────▼────┐          ┌────▼────┐          ┌────▼────┐
-   │ Hetzner │          │DigitalOcean│       │DigitalOcean│
-   │ Germany │          │   NYC    │          │   SFO    │
-   │(11 nodes)│         │          │          │          │
-   └─────────┘          └──────────┘          └──────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-   ┌────▼────┐          ┌────▼────┐
-   │DigitalOcean│       │DigitalOcean│
-   │Amsterdam│          │Singapore│
-   └─────────┘          └─────────┘
+                         ┌─────────────────┐
+                         │   Bootstrap     │
+                         │  validator-1    │
+                         │   NYC (USA)     │
+                         └────────┬────────┘
+                                  │
+        ┌─────────────────────────┼─────────────────────────┐
+        │                         │                         │
+   ┌────▼────┐               ┌────▼────┐               ┌────▼────┐
+   │validator│               │validator│               │validator│
+   │    2    │               │    3    │               │    4    │
+   │  SFO    │               │   FRA   │               │   AMS   │
+   │  (USA)  │               │  (EU)   │               │  (EU)   │
+   └─────────┘               └─────────┘               └─────────┘
+                                  │
+              ┌───────────────────┴───────────────────┐
+              │                                       │
+         ┌────▼────┐                             ┌────▼────┐
+         │validator│                             │validator│
+         │    5    │                             │    6    │
+         │   SGP   │                             │   LON   │
+         │ (APAC)  │                             │  (EU)   │
+         └─────────┘                             └─────────┘
 ```
 
 **Validator Distribution:**
-- **11 nodes:** Hetzner Germany (Frankfurt region)
-- **1 node:** DigitalOcean NYC
+- **1 node:** DigitalOcean NYC (Bootstrap)
 - **1 node:** DigitalOcean SFO
+- **1 node:** DigitalOcean Frankfurt
 - **1 node:** DigitalOcean Amsterdam
 - **1 node:** DigitalOcean Singapore
+- **1 node:** DigitalOcean London
 
-**Total: 15 globally distributed validators**
+**Total: 6 globally distributed validators across 4 regions**
 
 ### 5.3 Network Parameters
 
@@ -616,12 +622,6 @@ Sultan implements **strict cryptographic verification** on all transactions:
 5. Node verifies signature before accepting transaction
 ```
 
-**Secondary: Dilithium3 (Post-Quantum)**
-- Algorithm: CRYSTALS-Dilithium (NIST PQC winner)
-- Security level: NIST Level 3 (AES-192 equivalent)
-- Quantum-resistant: Yes
-- Use: Validator identity keys, long-term security
-
 ### 6.2 Hash Functions
 
 | Purpose | Algorithm | Output Size |
@@ -695,7 +695,6 @@ hk.expand(b"sultan-storage-encryption-v1", &mut derived_key);
 | Consensus forks | Deterministic mempool ordering | ✅ Live |
 | DDoS | Rate limiting, stake requirements | ✅ Live |
 | MEV attacks | Encrypted mempool | 🔜 Planned |
-| Quantum attacks | Dilithium3 signatures | 🔜 Planned |
 
 ### 6.5 Security Audits
 
@@ -1053,7 +1052,7 @@ Official non-custodial wallet with enterprise-grade security:
 ### Q4 2025 ✅ Complete
 - [x] Mainnet launch (December 25, 2025)
 - [x] 16-shard production deployment
-- [x] 6 global validators operational
+- [x] 6 validators at launch (permissionless)
 - [x] Core RPC endpoints (30+ endpoints)
 - [x] P2P networking (libp2p)
 - [x] SLTN wallet (security-hardened)
@@ -1105,7 +1104,6 @@ Official non-custodial wallet with enterprise-grade security:
 
 ### 2027+ 📋 Vision
 - [ ] 2,048+ shards (16M+ TPS)
-- [ ] Full quantum-resistant upgrade
 - [ ] AI-powered MEV protection
 - [ ] Global CDN infrastructure
 - [ ] 1B+ user capacity
@@ -1124,12 +1122,11 @@ Sultan L1 represents a new paradigm in blockchain design: **native Rust performa
 | Block Creation | 50-105µs | 100-500ms |
 | Finality | 2 seconds | 6 seconds - 15 minutes |
 | Gas Fees | $0 | $0.01 - $50+ |
-| Post-Quantum | Dilithium3 | None |
 | Max TPS | 64,000,000 | 10,000 - 65,000 |
 
 **Production Status:** ✅ **LIVE** since December 25, 2025
 
-**Network:** 6 globally distributed validators
+**Validators:** Dynamic (permissionless, anyone can join with 10,000 SLTN)
 
 **RPC:** `https://rpc.sltn.io`
 
@@ -1157,22 +1154,23 @@ Sultan L1 is ready to power the next generation of decentralized applications—
 | Language | Rust |
 | Networking | libp2p |
 | Storage | RocksDB |
-| Cryptography | Ed25519 + Dilithium3 |
+| Cryptography | Ed25519 + SHA3-256 |
 | Hashing | SHA256 |
 
 ---
 
 ## Appendix B: Validator Addresses
 
-**Genesis Validators (15 nodes):**
+**Genesis Validators (6 nodes):**
 
 | Region | Provider | Count |
 |--------|----------|-------|
-| Frankfurt, Germany | Hetzner | 11 |
-| New York, USA | DigitalOcean | 1 |
+| New York, USA | DigitalOcean | 1 (Bootstrap) |
 | San Francisco, USA | DigitalOcean | 1 |
+| Frankfurt, Germany | DigitalOcean | 1 |
 | Amsterdam, Netherlands | DigitalOcean | 1 |
 | Singapore | DigitalOcean | 1 |
+| London, UK | DigitalOcean | 1 |
 
 ---
 

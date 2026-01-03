@@ -153,8 +153,11 @@ impl NativeDex {
         let fee = (amount_in * pool.fee_rate as u128) / 10000;
         let amount_in_after_fee = amount_in - fee;
         
-        let numerator = reserve_out * amount_in_after_fee;
-        let denominator = reserve_in + amount_in_after_fee;
+        // Use checked arithmetic to prevent overflow with large reserves
+        let numerator = reserve_out.checked_mul(amount_in_after_fee)
+            .ok_or_else(|| anyhow::anyhow!("Swap calculation overflow"))?;
+        let denominator = reserve_in.checked_add(amount_in_after_fee)
+            .ok_or_else(|| anyhow::anyhow!("Swap calculation overflow"))?;
         let amount_out = numerator / denominator;
         
         if amount_out == 0 {
@@ -167,10 +170,12 @@ impl NativeDex {
                 min_amount_out, amount_out);
         }
         
-        // Update reserves and volume
+        // Update reserves and volume with overflow protection
         if is_a_to_b {
-            pool.reserve_a += amount_in;
-            pool.reserve_b -= amount_out;
+            pool.reserve_a = pool.reserve_a.checked_add(amount_in)
+                .ok_or_else(|| anyhow::anyhow!("Reserve overflow"))?;
+            pool.reserve_b = pool.reserve_b.checked_sub(amount_out)
+                .ok_or_else(|| anyhow::anyhow!("Reserve underflow"))?;
             pool.total_volume_a += amount_in;
         } else {
             pool.reserve_b += amount_in;
@@ -236,10 +241,13 @@ impl NativeDex {
             bail!("Liquidity amount too small");
         }
         
-        // Update pool state
-        pool.reserve_a += amount_a;
-        pool.reserve_b += amount_b;
-        pool.total_lp_tokens += lp_tokens;
+        // Update pool state with overflow protection
+        pool.reserve_a = pool.reserve_a.checked_add(amount_a)
+            .ok_or_else(|| anyhow::anyhow!("Reserve A overflow"))?;
+        pool.reserve_b = pool.reserve_b.checked_add(amount_b)
+            .ok_or_else(|| anyhow::anyhow!("Reserve B overflow"))?;
+        pool.total_lp_tokens = pool.total_lp_tokens.checked_add(lp_tokens)
+            .ok_or_else(|| anyhow::anyhow!("LP token overflow"))?;
         
         // Mint LP tokens to user
         let user_lp = pool.lp_token_holders.entry(user.to_string()).or_insert(0);

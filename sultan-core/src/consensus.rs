@@ -370,8 +370,9 @@ impl ConsensusEngine {
             validator.voting_power = Self::calculate_voting_power_static(new_stake, self.total_stake.saturating_sub(slash_amount));
             validator.total_slashed += slash_amount;
             
-            // Update total stake
-            self.total_stake = self.total_stake.saturating_sub(slash_amount);
+            // Update total stake: remove slashed amount AND remaining stake (validator is inactive)
+            // When unjailed, remaining stake will be re-added to total_stake
+            self.total_stake = self.total_stake.saturating_sub(slash_amount + new_stake);
             
             // Jail the validator
             validator.is_jailed = true;
@@ -423,7 +424,8 @@ impl ConsensusEngine {
             
             validator.is_jailed = false;
             validator.is_active = true;
-            self.total_stake += validator.stake; // Re-add to active stake
+            // Re-add stake to active total (was removed when jailed in slash_and_jail)
+            self.total_stake += validator.stake;
             
             info!("Validator {} unjailed and reactivated", validator_address);
             Ok(())

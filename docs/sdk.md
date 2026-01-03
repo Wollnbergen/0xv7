@@ -419,7 +419,7 @@ const status = await fetch(`${RPC_URL}/status`).then(r => r.json());
 // {
 //   "node_id": "sultan-validator-1",
 //   "block_height": 125000,
-//   "validators": 12,
+//   "validators": 6,
 //   "shard_count": 16,
 //   "tps_capacity": 64000
 // }
@@ -504,7 +504,7 @@ const validators = await fetch(`${RPC_URL}/staking/validators`).then(r => r.json
 //       "status": "active"
 //     }
 //   ],
-//   "total_validators": 12,
+//   "total_validators": 6,
 //   "total_stake": 300000000000000
 // }
 ```

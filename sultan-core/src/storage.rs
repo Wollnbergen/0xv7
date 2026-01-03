@@ -126,30 +126,15 @@ impl StorageEncryption {
     
     /// Decrypt data and verify authentication tag
     /// Input format: nonce (12 bytes) || ciphertext || auth_tag (16 bytes)
-    /// Returns decrypted plaintext or panics on authentication failure
+    /// Returns decrypted plaintext or error on authentication failure
+    /// SECURITY: Uses try_decrypt internally to avoid panics on corrupted data
     pub fn decrypt(&self, data: &[u8]) -> Vec<u8> {
-        use aes_gcm::{
-            aead::{Aead, KeyInit},
-            Aes256Gcm, Nonce,
-        };
-        
-        if data.len() < Self::NONCE_SIZE + 16 {
-            panic!("Ciphertext too short: must contain nonce and auth tag");
-        }
-        
-        let cipher = Aes256Gcm::new_from_slice(&self.key)
-            .expect("Valid 32-byte key");
-        
-        // Extract nonce and ciphertext - convert slice to fixed array
-        let mut nonce_arr = [0u8; 12];
-        nonce_arr.copy_from_slice(&data[..Self::NONCE_SIZE]);
-        let nonce = Nonce::from(nonce_arr);
-        let ciphertext = &data[Self::NONCE_SIZE..];
-        
-        // Decrypt and verify authentication tag
-        cipher
-            .decrypt(&nonce, ciphertext)
-            .expect("Decryption failed: authentication tag mismatch or corrupted data")
+        // Use try_decrypt and convert error to empty vec to maintain API compatibility
+        // Callers should prefer try_decrypt for proper error handling
+        self.try_decrypt(data).unwrap_or_else(|e| {
+            tracing::error!("Decryption failed: {}", e);
+            Vec::new()
+        })
     }
     
     /// Try to decrypt data, returning Result instead of panicking

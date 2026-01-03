@@ -1,9 +1,10 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.5  
-**Date:** December 30, 2025  
-**Classification:** Public Technical Reference
+**Version:** 3.6  
+**Date:** January 3, 2026  
+**Classification:** Public Technical Reference  
+**Binary:** v0.1.0 (SHA256: `6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51`)
 
 ---
 
@@ -60,7 +61,7 @@ Rust is a systems programming language known for:
 
 ### 1.1 Core Stack
 
-Sultan is a **native Rust L1 blockchain** built from scratch. Every component is custom-built for Sultan's specific requirements.
+Sultan is a **native Rust L1 blockchain**. Every component is custom-built for Sultan's specific requirements.
 
 | Layer | Technology | What It Is | Why It Matters |
 |-------|------------|------------|----------------|
@@ -1951,19 +1952,19 @@ N ≥ 3f + 1
 Solving for f: f ≤ (N - 1) / 3
 ```
 
-**For Sultan with 9 validators:**
+**For Sultan with 6 validators:**
 
 ```
-f ≤ (9 - 1) / 3 = 2.67 → f = 2
+f ≤ (6 - 1) / 3 = 1.67 → f = 1
 
-We can tolerate 2 faulty validators.
+We can tolerate 1 faulty validator.
 ```
 
 | Total Validators | Max Faulty | Fault Tolerance |
 |-----------------|------------|-----------------|
 | 4 | 1 | 25% |
+| 6 | 1 | 16% |
 | 7 | 2 | 28% |
-| 9 | 2 | 22% |
 | 10 | 3 | 30% |
 | 100 | 33 | 33% |
 
@@ -1973,7 +1974,7 @@ We can tolerate 2 faulty validators.
 - Actively malicious
 - Running buggy software
 
-*Why it matters:* Even if 2 of 9 validators try to attack, the network continues producing correct blocks.
+*Why it matters:* Even if 1 of 6 validators tries to attack, the network continues producing correct blocks. As more validators join, fault tolerance increases.
 
 ### 11.2 Slashing Economics
 
@@ -2749,14 +2750,14 @@ npm run build        # Outputs to dist/
 │  Signatures:          Ed25519                                   │
 │  Storage:             RocksDB                                   │
 │  Networking:          libp2p (Gossipsub + Kademlia)             │
-│  Language:            Rust (100% native, not a fork)            │
+│  Language:            Rust (100% native)                       │
 │  Binary Size:         14MB (stripped, LTO-optimized)            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **The Elevator Pitch:**
 
-> "Sultan is a Layer 1 blockchain with zero transaction fees, built in Rust from scratch. We use validator inflation instead of gas fees, so users never pay. We launch with 16 shards at 64,000 TPS and can scale to 64 million TPS. The network is live with dynamic validators - anyone can join with 10,000 SLTN stake."
+> "Sultan is a Layer 1 blockchain with zero transaction fees, built in native Rust. We use validator inflation instead of gas fees, so users never pay. We launch with 16 shards at 64,000 TPS and can scale to 64 million TPS. The network is live with dynamic validators - anyone can join with 10,000 SLTN stake."
 
 **The 30-Second Technical:**
 
