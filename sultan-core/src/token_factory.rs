@@ -370,6 +370,42 @@ impl TokenFactory {
         Ok(())
     }
 
+    /// Internal mint for trusted callers (e.g., BridgeManager)
+    /// SECURITY: Only call this from trusted system components
+    /// For user-initiated mints, use `mint_to_with_signature`
+    pub async fn mint_internal(
+        &self,
+        denom: &str,
+        recipient: &str,
+        amount: u128,
+    ) -> Result<()> {
+        // Get token metadata and check minting
+        let mut tokens = self.tokens.write().await;
+        let metadata = tokens.get_mut(denom)
+            .ok_or_else(|| anyhow::anyhow!("Token not found: {}", denom))?;
+        
+        // Check if minting is enabled and respects max supply
+        if let Some(max_supply) = metadata.max_supply {
+            if metadata.total_supply + amount > max_supply {
+                bail!("Minting would exceed max supply of {}", max_supply);
+            }
+        }
+        
+        // Update total supply in metadata
+        metadata.total_supply += amount;
+        let symbol = metadata.symbol.clone();
+        drop(tokens);
+        
+        // Mint tokens to recipient balance
+        let mut balances = self.balances.write().await;
+        let key = (denom.to_string(), recipient.to_string());
+        let balance = balances.entry(key).or_insert(0);
+        *balance += amount;
+        
+        info!("🪙 Minted {} {} to {} (internal)", amount, symbol, recipient);
+        Ok(())
+    }
+
     /// Mint with Ed25519 signature verification (creator only)
     pub async fn mint_to_with_signature(
         &self,

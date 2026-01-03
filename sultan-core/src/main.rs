@@ -520,17 +520,19 @@ impl NodeState {
         // Create shared TokenFactory for both direct access and DEX
         let token_factory = Arc::new(TokenFactory::new());
         
-        // TODO: Wire BridgeManager mint_callback to TokenFactory for wrapped token minting
-        // Currently bridges create sBTC/sETH/sSOL/sTON denominations but don't mint to TokenFactory.
-        // Requires async callback support in BridgeManager. For now, wrapped tokens are tracked
-        // in bridge state, not TokenFactory balances.
+        // Create BridgeManager with TokenFactory integration for wrapped token minting
+        // When a bridge tx is verified, TokenFactory.mint_internal() mints sBTC/sETH/sSOL/sTON
+        let bridge_manager = Arc::new(BridgeManager::with_token_factory(
+            "sultan1treasury7xj3k2p8n9m5q4r6t8v0w2y4z6a8c0e2g4".to_string(),
+            token_factory.clone(),
+        ));
         
         Ok(Self {
             blockchain: blockchain_arc,
             consensus: consensus_arc,
             storage: Arc::new(RwLock::new(storage)),
             economics: Arc::new(RwLock::new(Economics::new())),
-            bridge_manager: Arc::new(BridgeManager::new()),
+            bridge_manager,
             staking_manager,
             governance_manager: Arc::new(GovernanceManager::new()),
             token_factory: token_factory.clone(),

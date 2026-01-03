@@ -22,9 +22,11 @@ use tokio::sync::RwLock;
 use tracing::{info, warn, error, debug};
 
 use crate::bridge_fees::{BridgeFees, FeeBreakdown, RateLimiter};
+use crate::token_factory::TokenFactory;
 
-/// Callback for minting wrapped tokens when bridge tx completes
-/// In production: Integrates with TokenFactory to mint sBTC/sETH/sSOL/sTON
+/// Legacy callback for minting wrapped tokens (kept for tests)
+/// In production: Use `with_token_factory()` for async TokenFactory integration
+#[allow(dead_code)]
 pub type MintCallback = Box<dyn Fn(&str, &str, u64) -> Result<()> + Send + Sync>;
 
 /// Large transaction threshold requiring multi-sig (100,000 units)
@@ -420,8 +422,11 @@ pub struct BridgeManager {
     pending_txs: Arc<RwLock<Vec<CrossChainTransaction>>>,
     completed_txs: Arc<RwLock<Vec<CrossChainTransaction>>>,
     fees: Arc<RwLock<BridgeFees>>,
-    /// Callback to mint wrapped tokens (integrates with TokenFactory)
+    /// Legacy callback for tests (kept for backward compatibility)
+    #[allow(dead_code)]
     mint_callback: Option<Arc<MintCallback>>,
+    /// TokenFactory for minting wrapped tokens (sBTC/sETH/sSOL/sTON)
+    token_factory: Option<Arc<TokenFactory>>,
     /// Rate limiter for spam prevention (per pubkey)
     rate_limiter: Arc<RwLock<RateLimiter>>,
     /// Multi-sig config for large transactions
@@ -437,8 +442,16 @@ impl BridgeManager {
         Self::with_treasury_and_mint(treasury_address, None)
     }
 
-    /// Create bridge manager with token mint callback
-    /// Use this to integrate with TokenFactory for minting wrapped tokens
+    /// Create bridge manager with TokenFactory for minting wrapped tokens
+    /// This is the RECOMMENDED constructor for production use
+    pub fn with_token_factory(treasury_address: String, token_factory: Arc<TokenFactory>) -> Self {
+        let mut manager = Self::with_treasury_and_mint(treasury_address, None);
+        manager.token_factory = Some(token_factory);
+        manager
+    }
+
+    /// Create bridge manager with legacy callback (for tests)
+    /// Use `with_token_factory` for production
     pub fn with_treasury_and_mint(treasury_address: String, mint_callback: Option<Arc<MintCallback>>) -> Self {
         let mut bridges = HashMap::new();
 
@@ -494,6 +507,7 @@ impl BridgeManager {
             completed_txs: Arc::new(RwLock::new(Vec::new())),
             fees: Arc::new(RwLock::new(BridgeFees::new(treasury_address))),
             mint_callback,
+            token_factory: None,
             rate_limiter: Arc::new(RwLock::new(RateLimiter::new(50, 60))), // 50 tx/min per pubkey
             multi_sig_config: Arc::new(RwLock::new(MultiSigConfig::default())),
         }
@@ -978,18 +992,27 @@ impl BridgeManager {
                 b.last_sync = now;
             }
             
-            // Mint wrapped tokens to recipient
-            // In production: Uses TokenFactory to mint sBTC/sETH/sSOL/sTON
-            if let Some(ref callback) = self.mint_callback {
-                let wrapped_token = &tx.wrapped_token;
-                let recipient = &tx.recipient;
-                let amount = tx.amount;
+            // Mint wrapped tokens to recipient using TokenFactory (preferred)
+            // or legacy callback (for tests)
+            let wrapped_token = &tx.wrapped_token;
+            let recipient = &tx.recipient;
+            let amount = tx.amount;
+            
+            if let Some(ref factory) = self.token_factory {
+                // Use TokenFactory's internal mint (async, no signature required)
+                match factory.mint_internal(wrapped_token, recipient, amount as u128).await {
+                    Ok(_) => info!("🪙 Minted {} {} to {} via TokenFactory", amount, wrapped_token, recipient),
+                    Err(e) => warn!("Failed to mint wrapped tokens via TokenFactory: {}", e),
+                }
+            } else if let Some(ref callback) = self.mint_callback {
+                // Legacy callback path for tests
                 if let Err(e) = callback(wrapped_token, recipient, amount) {
                     warn!("Failed to mint wrapped tokens: {}", e);
-                    // Don't fail the tx, just log - tokens can be minted manually
                 } else {
-                    info!("🪙 Minted {} {} to {}", amount, wrapped_token, recipient);
+                    info!("🪙 Minted {} {} to {} (legacy callback)", amount, wrapped_token, recipient);
                 }
+            } else {
+                debug!("No mint mechanism configured - wrapped tokens not minted");
             }
             
             info!("✅ Bridge tx verified: {} ({}→{})", tx.id, tx.source_chain, tx.dest_chain);
