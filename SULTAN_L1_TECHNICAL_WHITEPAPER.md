@@ -1060,18 +1060,23 @@ Official non-custodial wallet with enterprise-grade security:
 - [x] Enterprise code review Phase 1 & 2 (10/10 rating achieved)
   - consensus.rs: 1,078 lines, 17 tests, Ed25519 validator keys
   - transaction_validator.rs: 782 lines, 18 tests, typed errors
-  - main.rs: 2,938 lines, keygen CLI, TLS support, CORS security
+  - main.rs: 3,395 lines, keygen CLI, TLS support, CORS security
   - sharding_production.rs: 2,244 lines, 32 tests, 2PC/WAL
-  - storage.rs: ~1,120 lines, 14 tests, AES-256-GCM encryption, HKDF key derivation
-  - staking.rs: ~1,540 lines, 21 tests, auto-persist methods, governance slashing
-  - governance.rs: ~1,900 lines, 21 tests, slashing proposals, encrypted storage
-- [x] 157 passing unit tests
+  - storage.rs: 1,159 lines, 14 tests, AES-256-GCM encryption, HKDF key derivation
+  - staking.rs: 1,534 lines, 21 tests, auto-persist methods, governance slashing
+  - governance.rs: 1,920 lines, 21 tests, slashing proposals, encrypted storage
+  - token_factory.rs: 921 lines, 14 tests, native token creation with Ed25519
+  - native_dex.rs: 976 lines, 13 tests, built-in AMM with Ed25519
+  - bridge_integration.rs: 1,987 lines, 39 tests, TokenFactory mint integration
+- [x] 294+ passing unit tests
 - [x] Code review Phase 3 complete (10/10 rating on all modules)
+- [x] BridgeManager → TokenFactory integration (wrapped token minting)
+- [x] GitHub binary releases (https://github.com/SultanL1/sultan-node)
 
 ### Q1 2026 🔄 In Progress
-- [ ] Block explorer launch
+- [x] Block explorer launch (https://x.sltn.io)
 - [ ] TypeScript SDK release
-- [ ] Validator documentation
+- [x] Validator documentation (VALIDATOR_GUIDE.md + install script)
 - [ ] Community governance activation
 - [ ] Security audit (CertiK)
 - [ ] 64-shard expansion

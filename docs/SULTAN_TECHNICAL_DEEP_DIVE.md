@@ -76,20 +76,20 @@ The production codebase (`sultan-core/src/`) contains 22 Rust modules:
 
 ```
 sultan-core/src/
-├── main.rs               (2,938 lines) - Node binary, RPC (30+ endpoints), keygen CLI
+├── main.rs               (3,395 lines) - Node binary, RPC (30+ endpoints), keygen CLI
 ├── blockchain.rs         (374 lines)  - Block/TX structures (with memo field)
 ├── consensus.rs          (1,078 lines) - Validator management (17 tests, Ed25519)
 ├── p2p.rs                (1,025 lines) - libp2p networking (16 tests, Ed25519 sig verify)
 ├── block_sync.rs         (1,174 lines) - Byzantine-tolerant sync (31 tests, voter verify)
-├── storage.rs            (~1,120 lines) - RocksDB + AES-256-GCM encryption (14 tests)
+├── storage.rs            (1,159 lines) - RocksDB + AES-256-GCM encryption (14 tests)
 ├── economics.rs          (100 lines)  - Inflation/APY model
-├── staking.rs            (~1,540 lines) - Validator staking, auto-persist (21 tests)
-├── governance.rs         (~1,900 lines) - Governance with slashing proposals (21 tests)
-├── token_factory.rs      (~880 lines) - Native token creation, Ed25519 signatures (14 tests)
-├── native_dex.rs         (~970 lines) - AMM with Ed25519 signatures (13 tests)
+├── staking.rs            (1,534 lines) - Validator staking, auto-persist (21 tests)
+├── governance.rs         (1,920 lines) - Governance with slashing proposals (21 tests)
+├── token_factory.rs      (921 lines) - Native token creation, Ed25519 signatures (14 tests)
+├── native_dex.rs         (976 lines) - AMM with Ed25519 signatures (13 tests)
 ├── transaction_validator.rs (782 lines) - TX validation (18 tests, typed errors)
-├── bridge_fees.rs        (~880 lines) - Zero-fee bridge, rate limiting, treasury governance (30 tests)
-├── bridge_integration.rs (~1,965 lines) - Bridge coordination, real proof verification, multi-sig (39 tests)
+├── bridge_fees.rs        (1,009 lines) - Zero-fee bridge, rate limiting, treasury governance (30 tests)
+├── bridge_integration.rs (1,987 lines) - Bridge coordination, real proof verification, TokenFactory mint (39 tests)
 ├── sharding_production.rs(2,244 lines)- PRODUCTION sharding (Ed25519, 2PC, WAL)
 ├── sharded_blockchain_production.rs (1,342 lines) - Production shard coordinator
 ├── sharding.rs           (362 lines)  - LEGACY (deprecated)
@@ -97,7 +97,7 @@ sultan-core/src/
 └── [supporting modules]
 ```
 
-**Total: 18,000+ lines of production Rust code, 274 tests passing**
+**Total: 22,050 lines of production Rust code, 294+ tests passing**
 
 ### 1.3 Key Design Decisions
 
@@ -2118,24 +2118,24 @@ Professional code review by specialized security firms. They look for:
 **ALWAYS USE:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `main.rs` | 2,938 | Node entry point, RPC (30+ endpoints), keygen CLI |
+| `main.rs` | 3,395 | Node entry point, RPC (30+ endpoints), keygen CLI |
 | `consensus.rs` | 1,078 | Validator logic (17 tests, Ed25519) |
 | `transaction_validator.rs` | 782 | TX validation (18 tests, typed errors) |
 | `blockchain.rs` | 374 | Block/TX structures |
 | `sharding_production.rs` | 2,244 | **PRODUCTION sharding** (32 tests) |
 | `sharded_blockchain_production.rs` | 1,342 | **PRODUCTION shard coordinator** |
-| `staking.rs` | 1,198 | Validator staking (21 tests) |
-| `governance.rs` | 911 | On-chain governance (21 tests) |
-| `storage.rs` | 1,120 | RocksDB persistence + AES-256-GCM encryption (14 tests) |
+| `staking.rs` | 1,534 | Validator staking (21 tests) |
+| `governance.rs` | 1,920 | On-chain governance (21 tests) |
+| `storage.rs` | 1,159 | RocksDB persistence + AES-256-GCM encryption (14 tests) |
 | `economics.rs` | 100 | Inflation model |
-| `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
-| `native_dex.rs` | ~970 | Built-in AMM with Ed25519 signatures (13 tests) |
-| `bridge_integration.rs` | ~1,600 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification (32 tests) |
-| `bridge_fees.rs` | ~680 | Zero-fee bridge with async oracle support (23 tests) |
+| `token_factory.rs` | 921 | Native token creation with Ed25519 signatures (14 tests) |
+| `native_dex.rs` | 976 | Built-in AMM with Ed25519 signatures (13 tests) |
+| `bridge_integration.rs` | 1,987 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification, TokenFactory mint (39 tests) |
+| `bridge_fees.rs` | 1,009 | Zero-fee bridge with async oracle support (30 tests) |
 | `p2p.rs` | 1,025 | **P2P networking** (16 tests, GossipSub, Kademlia, DoS, Ed25519 sig verify) |
 | `block_sync.rs` | 1,174 | **Byzantine-tolerant sync** (31 tests, voter verify, sig validation) |
 
-**Total: 18,000+ lines, 274 tests passing**
+**Total: 22,050 lines, 294+ tests passing**
 
 **Code Review Status (Phase 5 Complete):**
 | Module | Rating | Key Features |
@@ -2158,6 +2158,17 @@ Professional code review by specialized security firms. They look for:
 
 ### 12.2 Build & Run
 
+**Quick Install (Recommended):**
+```bash
+# One-line validator install
+curl -L https://wallet.sltn.io/install.sh | bash
+```
+
+**Or download directly from GitHub:**
+- Release: https://github.com/SultanL1/sultan-node/releases
+- Binary: `sultan-node-linux-amd64` (16MB)
+
+**Build from source:**
 ```bash
 # Build the node
 cd sultan-core

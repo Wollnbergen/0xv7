@@ -193,4 +193,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: December 31, 2025 - Code Review Phase 5 Complete (274 tests node, 219 tests wallet, 10/10 rating on all modules)*
+*Last updated: January 3, 2026 - BridgeManager→TokenFactory integration complete, GitHub releases live*
