@@ -517,6 +517,14 @@ impl NodeState {
             cfg
         };
 
+        // Create shared TokenFactory for both direct access and DEX
+        let token_factory = Arc::new(TokenFactory::new());
+        
+        // TODO: Wire BridgeManager mint_callback to TokenFactory for wrapped token minting
+        // Currently bridges create sBTC/sETH/sSOL/sTON denominations but don't mint to TokenFactory.
+        // Requires async callback support in BridgeManager. For now, wrapped tokens are tracked
+        // in bridge state, not TokenFactory balances.
+        
         Ok(Self {
             blockchain: blockchain_arc,
             consensus: consensus_arc,
@@ -525,8 +533,8 @@ impl NodeState {
             bridge_manager: Arc::new(BridgeManager::new()),
             staking_manager,
             governance_manager: Arc::new(GovernanceManager::new()),
-            token_factory: Arc::new(TokenFactory::new()),
-            native_dex: Arc::new(NativeDex::new(Arc::new(TokenFactory::new()))),
+            token_factory: token_factory.clone(),
+            native_dex: Arc::new(NativeDex::new(token_factory)),
             p2p_network,
             block_sync_manager,
             validator_address: args.validator_address.clone(),
@@ -1632,6 +1640,8 @@ mod rpc {
         source_tx: String,
         amount: u64,
         recipient: String,
+        signature: String,  // hex-encoded Ed25519 signature
+        pubkey: String,     // hex-encoded 32-byte public key
     }
 
     #[derive(serde::Deserialize)]
@@ -1690,12 +1700,34 @@ mod rpc {
         req: BridgeTxRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
-        match state.bridge_manager.submit_bridge_transaction(
+        // Parse signature
+        let signature = match hex::decode(&req.signature) {
+            Ok(s) if s.len() == 64 => s,
+            _ => return Ok(warp::reply::json(&serde_json::json!({
+                "error": "Invalid signature (must be 64 bytes hex)"
+            }))),
+        };
+        
+        // Parse pubkey
+        let pubkey: [u8; 32] = match hex::decode(&req.pubkey) {
+            Ok(p) if p.len() == 32 => {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&p);
+                arr
+            },
+            _ => return Ok(warp::reply::json(&serde_json::json!({
+                "error": "Invalid pubkey (must be 32 bytes hex)"
+            }))),
+        };
+        
+        match state.bridge_manager.submit_bridge_transaction_with_signature(
             req.source_chain,
             req.dest_chain,
             req.source_tx,
             req.amount,
             req.recipient,
+            signature,
+            pubkey,
         ).await {
             Ok(tx_id) => Ok(warp::reply::json(&serde_json::json!({
                 "tx_id": tx_id,
@@ -1703,7 +1735,9 @@ mod rpc {
             }))),
             Err(e) => {
                 warn!("Bridge transaction failed: {}", e);
-                Err(warp::reject())
+                Ok(warp::reply::json(&serde_json::json!({
+                    "error": e.to_string()
+                })))
             }
         }
     }
@@ -2820,6 +2854,7 @@ struct CreateTokenRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // minter field used for request validation context
 struct MintTokenRequest {
     denom: String,
     to_address: String,
@@ -3207,6 +3242,9 @@ async fn handle_add_liquidity(
             "error": "Invalid pubkey (must be 32 bytes hex)"
         }))),
     };
+    
+    // Note: min_lp_tokens from request is reserved for future slippage protection
+    let _min_lp = request.min_lp_tokens.unwrap_or(0);
     
     match state.native_dex.add_liquidity_with_signature(
         &request.pair_id,

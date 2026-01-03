@@ -57,6 +57,8 @@ impl TokenFactory {
     
     /// Internal: Create a new token
     /// Private method - use `create_token_with_signature` for public API
+    /// Used by test suite to bypass signature requirements
+    #[allow(dead_code)]  // Used in #[cfg(test)] module
     pub(crate) async fn create_token_internal(
         &self,
         creator: &str,
