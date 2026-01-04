@@ -1574,11 +1574,18 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_list_tokens);
 
-        // === Faucet Routes ===
+        // === Faucet Routes (Challenge-Response Anti-Sybil) ===
         
-        // POST /faucet/claim/:address - Claim SLTN from faucet
-        let faucet_claim_route = warp::path!("faucet" / "claim" / String)
+        // GET /faucet/challenge/:address - Get challenge nonce to sign (step 1)
+        let faucet_challenge_route = warp::path!("faucet" / "challenge" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_faucet_challenge);
+        
+        // POST /faucet/claim - Claim SLTN with signed challenge (step 2)
+        let faucet_claim_route = warp::path!("faucet" / "claim")
             .and(warp::post())
+            .and(warp::body::json::<FaucetClaimRequest>())
             .and(with_state(state.clone()))
             .and_then(handle_faucet_claim);
         
@@ -1691,7 +1698,8 @@ mod rpc {
             .or(list_tokens_route)
             .boxed();
         
-        let faucet_routes = faucet_claim_route
+        let faucet_routes = faucet_challenge_route
+            .or(faucet_claim_route)
             .or(faucet_status_route)
             .or(faucet_toggle_route)
             .boxed();
@@ -3266,6 +3274,14 @@ struct FaucetToggleRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct FaucetClaimRequest {
+    address: String,
+    nonce: String,
+    signature: String,  // hex-encoded Ed25519 signature over the nonce
+    pubkey: String,     // hex-encoded 32-byte Ed25519 public key
+}
+
+#[derive(Debug, Deserialize)]
 struct SwapRequest {
     from_address: String,
     pair_id: String,
@@ -3536,25 +3552,64 @@ async fn handle_list_tokens(
     })))
 }
 
-// Faucet claim handler
-async fn handle_faucet_claim(
+// Faucet challenge handler (Step 1: Get nonce to sign)
+async fn handle_faucet_challenge(
     address: String,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Validate address format
-    if !address.starts_with("sultan1") || address.len() < 40 {
-        return Ok(warp::reply::json(&serde_json::json!({
+    match state.token_factory.generate_faucet_challenge(&address).await {
+        Ok(nonce) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "address": address,
+            "nonce": nonce,
+            "message": "Sign this nonce with your wallet and POST to /faucet/claim",
+            "expires_in_seconds": 300
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
             "success": false,
-            "error": "Invalid Sultan address format"
-        })));
+            "error": e.to_string()
+        }))),
     }
+}
+
+// Faucet claim handler (Step 2: Submit signed challenge)
+async fn handle_faucet_claim(
+    request: FaucetClaimRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Parse signature
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex encoding"
+        }))),
+    };
     
-    match state.token_factory.claim_faucet(&address).await {
+    // Parse pubkey
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey: must be 32 bytes hex-encoded"
+        }))),
+    };
+    
+    match state.token_factory.claim_faucet_with_signature(
+        &request.address,
+        &request.nonce,
+        &signature,
+        &pubkey_bytes,
+    ).await {
         Ok(amount) => Ok(warp::reply::json(&serde_json::json!({
             "success": true,
             "amount": amount.to_string(),
             "amount_sltn": amount / 1_000_000,
-            "message": format!("Claimed {} SLTN to {}", amount / 1_000_000, address)
+            "message": format!("Claimed {} SLTN to {}", amount / 1_000_000, request.address)
         }))),
         Err(e) => Ok(warp::reply::json(&serde_json::json!({
             "success": false,
@@ -3589,9 +3644,11 @@ async fn handle_faucet_toggle(
     admin_key: String,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Check admin key from environment
+    use crate::token_factory::TokenFactory;
+    
+    // Check admin key from environment (constant-time comparison)
     let expected_key = std::env::var("SULTAN_ADMIN_KEY").unwrap_or_default();
-    if expected_key.is_empty() || admin_key != expected_key {
+    if expected_key.is_empty() || !TokenFactory::constant_time_compare(&admin_key, &expected_key) {
         return Ok(warp::reply::json(&serde_json::json!({
             "success": false,
             "error": "Unauthorized: Invalid admin key"
