@@ -32,6 +32,8 @@ use clap::{Parser, Subcommand};
 use sha2::Digest;
 use ed25519_dalek::{Signature, VerifyingKey, Verifier, SigningKey, SIGNATURE_LENGTH};
 use rand::rngs::OsRng;
+use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
+use aes_gcm::aead::Aead;
 
 /// Sultan Node CLI Arguments
 #[derive(Parser, Debug)]
@@ -124,9 +126,22 @@ struct Args {
     #[clap(long)]
     tls_key: Option<String>,
 
+    /// Protocol fee wallet address (receives 0.1% of DEX swap fees)
+    /// Default: genesis treasury wallet
+    #[clap(long, default_value = "sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g")]
+    protocol_fee_address: String,
+
     /// Subcommand (e.g., keygen)
     #[clap(subcommand)]
     command: Option<Command>,
+
+    /// Path to encrypted validator key file (alternative to --validator-secret)
+    #[clap(long)]
+    validator_keyfile: Option<String>,
+
+    /// Password for encrypted key file (use env SULTAN_KEY_PASSWORD for security)
+    #[clap(long, env = "SULTAN_KEY_PASSWORD")]
+    key_password: Option<String>,
 }
 
 /// CLI Subcommands
@@ -134,14 +149,22 @@ struct Args {
 enum Command {
     /// Generate a new Ed25519 keypair for validator registration
     Keygen {
-        /// Output format (hex, json)
+        /// Output format (hex, json, encrypted)
         #[clap(long, default_value = "hex")]
         format: String,
+        
+        /// Output file path (required for encrypted format)
+        #[clap(long, short)]
+        output: Option<String>,
+        
+        /// Password for encrypted output (use env for security)
+        #[clap(long, env = "SULTAN_KEY_PASSWORD")]
+        password: Option<String>,
     },
 }
 
 /// Generate and display a new Ed25519 keypair
-fn run_keygen(format: &str) {
+fn run_keygen(format: &str, output: Option<&str>, password: Option<&str>) {
     let signing_key = SigningKey::generate(&mut OsRng);
     let verifying_key = signing_key.verifying_key();
     
@@ -149,6 +172,41 @@ fn run_keygen(format: &str) {
     let public_hex = hex::encode(verifying_key.to_bytes());
     
     match format {
+        "encrypted" => {
+            let output_path = match output {
+                Some(p) => p,
+                None => {
+                    eprintln!("Error: --output required for encrypted format");
+                    std::process::exit(1);
+                }
+            };
+            let pwd = match password {
+                Some(p) if !p.is_empty() => p,
+                _ => {
+                    eprintln!("Error: --password or SULTAN_KEY_PASSWORD required for encrypted format");
+                    std::process::exit(1);
+                }
+            };
+            
+            match NodeState::save_encrypted_key(&signing_key, std::path::Path::new(output_path), pwd) {
+                Ok(_) => {
+                    println!("╔══════════════════════════════════════════════════════════════════════╗");
+                    println!("║              SULTAN L1 ENCRYPTED VALIDATOR KEY                       ║");
+                    println!("╠══════════════════════════════════════════════════════════════════════╣");
+                    println!("║ PUBLIC KEY (use with --validator-pubkey):                            ║");
+                    println!("║ {}  ║", public_hex);
+                    println!("╠══════════════════════════════════════════════════════════════════════╣");
+                    println!("║ Encrypted key saved to: {:46}   ║", output_path);
+                    println!("╚══════════════════════════════════════════════════════════════════════╝");
+                    println!();
+                    println!("Usage: sultan-node --validator --validator-keyfile {} --key-password <PASSWORD>", output_path);
+                }
+                Err(e) => {
+                    eprintln!("Error saving encrypted key: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
         "json" => {
             println!("{}", serde_json::json!({
                 "public_key": public_hex,
@@ -171,6 +229,8 @@ fn run_keygen(format: &str) {
             println!("╚══════════════════════════════════════════════════════════════════════╝");
             println!();
             println!("Usage: sultan-node --validator --validator-pubkey {}", public_hex);
+            println!();
+            println!("For encrypted key storage, use: sultan-node keygen --format encrypted --output key.enc --password <PASSWORD>");
         }
     }
 }
@@ -328,6 +388,15 @@ struct NodeState {
     config: Arc<RwLock<Config>>,
     /// Path to config file for persistence
     config_path: PathBuf,
+    /// TLS configuration for secure RPC
+    tls_config: Option<TlsConfig>,
+}
+
+/// TLS configuration for secure RPC server
+#[derive(Clone)]
+struct TlsConfig {
+    cert_path: String,
+    key_path: String,
 }
 
 impl NodeState {
@@ -526,7 +595,13 @@ impl NodeState {
         };
 
         // Create shared TokenFactory for both direct access and DEX
-        let token_factory = Arc::new(TokenFactory::new());
+        let data_path = std::path::PathBuf::from(&args.data_dir);
+        let token_factory = Arc::new(TokenFactory::with_storage(data_path.join("tokens")));
+        
+        // Load persisted token state if exists
+        if let Err(e) = token_factory.load_from_storage().await {
+            warn!("⚠️ Failed to load token state: {}", e);
+        }
         
         // Create BridgeManager with TokenFactory integration for wrapped token minting
         // When a bridge tx is verified, TokenFactory.mint_internal() mints sBTC/sETH/sSOL/sTON
@@ -534,6 +609,20 @@ impl NodeState {
             "sultan1treasury7xj3k2p8n9m5q4r6t8v0w2y4z6a8c0e2g4".to_string(),
             token_factory.clone(),
         ));
+        
+        // Create NativeDex with protocol fee address and persistence
+        let native_dex = Arc::new(NativeDex::with_config(
+            token_factory.clone(),
+            args.protocol_fee_address.clone(),
+            Some(data_path.join("dex")),
+        ));
+        
+        // Load persisted DEX state if exists
+        if let Err(e) = native_dex.load_from_storage().await {
+            warn!("⚠️ Failed to load DEX state: {}", e);
+        }
+        
+        info!("💰 Protocol fee address: {}", args.protocol_fee_address);
         
         Ok(Self {
             blockchain: blockchain_arc,
@@ -544,7 +633,7 @@ impl NodeState {
             staking_manager,
             governance_manager: Arc::new(GovernanceManager::new()),
             token_factory: token_factory.clone(),
-            native_dex: Arc::new(NativeDex::new(token_factory)),
+            native_dex,
             p2p_network,
             block_sync_manager,
             validator_address: args.validator_address.clone(),
@@ -554,6 +643,20 @@ impl NodeState {
             allowed_origins,
             config: Arc::new(RwLock::new(config)),
             config_path,
+            tls_config: if args.enable_tls {
+                match (&args.tls_cert, &args.tls_key) {
+                    (Some(cert), Some(key)) => Some(TlsConfig {
+                        cert_path: cert.clone(),
+                        key_path: key.clone(),
+                    }),
+                    _ => {
+                        warn!("⚠️  TLS enabled but cert/key paths not provided");
+                        None
+                    }
+                }
+            } else {
+                None
+            },
         })
     }
 
@@ -563,12 +666,36 @@ impl NodeState {
             return Ok(None);
         }
 
+        // Try loading from encrypted keyfile first
+        if let Some(ref keyfile_path) = args.validator_keyfile {
+            let password = match &args.key_password {
+                Some(p) if !p.is_empty() => p.as_str(),
+                _ => {
+                    bail!("--key-password or SULTAN_KEY_PASSWORD required when using --validator-keyfile");
+                }
+            };
+            
+            let signing_key = Self::load_encrypted_key(std::path::Path::new(keyfile_path), password)?;
+            
+            // Verify public key matches if provided
+            if let Some(ref pubkey_hex) = args.validator_pubkey {
+                let expected_pubkey = signing_key.verifying_key();
+                let expected_hex = hex::encode(expected_pubkey.to_bytes());
+                if expected_hex != *pubkey_hex {
+                    bail!("Encrypted key pubkey does not match --validator-pubkey!\n  Expected: {}\n  Got: {}", pubkey_hex, expected_hex);
+                }
+            }
+            
+            return Ok(Some(signing_key));
+        }
+
+        // Fall back to hex secret from CLI/env
         let secret_hex = match &args.validator_secret {
             Some(s) if !s.is_empty() => s.clone(),
             _ => {
                 warn!("⚠️  Validator mode enabled but no signing key provided");
                 warn!("   Blocks will be proposed but NOT signed (insecure)");
-                warn!("   Use --validator-secret or SULTAN_VALIDATOR_SECRET env var");
+                warn!("   Use --validator-secret, SULTAN_VALIDATOR_SECRET, or --validator-keyfile");
                 return Ok(None);
             }
         };
@@ -599,6 +726,89 @@ impl NodeState {
         }
 
         Ok(Some(signing_key))
+    }
+
+    /// Save validator signing key encrypted with password
+    /// 
+    /// Uses AES-256-GCM authenticated encryption with HKDF key derivation
+    /// Key file format: [12-byte nonce][32-byte salt][encrypted data][16-byte auth tag]
+    fn save_encrypted_key(key: &SigningKey, path: &std::path::Path, password: &str) -> Result<()> {
+        use rand::RngCore;
+        use hkdf::Hkdf;
+        use sha2::Sha256;
+        
+        // Generate random salt and nonce
+        let mut salt = [0u8; 32];
+        let mut nonce_bytes = [0u8; 12];
+        OsRng.fill_bytes(&mut salt);
+        OsRng.fill_bytes(&mut nonce_bytes);
+        
+        // Derive encryption key using HKDF
+        let hk = Hkdf::<Sha256>::new(Some(&salt), password.as_bytes());
+        let mut encryption_key = [0u8; 32];
+        hk.expand(b"sultan-validator-key", &mut encryption_key)
+            .map_err(|_| anyhow::anyhow!("HKDF expansion failed"))?;
+        
+        // Encrypt the signing key
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&encryption_key));
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ciphertext = cipher.encrypt(nonce, key.to_bytes().as_slice())
+            .map_err(|_| anyhow::anyhow!("Encryption failed"))?;
+        
+        // Write: nonce || salt || ciphertext (includes auth tag)
+        let mut output = Vec::with_capacity(12 + 32 + ciphertext.len());
+        output.extend_from_slice(&nonce_bytes);
+        output.extend_from_slice(&salt);
+        output.extend_from_slice(&ciphertext);
+        
+        std::fs::write(path, &output)
+            .context("Failed to write encrypted key file")?;
+        
+        info!("🔐 Validator key encrypted and saved to {:?}", path);
+        Ok(())
+    }
+
+    /// Load validator signing key from encrypted file
+    fn load_encrypted_key(path: &std::path::Path, password: &str) -> Result<SigningKey> {
+        use hkdf::Hkdf;
+        use sha2::Sha256;
+        
+        let data = std::fs::read(path)
+            .context("Failed to read encrypted key file")?;
+        
+        if data.len() < 12 + 32 + 32 + 16 {
+            bail!("Invalid encrypted key file: too short");
+        }
+        
+        // Parse: nonce || salt || ciphertext
+        let nonce_bytes: [u8; 12] = data[0..12].try_into()?;
+        let salt: [u8; 32] = data[12..44].try_into()?;
+        let ciphertext = &data[44..];
+        
+        // Derive decryption key using HKDF
+        let hk = Hkdf::<Sha256>::new(Some(&salt), password.as_bytes());
+        let mut decryption_key = [0u8; 32];
+        hk.expand(b"sultan-validator-key", &mut decryption_key)
+            .map_err(|_| anyhow::anyhow!("HKDF expansion failed"))?;
+        
+        // Decrypt the signing key
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&decryption_key));
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let plaintext = cipher.decrypt(nonce, ciphertext)
+            .map_err(|_| anyhow::anyhow!("Decryption failed - wrong password?"))?;
+        
+        if plaintext.len() != 32 {
+            bail!("Invalid decrypted key length");
+        }
+        
+        let key_bytes: [u8; 32] = plaintext.try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert decrypted key"))?;
+        
+        let signing_key = SigningKey::from_bytes(&key_bytes);
+        info!("🔓 Validator key decrypted from {:?}", path);
+        info!("   Pubkey: {}", hex::encode(signing_key.verifying_key().to_bytes()));
+        
+        Ok(signing_key)
     }
 
     /// Activate or deactivate a feature flag via governance
@@ -1481,7 +1691,19 @@ mod rpc {
             .with(cors_config)
             .recover(handle_rejection);
 
-        warp::serve(routes).run(addr).await;
+        // Start server with or without TLS
+        if let Some(ref tls_config) = state.tls_config {
+            info!("🔒 Starting RPC server with TLS on {}", addr);
+            warp::serve(routes)
+                .tls()
+                .cert_path(&tls_config.cert_path)
+                .key_path(&tls_config.key_path)
+                .run(addr)
+                .await;
+        } else {
+            info!("⚠️  Starting RPC server WITHOUT TLS on {} (use --enable-tls for production)", addr);
+            warp::serve(routes).run(addr).await;
+        }
 
         Ok(())
     }
@@ -2629,8 +2851,8 @@ async fn main() -> Result<()> {
     // Handle subcommands first
     if let Some(cmd) = &args.command {
         match cmd {
-            Command::Keygen { format } => {
-                run_keygen(format);
+            Command::Keygen { format, output, password } => {
+                run_keygen(format, output.as_deref(), password.as_deref());
                 return Ok(());
             }
         }
@@ -3340,8 +3562,8 @@ async fn handle_swap(
     };
     
     match state.native_dex.swap_with_signature(
-        &request.from_address,
-        &request.pair_id,
+        &request.pair_id,        // pair_id first
+        &request.from_address,   // then user address
         &request.token_in,
         request.amount_in,
         request.min_amount_out,

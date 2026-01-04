@@ -109,7 +109,8 @@ pub async fn swap(
 | Mempool Ordering | Deterministic (timestamp/from/nonce) |
 | Signature Verification | Ed25519 STRICT mode |
 | Tests | 274 passing (lib tests) |
-| DEX Swap Fee | 0.3% (to Liquidity Providers) |
+| DEX Swap Fee | 0.3% total (0.2% to LP reserves, 0.1% to protocol) |
+| Protocol Fee Address | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (genesis treasury) |
 | Binary Version | v0.1.0 |
 | Binary SHA256 | `6440e837...de51` |
 

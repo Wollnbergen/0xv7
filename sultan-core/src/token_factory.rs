@@ -9,6 +9,7 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, debug};
@@ -43,6 +44,9 @@ pub struct TokenFactory {
     
     /// Minimum initial supply
     pub min_initial_supply: u128,
+    
+    /// Path to persist token data
+    pub storage_path: Option<PathBuf>,
 }
 
 impl TokenFactory {
@@ -52,7 +56,86 @@ impl TokenFactory {
             balances: Arc::new(RwLock::new(HashMap::new())),
             creation_fee: 1000 * 1_000_000, // 1000 SLTN
             min_initial_supply: 1_000_000,   // 1 million minimum
+            storage_path: None,
         }
+    }
+
+    /// Create a new TokenFactory with persistence
+    pub fn with_storage(storage_path: PathBuf) -> Self {
+        Self {
+            tokens: Arc::new(RwLock::new(HashMap::new())),
+            balances: Arc::new(RwLock::new(HashMap::new())),
+            creation_fee: 1000 * 1_000_000,
+            min_initial_supply: 1_000_000,
+            storage_path: Some(storage_path),
+        }
+    }
+
+    /// Set storage path for persistence
+    pub fn set_storage_path(&mut self, path: PathBuf) {
+        self.storage_path = Some(path);
+    }
+
+    /// Load tokens and balances from persistent storage
+    pub async fn load_from_storage(&self) -> Result<()> {
+        let Some(path) = &self.storage_path else {
+            return Ok(());
+        };
+        
+        // Load tokens
+        let tokens_file = path.join("tokens.json");
+        if tokens_file.exists() {
+            let data = tokio::fs::read_to_string(&tokens_file).await?;
+            let loaded_tokens: HashMap<String, TokenMetadata> = serde_json::from_str(&data)?;
+            let mut tokens = self.tokens.write().await;
+            *tokens = loaded_tokens;
+            info!("📂 Loaded {} tokens from {:?}", tokens.len(), tokens_file);
+        }
+        
+        // Load balances (convert from serializable format)
+        let balances_file = path.join("balances.json");
+        if balances_file.exists() {
+            let data = tokio::fs::read_to_string(&balances_file).await?;
+            // Serialize as Vec of (denom, address, balance) for JSON compatibility
+            let loaded: Vec<(String, String, u128)> = serde_json::from_str(&data)?;
+            let mut balances = self.balances.write().await;
+            balances.clear();
+            for (denom, address, balance) in loaded {
+                balances.insert((denom, address), balance);
+            }
+            info!("📂 Loaded {} balance entries from {:?}", balances.len(), balances_file);
+        }
+        
+        Ok(())
+    }
+
+    /// Save tokens and balances to persistent storage
+    pub async fn save_to_storage(&self) -> Result<()> {
+        let Some(path) = &self.storage_path else {
+            return Ok(());
+        };
+        
+        // Ensure directory exists
+        tokio::fs::create_dir_all(path).await?;
+        
+        // Save tokens
+        let tokens_file = path.join("tokens.json");
+        let tokens = self.tokens.read().await;
+        let data = serde_json::to_string_pretty(&*tokens)?;
+        tokio::fs::write(&tokens_file, data).await?;
+        
+        // Save balances (convert to serializable format)
+        let balances_file = path.join("balances.json");
+        let balances = self.balances.read().await;
+        let serializable: Vec<(&String, &String, &u128)> = balances
+            .iter()
+            .map(|((d, a), b)| (d, a, b))
+            .collect();
+        let data = serde_json::to_string_pretty(&serializable)?;
+        tokio::fs::write(&balances_file, data).await?;
+        
+        debug!("💾 Saved {} tokens and {} balances", tokens.len(), balances.len());
+        Ok(())
     }
     
     /// Internal: Create a new token
@@ -411,6 +494,60 @@ impl TokenFactory {
         Ok(())
     }
 
+    /// Create LP token with custom denom (for DEX pools)
+    /// SECURITY: Only call this from trusted system components (NativeDex)
+    /// LP tokens have no min_supply requirement and use custom denom format
+    pub async fn create_lp_token_internal(
+        &self,
+        lp_denom: &str,
+        pool_address: &str,
+        total_supply: u128,
+        token_a: &str,
+        token_b: &str,
+    ) -> Result<String> {
+        // Check if token already exists
+        let tokens = self.tokens.read().await;
+        if tokens.contains_key(lp_denom) {
+            bail!("LP token already exists: {}", lp_denom);
+        }
+        drop(tokens);
+        
+        // Create LP token metadata
+        let metadata = TokenMetadata {
+            creator: pool_address.to_string(),
+            name: format!("LP Token {}/{}", token_a, token_b),
+            symbol: format!("LP-{}-{}", 
+                token_a.split('/').last().unwrap_or(token_a),
+                token_b.split('/').last().unwrap_or(token_b)
+            ),
+            decimals: 18,
+            total_supply,
+            max_supply: None, // LP tokens can mint/burn freely
+            logo_url: None,
+            description: Some(format!("Liquidity provider token for {}/{}", token_a, token_b)),
+            website: None,
+            social_links: None,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            minting_enabled: true, // LP tokens can always be minted
+        };
+        
+        // Store token metadata with custom denom
+        let mut tokens = self.tokens.write().await;
+        tokens.insert(lp_denom.to_string(), metadata);
+        drop(tokens);
+        
+        // Set initial supply to pool address
+        let mut balances = self.balances.write().await;
+        let key = (lp_denom.to_string(), pool_address.to_string());
+        balances.insert(key, total_supply);
+        
+        info!("🔷 LP token created: {} with {} supply", lp_denom, total_supply);
+        Ok(lp_denom.to_string())
+    }
+
     /// Mint with Ed25519 signature verification (creator only)
     pub async fn mint_to_with_signature(
         &self,
@@ -458,6 +595,42 @@ impl TokenFactory {
         } else {
             bail!("Minting not enabled for this token");
         }
+    }
+
+    /// Internal burn for trusted callers (e.g., NativeDex LP redemption)
+    /// SECURITY: Only call this from trusted system components
+    /// For user-initiated burns, use `burn_with_signature`
+    pub async fn burn_internal(
+        &self,
+        denom: &str,
+        from: &str,
+        amount: u128,
+    ) -> Result<()> {
+        // Validate amount
+        if amount == 0 {
+            bail!("Burn amount must be positive");
+        }
+        
+        let mut balances = self.balances.write().await;
+        
+        let key = (denom.to_string(), from.to_string());
+        let balance = balances.get_mut(&key)
+            .ok_or_else(|| anyhow::anyhow!("No balance to burn"))?;
+        
+        if *balance < amount {
+            bail!("Insufficient balance to burn: has {}, needs {}", balance, amount);
+        }
+        *balance -= amount;
+        drop(balances);
+        
+        // Update total supply in metadata (O(1))
+        let mut tokens = self.tokens.write().await;
+        if let Some(metadata) = tokens.get_mut(denom) {
+            metadata.total_supply = metadata.total_supply.saturating_sub(amount);
+        }
+        
+        info!("🔥 Burned {} {} from {} (internal)", amount, denom, from);
+        Ok(())
     }
 
     /// Burn with Ed25519 signature verification
