@@ -1358,6 +1358,25 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_get_block);
 
+        // GET /block/latest - Latest block for explorers
+        let block_latest_route = warp::path!("block" / "latest")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_latest_block);
+
+        // GET /blocks?limit=N&offset=M - List recent blocks (paginated)
+        let blocks_list_route = warp::path!("blocks")
+            .and(warp::get())
+            .and(warp::query::<BlocksListQuery>())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_blocks_list);
+
+        // GET /stats - Network statistics for dashboards
+        let stats_route = warp::path!("stats")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_stats);
+
         // GET /balance/:address
         let balance_route = warp::path!("balance" / String)
             .and(warp::get())
@@ -1654,7 +1673,10 @@ mod rpc {
         // Group routes to avoid type complexity limits
         let core_routes = status_route
             .or(tx_route)
+            .or(block_latest_route)
             .or(block_route)
+            .or(blocks_list_route)
+            .or(stats_route)
             .or(balance_route)
             .or(tx_history_route)
             .or(tx_by_hash_route)
@@ -1848,6 +1870,102 @@ mod rpc {
         }
     }
 
+    async fn handle_get_latest_block(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let blockchain = state.blockchain.read().await;
+        let height = blockchain.get_height().await;
+        
+        match blockchain.get_block(height).await {
+            Some(block) => Ok(warp::reply::json(&serde_json::json!({
+                "block": block,
+                "height": height
+            }))),
+            None => Ok(warp::reply::json(&serde_json::json!({
+                "height": height,
+                "message": "Genesis block"
+            }))),
+        }
+    }
+
+    async fn handle_get_blocks_list(
+        query: BlocksListQuery,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let blockchain = state.blockchain.read().await;
+        let current_height = blockchain.get_height().await;
+        
+        // Calculate range (most recent first)
+        let start = if query.offset >= current_height {
+            0
+        } else {
+            current_height - query.offset
+        };
+        let end = if start >= query.limit as u64 {
+            start - query.limit as u64 + 1
+        } else {
+            1
+        };
+        
+        let mut blocks = Vec::new();
+        for height in (end..=start).rev() {
+            if let Some(block) = blockchain.get_block(height).await {
+                blocks.push(serde_json::json!({
+                    "height": block.index,
+                    "hash": block.hash,
+                    "timestamp": block.timestamp,
+                    "tx_count": block.transactions.len(),
+                    "validator": block.validator
+                }));
+            }
+            if blocks.len() >= query.limit {
+                break;
+            }
+        }
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "blocks": blocks,
+            "total_height": current_height,
+            "count": blocks.len(),
+            "limit": query.limit,
+            "offset": query.offset
+        })))
+    }
+
+    async fn handle_get_stats(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let blockchain = state.blockchain.read().await;
+        let height = blockchain.get_height().await;
+        let stats = blockchain.get_stats().await;
+        
+        // Validator count
+        let validators = state.staking_manager.get_validators().await;
+        let validator_count = validators.len();
+        
+        // Get config for shard info
+        let config = state.config.read().await;
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "height": height,
+            "total_transactions": stats.total_transactions,
+            "total_processed": stats.total_processed,
+            "estimated_tps": stats.estimated_tps,
+            "current_load": format!("{:.1}%", stats.current_load * 100.0),
+            "validator_count": validator_count,
+            "shard_count": stats.shard_count,
+            "healthy_shards": stats.healthy_shards,
+            "max_shards": stats.max_shards,
+            "pending_cross_shard": stats.pending_cross_shard,
+            "total_accounts": stats.total_accounts,
+            "should_expand": stats.should_expand,
+            "sharding_enabled": config.features.sharding_enabled,
+            "block_time_seconds": 2,
+            "gas_fees": "zero",
+            "network": "Sultan L1 Mainnet"
+        })))
+    }
+
     async fn handle_get_balance(
         address: String,
         state: Arc<NodeState>,
@@ -1999,8 +2117,20 @@ mod rpc {
         limit: usize,
     }
 
+    #[derive(serde::Deserialize)]
+    struct BlocksListQuery {
+        #[serde(default = "default_blocks_limit")]
+        limit: usize,
+        #[serde(default)]
+        offset: u64,
+    }
+
     fn default_limit() -> usize {
         50
+    }
+
+    fn default_blocks_limit() -> usize {
+        20
     }
 
     async fn handle_get_bridge_fee(
