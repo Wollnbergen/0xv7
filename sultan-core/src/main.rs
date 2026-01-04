@@ -131,6 +131,18 @@ struct Args {
     #[clap(long, default_value = "sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g")]
     protocol_fee_address: String,
 
+    /// Token creation fee in SLTN (default: 3 SLTN = ~$0.90)
+    #[clap(long, default_value = "3")]
+    token_creation_fee: u64,
+
+    /// Enable faucet for Phase 1 (disable when DEX/CEX live)
+    #[clap(long, default_value = "true")]
+    faucet_enabled: bool,
+
+    /// Faucet amount in SLTN per claim (default: 10 SLTN)
+    #[clap(long, default_value = "10")]
+    faucet_amount: u64,
+
     /// Subcommand (e.g., keygen)
     #[clap(subcommand)]
     command: Option<Command>,
@@ -594,14 +606,25 @@ impl NodeState {
             cfg
         };
 
-        // Create shared TokenFactory for both direct access and DEX
+        // Create shared TokenFactory with configurable fee and faucet settings
         let data_path = std::path::PathBuf::from(&args.data_dir);
-        let token_factory = Arc::new(TokenFactory::with_storage(data_path.join("tokens")));
+        let token_factory = Arc::new(TokenFactory::with_config(
+            Some(data_path.join("tokens")),
+            args.token_creation_fee as u128 * 1_000_000, // Convert SLTN to usltn
+            args.faucet_enabled,
+            args.faucet_amount as u128 * 1_000_000,      // Convert SLTN to usltn
+        ));
         
         // Load persisted token state if exists
         if let Err(e) = token_factory.load_from_storage().await {
             warn!("⚠️ Failed to load token state: {}", e);
         }
+        
+        info!("💰 Token creation fee: {} SLTN", args.token_creation_fee);
+        info!("🚰 Faucet: {} (amount: {} SLTN per claim)", 
+            if args.faucet_enabled { "ENABLED (Phase 1)" } else { "DISABLED (Phase 2)" },
+            args.faucet_amount
+        );
         
         // Create BridgeManager with TokenFactory integration for wrapped token minting
         // When a bridge tx is verified, TokenFactory.mint_internal() mints sBTC/sETH/sSOL/sTON
@@ -1335,6 +1358,25 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_get_block);
 
+        // GET /block/latest - Latest block for explorers
+        let block_latest_route = warp::path!("block" / "latest")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_latest_block);
+
+        // GET /blocks?limit=N&offset=M - List recent blocks (paginated)
+        let blocks_list_route = warp::path!("blocks")
+            .and(warp::get())
+            .and(warp::query::<BlocksListQuery>())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_blocks_list);
+
+        // GET /stats - Network statistics for dashboards
+        let stats_route = warp::path!("stats")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_stats);
+
         // GET /balance/:address
         let balance_route = warp::path!("balance" / String)
             .and(warp::get())
@@ -1551,6 +1593,36 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_list_tokens);
 
+        // === Faucet Routes (Challenge-Response Anti-Sybil) ===
+        
+        // GET /faucet/challenge/:address - Get challenge nonce to sign (step 1)
+        let faucet_challenge_route = warp::path!("faucet" / "challenge" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_faucet_challenge);
+        
+        // POST /faucet/claim - Claim SLTN with signed challenge (step 2)
+        let faucet_claim_route = warp::path!("faucet" / "claim")
+            .and(warp::post())
+            .and(warp::body::json::<FaucetClaimRequest>())
+            .and(with_state(state.clone()))
+            .and_then(handle_faucet_claim);
+        
+        // GET /faucet/status - Get faucet status and stats
+        let faucet_status_route = warp::path!("faucet" / "status")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_faucet_status);
+        
+        // POST /faucet/toggle - Admin toggle faucet on/off (requires SULTAN_ADMIN_KEY)
+        let faucet_toggle_route = warp::path!("faucet" / "toggle")
+            .and(warp::post())
+            .and(warp::body::json::<FaucetToggleRequest>())
+            .and(with_state(state.clone()))
+            .and_then(|req: FaucetToggleRequest, state: Arc<NodeState>| async move {
+                handle_faucet_toggle(req.enabled, req.admin_key, state).await
+            });
+
         // DEX Routes
         // POST /dex/create_pair
         let create_pair_route = warp::path!("dex" / "create_pair")
@@ -1601,7 +1673,10 @@ mod rpc {
         // Group routes to avoid type complexity limits
         let core_routes = status_route
             .or(tx_route)
+            .or(block_latest_route)
             .or(block_route)
+            .or(blocks_list_route)
+            .or(stats_route)
             .or(balance_route)
             .or(tx_history_route)
             .or(tx_by_hash_route)
@@ -1645,6 +1720,12 @@ mod rpc {
             .or(list_tokens_route)
             .boxed();
         
+        let faucet_routes = faucet_challenge_route
+            .or(faucet_claim_route)
+            .or(faucet_status_route)
+            .or(faucet_toggle_route)
+            .boxed();
+        
         let dex_routes = create_pair_route
             .or(swap_route)
             .or(add_liquidity_route)
@@ -1662,6 +1743,7 @@ mod rpc {
         
         let api_routes_2 = gov_routes
             .or(token_routes)
+            .or(faucet_routes)
             .or(dex_routes)
             .boxed();
         
@@ -1786,6 +1868,102 @@ mod rpc {
             Some(block) => Ok(warp::reply::json(&block)),
             None => Err(warp::reject()),
         }
+    }
+
+    async fn handle_get_latest_block(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let blockchain = state.blockchain.read().await;
+        let height = blockchain.get_height().await;
+        
+        match blockchain.get_block(height).await {
+            Some(block) => Ok(warp::reply::json(&serde_json::json!({
+                "block": block,
+                "height": height
+            }))),
+            None => Ok(warp::reply::json(&serde_json::json!({
+                "height": height,
+                "message": "Genesis block"
+            }))),
+        }
+    }
+
+    async fn handle_get_blocks_list(
+        query: BlocksListQuery,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let blockchain = state.blockchain.read().await;
+        let current_height = blockchain.get_height().await;
+        
+        // Calculate range (most recent first)
+        let start = if query.offset >= current_height {
+            0
+        } else {
+            current_height - query.offset
+        };
+        let end = if start >= query.limit as u64 {
+            start - query.limit as u64 + 1
+        } else {
+            1
+        };
+        
+        let mut blocks = Vec::new();
+        for height in (end..=start).rev() {
+            if let Some(block) = blockchain.get_block(height).await {
+                blocks.push(serde_json::json!({
+                    "height": block.index,
+                    "hash": block.hash,
+                    "timestamp": block.timestamp,
+                    "tx_count": block.transactions.len(),
+                    "validator": block.validator
+                }));
+            }
+            if blocks.len() >= query.limit {
+                break;
+            }
+        }
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "blocks": blocks,
+            "total_height": current_height,
+            "count": blocks.len(),
+            "limit": query.limit,
+            "offset": query.offset
+        })))
+    }
+
+    async fn handle_get_stats(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let blockchain = state.blockchain.read().await;
+        let height = blockchain.get_height().await;
+        let stats = blockchain.get_stats().await;
+        
+        // Validator count
+        let validators = state.staking_manager.get_validators().await;
+        let validator_count = validators.len();
+        
+        // Get config for shard info
+        let config = state.config.read().await;
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "height": height,
+            "total_transactions": stats.total_transactions,
+            "total_processed": stats.total_processed,
+            "estimated_tps": stats.estimated_tps,
+            "current_load": format!("{:.1}%", stats.current_load * 100.0),
+            "validator_count": validator_count,
+            "shard_count": stats.shard_count,
+            "healthy_shards": stats.healthy_shards,
+            "max_shards": stats.max_shards,
+            "pending_cross_shard": stats.pending_cross_shard,
+            "total_accounts": stats.total_accounts,
+            "should_expand": stats.should_expand,
+            "sharding_enabled": config.features.sharding_enabled,
+            "block_time_seconds": 2,
+            "gas_fees": "zero",
+            "network": "Sultan L1 Mainnet"
+        })))
     }
 
     async fn handle_get_balance(
@@ -1939,8 +2117,20 @@ mod rpc {
         limit: usize,
     }
 
+    #[derive(serde::Deserialize)]
+    struct BlocksListQuery {
+        #[serde(default = "default_blocks_limit")]
+        limit: usize,
+        #[serde(default)]
+        offset: u64,
+    }
+
     fn default_limit() -> usize {
         50
+    }
+
+    fn default_blocks_limit() -> usize {
+        20
     }
 
     async fn handle_get_bridge_fee(
@@ -3208,6 +3398,20 @@ struct CreatePairRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct FaucetToggleRequest {
+    enabled: bool,
+    admin_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct FaucetClaimRequest {
+    address: String,
+    nonce: String,
+    signature: String,  // hex-encoded Ed25519 signature over the nonce
+    pubkey: String,     // hex-encoded 32-byte Ed25519 public key
+}
+
+#[derive(Debug, Deserialize)]
 struct SwapRequest {
     from_address: String,
     pair_id: String,
@@ -3475,6 +3679,122 @@ async fn handle_list_tokens(
     Ok(warp::reply::json(&serde_json::json!({
         "success": true,
         "tokens": []
+    })))
+}
+
+// Faucet challenge handler (Step 1: Get nonce to sign)
+async fn handle_faucet_challenge(
+    address: String,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match state.token_factory.generate_faucet_challenge(&address).await {
+        Ok(nonce) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "address": address,
+            "nonce": nonce,
+            "message": "Sign this nonce with your wallet and POST to /faucet/claim",
+            "expires_in_seconds": 300
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+// Faucet claim handler (Step 2: Submit signed challenge)
+async fn handle_faucet_claim(
+    request: FaucetClaimRequest,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // Parse signature
+    let signature = match hex::decode(&request.signature) {
+        Ok(s) => s,
+        Err(_) => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid signature hex encoding"
+        }))),
+    };
+    
+    // Parse pubkey
+    let pubkey_bytes = match hex::decode(&request.pubkey) {
+        Ok(p) if p.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&p);
+            arr
+        },
+        _ => return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Invalid pubkey: must be 32 bytes hex-encoded"
+        }))),
+    };
+    
+    match state.token_factory.claim_faucet_with_signature(
+        &request.address,
+        &request.nonce,
+        &signature,
+        &pubkey_bytes,
+    ).await {
+        Ok(amount) => Ok(warp::reply::json(&serde_json::json!({
+            "success": true,
+            "amount": amount.to_string(),
+            "amount_sltn": amount / 1_000_000,
+            "message": format!("Claimed {} SLTN to {}", amount / 1_000_000, request.address)
+        }))),
+        Err(e) => Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": e.to_string()
+        }))),
+    }
+}
+
+// Faucet status handler
+async fn handle_faucet_status(
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let stats = state.token_factory.get_faucet_stats().await;
+    Ok(warp::reply::json(&serde_json::json!({
+        "success": true,
+        "enabled": stats.enabled,
+        "amount_per_claim": stats.amount_per_claim.to_string(),
+        "amount_per_claim_sltn": stats.amount_per_claim / 1_000_000,
+        "max_cap": stats.max_cap.to_string(),
+        "max_cap_sltn": stats.max_cap / 1_000_000,
+        "total_claims": stats.total_claims,
+        "total_distributed": stats.total_distributed.to_string(),
+        "total_distributed_sltn": stats.total_distributed / 1_000_000,
+        "remaining": stats.remaining.to_string(),
+        "remaining_sltn": stats.remaining / 1_000_000
+    })))
+}
+
+// Admin: Toggle faucet (requires admin key from env)
+async fn handle_faucet_toggle(
+    enabled: bool,
+    admin_key: String,
+    state: Arc<NodeState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    use crate::token_factory::TokenFactory;
+    
+    // Check admin key from environment (constant-time comparison)
+    let expected_key = std::env::var("SULTAN_ADMIN_KEY").unwrap_or_default();
+    if expected_key.is_empty() || !TokenFactory::constant_time_compare(&admin_key, &expected_key) {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Unauthorized: Invalid admin key"
+        })));
+    }
+    
+    if enabled {
+        state.token_factory.enable_faucet();
+    } else {
+        state.token_factory.disable_faucet();
+    }
+    
+    Ok(warp::reply::json(&serde_json::json!({
+        "success": true,
+        "faucet_enabled": state.token_factory.is_faucet_enabled(),
+        "message": if enabled { "Faucet enabled (Phase 1)" } else { "Faucet disabled (Phase 2)" }
     })))
 }
 

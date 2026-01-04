@@ -1,6 +1,6 @@
 # Sultan Block Explorer API Reference
 
-**Last Updated:** December 27, 2025
+**Last Updated:** January 4, 2026
 
 ## RPC Endpoints
 
@@ -16,7 +16,37 @@
 
 ## Key Endpoints for Block Explorer
 
-### 1. Total Supply (for market cap display)
+### 1. Network Statistics (Dashboard)
+
+```http
+GET /stats
+```
+
+**Response:**
+```json
+{
+  "height": 45000,
+  "total_transactions": 125000,
+  "total_processed": 125000,
+  "estimated_tps": 8000,
+  "current_load": "12.5%",
+  "validator_count": 6,
+  "shard_count": 16,
+  "healthy_shards": 16,
+  "max_shards": 8000,
+  "pending_cross_shard": 0,
+  "total_accounts": 5420,
+  "should_expand": false,
+  "sharding_enabled": true,
+  "block_time_seconds": 2,
+  "gas_fees": "zero",
+  "network": "Sultan L1 Mainnet"
+}
+```
+
+---
+
+### 2. Total Supply (for market cap display)
 
 ```http
 GET /supply/total
@@ -90,7 +120,7 @@ GET /economics
 
 ---
 
-### 4. Block Information
+### 5. Block Information
 
 ```http
 GET /block/{height}
@@ -105,6 +135,62 @@ GET /block/{height}
   "timestamp": 1735300000,
   "transactions": [...],
   "validator": "sultanval6newyork"
+}
+```
+
+---
+
+### 5a. Latest Block
+
+```http
+GET /block/latest
+```
+
+**Response:**
+```json
+{
+  "block": {
+    "index": 31666,
+    "hash": "abc123...",
+    "timestamp": 1735300000,
+    "transactions": [...],
+    "validator": "sultanval6newyork"
+  },
+  "height": 31666
+}
+```
+
+---
+
+### 5b. List Recent Blocks (Paginated)
+
+```http
+GET /blocks?limit=20&offset=0
+```
+
+**Response:**
+```json
+{
+  "blocks": [
+    {
+      "height": 31666,
+      "hash": "abc123...",
+      "timestamp": 1735300000,
+      "tx_count": 15,
+      "validator": "sultanval6newyork"
+    },
+    {
+      "height": 31665,
+      "hash": "def456...",
+      "timestamp": 1735299998,
+      "tx_count": 23,
+      "validator": "sultanval5london"
+    }
+  ],
+  "total_height": 31666,
+  "count": 20,
+  "limit": 20,
+  "offset": 0
 }
 ```
 

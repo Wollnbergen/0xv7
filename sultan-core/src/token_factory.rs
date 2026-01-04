@@ -5,6 +5,7 @@
 // - Ed25519 signature verification on all state-changing operations
 // - Creator-only minting and burning controls
 // - Supply limits with max_supply enforcement
+// - Faucet with challenge-response anti-Sybil protection
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
@@ -39,7 +40,7 @@ pub struct TokenFactory {
     /// Token balances: (denom, address) -> balance
     pub balances: Arc<RwLock<HashMap<(String, String), u128>>>,
     
-    /// Creation fee in usltn
+    /// Creation fee in usltn (default: 3 SLTN = 3_000_000 usltn)
     pub creation_fee: u128,
     
     /// Minimum initial supply
@@ -47,16 +48,57 @@ pub struct TokenFactory {
     
     /// Path to persist token data
     pub storage_path: Option<PathBuf>,
+    
+    // === Phase 1 Faucet (disable when DEX/CEX live) ===
+    
+    /// Whether faucet is enabled (Phase 1 = true, Phase 2 = false)
+    /// Uses AtomicBool for runtime toggle without restart
+    pub faucet_enabled: Arc<std::sync::atomic::AtomicBool>,
+    
+    /// Amount given per faucet claim (default: 10 SLTN)
+    pub faucet_amount: u128,
+    
+    /// Maximum total SLTN that can be distributed via faucet
+    /// Default: 2,000,000 SLTN (1% of 200M ecosystem fund)
+    pub faucet_max_cap: u128,
+    
+    /// Total SLTN distributed via faucet so far
+    pub faucet_total_distributed: Arc<RwLock<u128>>,
+    
+    /// Addresses that have claimed from faucet (prevents abuse)
+    pub faucet_claims: Arc<RwLock<std::collections::HashSet<String>>>,
+    
+    // === Anti-Sybil & Rate Limiting ===
+    
+    /// Pending faucet challenges: address -> (nonce, expires_at)
+    pub faucet_challenges: Arc<RwLock<HashMap<String, (String, u64)>>>,
+    
+    /// Rate limiting: timestamp of last N claims (sliding window)
+    pub faucet_claim_timestamps: Arc<RwLock<std::collections::VecDeque<u64>>>,
+    
+    /// Max claims per minute (rate limit)
+    pub faucet_rate_limit: u32,
 }
 
 impl TokenFactory {
+    /// Native SLTN denom for fee payments
+    pub const SLTN_DENOM: &'static str = "usltn";
+    
     pub fn new() -> Self {
         Self {
             tokens: Arc::new(RwLock::new(HashMap::new())),
             balances: Arc::new(RwLock::new(HashMap::new())),
-            creation_fee: 1000 * 1_000_000, // 1000 SLTN
-            min_initial_supply: 1_000_000,   // 1 million minimum
+            creation_fee: 3 * 1_000_000, // 3 SLTN (~$0.90 at $0.30)
+            min_initial_supply: 1_000_000,
             storage_path: None,
+            faucet_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)), // Phase 1: ON
+            faucet_amount: 10 * 1_000_000, // 10 SLTN per claim
+            faucet_max_cap: 2_000_000 * 1_000_000, // 2M SLTN (1% of ecosystem fund)
+            faucet_total_distributed: Arc::new(RwLock::new(0)),
+            faucet_claims: Arc::new(RwLock::new(std::collections::HashSet::new())),
+            faucet_challenges: Arc::new(RwLock::new(HashMap::new())),
+            faucet_claim_timestamps: Arc::new(RwLock::new(std::collections::VecDeque::new())),
+            faucet_rate_limit: 30, // 30 claims per minute max
         }
     }
 
@@ -65,15 +107,315 @@ impl TokenFactory {
         Self {
             tokens: Arc::new(RwLock::new(HashMap::new())),
             balances: Arc::new(RwLock::new(HashMap::new())),
-            creation_fee: 1000 * 1_000_000,
+            creation_fee: 3 * 1_000_000, // 3 SLTN
             min_initial_supply: 1_000_000,
             storage_path: Some(storage_path),
+            faucet_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            faucet_amount: 10 * 1_000_000,
+            faucet_max_cap: 2_000_000 * 1_000_000,
+            faucet_total_distributed: Arc::new(RwLock::new(0)),
+            faucet_claims: Arc::new(RwLock::new(std::collections::HashSet::new())),
+            faucet_challenges: Arc::new(RwLock::new(HashMap::new())),
+            faucet_claim_timestamps: Arc::new(RwLock::new(std::collections::VecDeque::new())),
+            faucet_rate_limit: 30,
+        }
+    }
+    
+    /// Create with full configuration (for production deployments)
+    pub fn with_config(
+        storage_path: Option<PathBuf>,
+        creation_fee: u128,
+        faucet_enabled: bool,
+        faucet_amount: u128,
+    ) -> Self {
+        Self {
+            tokens: Arc::new(RwLock::new(HashMap::new())),
+            balances: Arc::new(RwLock::new(HashMap::new())),
+            creation_fee,
+            min_initial_supply: 1_000_000,
+            storage_path,
+            faucet_enabled: Arc::new(std::sync::atomic::AtomicBool::new(faucet_enabled)),
+            faucet_amount,
+            faucet_max_cap: 2_000_000 * 1_000_000, // 2M SLTN cap
+            faucet_total_distributed: Arc::new(RwLock::new(0)),
+            faucet_claims: Arc::new(RwLock::new(std::collections::HashSet::new())),
+            faucet_challenges: Arc::new(RwLock::new(HashMap::new())),
+            faucet_claim_timestamps: Arc::new(RwLock::new(std::collections::VecDeque::new())),
+            faucet_rate_limit: 30,
         }
     }
 
     /// Set storage path for persistence
     pub fn set_storage_path(&mut self, path: PathBuf) {
         self.storage_path = Some(path);
+    }
+    
+    // === Phase Control Methods ===
+    
+    /// Enable faucet (Phase 1 - pre-exchange)
+    pub fn enable_faucet(&self) {
+        use std::sync::atomic::Ordering;
+        self.faucet_enabled.store(true, Ordering::SeqCst);
+        info!("🚰 Faucet ENABLED (Phase 1 mode)");
+    }
+    
+    /// Disable faucet (Phase 2 - exchanges live)
+    /// Can be called at runtime without restart
+    pub fn disable_faucet(&self) {
+        use std::sync::atomic::Ordering;
+        self.faucet_enabled.store(false, Ordering::SeqCst);
+        info!("🔒 Faucet DISABLED (Phase 2 mode - buy SLTN on DEX/CEX)");
+    }
+    
+    /// Check if faucet is enabled
+    pub fn is_faucet_enabled(&self) -> bool {
+        use std::sync::atomic::Ordering;
+        self.faucet_enabled.load(Ordering::SeqCst)
+    }
+    
+    /// Update creation fee (in usltn)
+    pub fn set_creation_fee(&mut self, fee: u128) {
+        self.creation_fee = fee;
+        info!("💰 Creation fee updated to {} usltn ({} SLTN)", fee, fee / 1_000_000);
+    }
+    
+    // === Faucet Challenge-Response (Anti-Sybil) ===
+    
+    /// Generate a challenge for faucet claim (step 1 of 2)
+    /// Returns a nonce that must be signed by the wallet
+    pub async fn generate_faucet_challenge(&self, address: &str) -> Result<String> {
+        if !self.is_faucet_enabled() {
+            bail!("Faucet is disabled. Buy SLTN on DEX or CEX.");
+        }
+        
+        // Validate address format
+        if !Self::validate_sultan_address(address) {
+            bail!("Invalid Sultan address format");
+        }
+        
+        // Check if already claimed
+        let claims = self.faucet_claims.read().await;
+        if claims.contains(address) {
+            bail!("Address {} has already claimed from faucet", address);
+        }
+        drop(claims);
+        
+        // Generate random nonce
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let nonce = format!("sultan_faucet:{}:{}", address, timestamp);
+        
+        // Store challenge with 5-minute expiry
+        let expires_at = timestamp + 300;
+        let mut challenges = self.faucet_challenges.write().await;
+        challenges.insert(address.to_string(), (nonce.clone(), expires_at));
+        
+        // Cleanup expired challenges (housekeeping)
+        challenges.retain(|_, (_, exp)| *exp > timestamp);
+        
+        debug!("🎫 Faucet challenge generated for {}: {}", address, nonce);
+        Ok(nonce)
+    }
+    
+    /// Claim SLTN from faucet with signature verification (step 2 of 2)
+    /// Requires signing the challenge nonce with the wallet's private key
+    pub async fn claim_faucet_with_signature(
+        &self,
+        address: &str,
+        nonce: &str,
+        signature: &[u8],
+        pubkey: &[u8; 32],
+    ) -> Result<u128> {
+        if !self.is_faucet_enabled() {
+            bail!("Faucet is disabled. Buy SLTN on DEX or CEX.");
+        }
+        
+        // Rate limiting check
+        self.check_rate_limit().await?;
+        
+        // Validate address
+        if !Self::validate_sultan_address(address) {
+            bail!("Invalid Sultan address format");
+        }
+        
+        // Verify challenge exists and is not expired
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        
+        let mut challenges = self.faucet_challenges.write().await;
+        let (stored_nonce, expires_at) = challenges
+            .get(address)
+            .ok_or_else(|| anyhow::anyhow!("No challenge found. Call /faucet/challenge first"))?
+            .clone();
+        
+        if now > expires_at {
+            challenges.remove(address);
+            bail!("Challenge expired. Request a new one.");
+        }
+        
+        if nonce != stored_nonce {
+            bail!("Invalid nonce");
+        }
+        
+        // Verify signature over the nonce
+        if !Self::verify_ed25519_signature(pubkey, nonce.as_bytes(), signature) {
+            bail!("Invalid signature. Sign the challenge nonce with your wallet.");
+        }
+        
+        // Remove used challenge
+        challenges.remove(address);
+        drop(challenges);
+        
+        // Check global cap
+        let mut total_distributed = self.faucet_total_distributed.write().await;
+        let new_total = *total_distributed + self.faucet_amount;
+        if new_total > self.faucet_max_cap {
+            bail!("Faucet cap reached ({} SLTN distributed of {} max). Buy SLTN on DEX.", 
+                  *total_distributed / 1_000_000, self.faucet_max_cap / 1_000_000);
+        }
+        
+        // Check if already claimed
+        let mut claims = self.faucet_claims.write().await;
+        if claims.contains(address) {
+            bail!("Address {} has already claimed from faucet", address);
+        }
+        
+        // Mark as claimed and update total
+        claims.insert(address.to_string());
+        *total_distributed = new_total;
+        drop(claims);
+        drop(total_distributed);
+        
+        // Record timestamp for rate limiting
+        let mut timestamps = self.faucet_claim_timestamps.write().await;
+        timestamps.push_back(now);
+        // Keep only last 60 seconds of claims
+        while let Some(&oldest) = timestamps.front() {
+            if now - oldest > 60 {
+                timestamps.pop_front();
+            } else {
+                break;
+            }
+        }
+        drop(timestamps);
+        
+        // Credit SLTN to address
+        let mut balances = self.balances.write().await;
+        let key = (Self::SLTN_DENOM.to_string(), address.to_string());
+        let balance = balances.entry(key).or_insert(0);
+        *balance = balance.checked_add(self.faucet_amount)
+            .ok_or_else(|| anyhow::anyhow!("Balance overflow"))?;
+        
+        info!("🚰 Faucet: {} SLTN claimed by {} (verified signature, total: {}/{})", 
+              self.faucet_amount / 1_000_000, address,
+              new_total / 1_000_000, self.faucet_max_cap / 1_000_000);
+        Ok(self.faucet_amount)
+    }
+    
+    /// Rate limiting check - max N claims per minute
+    async fn check_rate_limit(&self) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        
+        let timestamps = self.faucet_claim_timestamps.read().await;
+        let recent_claims = timestamps.iter().filter(|&&t| now - t < 60).count();
+        
+        if recent_claims >= self.faucet_rate_limit as usize {
+            bail!("Rate limit exceeded. {} claims in the last minute (max {}). Try again shortly.", 
+                  recent_claims, self.faucet_rate_limit);
+        }
+        Ok(())
+    }
+    
+    /// Validate Sultan address format (bech32 with sultan1 prefix)
+    pub fn validate_sultan_address(address: &str) -> bool {
+        // Must start with sultan1 and be ~43-45 chars (bech32)
+        if !address.starts_with("sultan1") {
+            return false;
+        }
+        if address.len() < 40 || address.len() > 50 {
+            return false;
+        }
+        // Check for valid bech32 characters
+        address[7..].chars().all(|c| {
+            matches!(c, 'q'..='z' | 'a'..='p' | '0'..='9') && c != 'b' && c != 'i' && c != 'o'
+        })
+    }
+    
+    /// Constant-time string comparison (prevents timing attacks)
+    pub fn constant_time_compare(a: &str, b: &str) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut result = 0u8;
+        for (x, y) in a.bytes().zip(b.bytes()) {
+            result |= x ^ y;
+        }
+        result == 0
+    }
+    
+    /// Legacy claim (for testing only - use claim_faucet_with_signature in production)
+    #[cfg(test)]
+    pub async fn claim_faucet(&self, address: &str) -> Result<u128> {
+        if !self.is_faucet_enabled() {
+            bail!("Faucet is disabled. Buy SLTN on DEX or CEX.");
+        }
+        
+        // Check if cap would be exceeded
+        let mut total_distributed = self.faucet_total_distributed.write().await;
+        let new_total = *total_distributed + self.faucet_amount;
+        if new_total > self.faucet_max_cap {
+            bail!("Faucet cap reached ({} SLTN distributed of {} max). Buy SLTN on DEX.",  
+                  *total_distributed / 1_000_000, self.faucet_max_cap / 1_000_000);
+        }
+        
+        // Check if already claimed
+        let mut claims = self.faucet_claims.write().await;
+        if claims.contains(address) {
+            bail!("Address {} has already claimed from faucet", address);
+        }
+        
+        // Mark as claimed and update total
+        claims.insert(address.to_string());
+        *total_distributed = new_total;
+        drop(claims);
+        drop(total_distributed);
+        
+        // Credit SLTN to address
+        let mut balances = self.balances.write().await;
+        let key = (Self::SLTN_DENOM.to_string(), address.to_string());
+        let balance = balances.entry(key).or_insert(0);
+        *balance = balance.checked_add(self.faucet_amount)
+            .ok_or_else(|| anyhow::anyhow!("Balance overflow"))?;
+        
+        info!("🚰 Faucet: {} SLTN claimed by {} (total: {}/{})", 
+              self.faucet_amount / 1_000_000, address,
+              new_total / 1_000_000, self.faucet_max_cap / 1_000_000);
+        Ok(self.faucet_amount)
+    }
+    
+    /// Check if address has claimed from faucet
+    pub async fn has_claimed_faucet(&self, address: &str) -> bool {
+        let claims = self.faucet_claims.read().await;
+        claims.contains(address)
+    }
+    
+    /// Get faucet statistics
+    pub async fn get_faucet_stats(&self) -> FaucetStats {
+        let claims = self.faucet_claims.read().await;
+        let total_distributed = self.faucet_total_distributed.read().await;
+        FaucetStats {
+            enabled: self.is_faucet_enabled(),
+            amount_per_claim: self.faucet_amount,
+            max_cap: self.faucet_max_cap,
+            total_claims: claims.len(),
+            total_distributed: *total_distributed,
+            remaining: self.faucet_max_cap.saturating_sub(*total_distributed),
+        }
     }
 
     /// Load tokens and balances from persistent storage
@@ -705,6 +1047,17 @@ pub struct TokenFactoryStats {
     pub min_initial_supply: u128,
 }
 
+/// Faucet statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FaucetStats {
+    pub enabled: bool,
+    pub amount_per_claim: u128,
+    pub max_cap: u128,
+    pub total_claims: usize,
+    pub total_distributed: u128,
+    pub remaining: u128,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -924,7 +1277,7 @@ mod tests {
         
         let stats = factory.get_statistics().await;
         assert_eq!(stats.total_tokens, 1);
-        assert_eq!(stats.creation_fee, 1000 * 1_000_000);
+        assert_eq!(stats.creation_fee, 3 * 1_000_000); // 3 SLTN
     }
 
     #[test]
@@ -1099,5 +1452,204 @@ mod tests {
         
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid Ed25519 signature"));
+    }
+
+    // === Faucet Tests ===
+
+    #[tokio::test]
+    async fn test_faucet_claim() {
+        let factory = TokenFactory::new();
+        
+        // Claim from faucet
+        let amount = factory.claim_faucet("sultan1user").await.unwrap();
+        assert_eq!(amount, 10 * 1_000_000); // 10 SLTN
+        
+        // Check balance
+        let balance = factory.get_balance(TokenFactory::SLTN_DENOM, "sultan1user").await;
+        assert_eq!(balance, 10 * 1_000_000);
+    }
+
+    #[tokio::test]
+    async fn test_faucet_prevents_double_claim() {
+        let factory = TokenFactory::new();
+        
+        // First claim succeeds
+        factory.claim_faucet("sultan1user").await.unwrap();
+        
+        // Second claim fails
+        let result = factory.claim_faucet("sultan1user").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already claimed"));
+    }
+
+    #[tokio::test]
+    async fn test_faucet_disabled_rejects() {
+        let factory = TokenFactory::new();
+        factory.disable_faucet();
+        
+        let result = factory.claim_faucet("sultan1user").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("disabled"));
+    }
+
+    #[tokio::test]
+    async fn test_faucet_stats() {
+        let factory = TokenFactory::new();
+        
+        factory.claim_faucet("sultan1user1").await.unwrap();
+        factory.claim_faucet("sultan1user2").await.unwrap();
+        
+        let stats = factory.get_faucet_stats().await;
+        assert_eq!(stats.total_claims, 2);
+        assert_eq!(stats.total_distributed, 20 * 1_000_000); // 20 SLTN
+        assert!(stats.enabled);
+        assert_eq!(stats.max_cap, 2_000_000 * 1_000_000); // 2M SLTN
+        assert_eq!(stats.remaining, stats.max_cap - stats.total_distributed);
+    }
+
+    #[tokio::test]
+    async fn test_faucet_cap_enforcement() {
+        // Create factory with tiny cap for testing
+        let factory = TokenFactory::with_config(
+            None,
+            3 * 1_000_000,  // 3 SLTN fee
+            true,            // faucet enabled
+            10 * 1_000_000,  // 10 SLTN per claim
+        );
+        // Override cap to 25 SLTN for testing (2.5 claims worth)
+        *factory.faucet_total_distributed.write().await = factory.faucet_max_cap - 5 * 1_000_000; // Only 5 SLTN left
+        
+        // First claim should fail (10 > 5 remaining)
+        let result = factory.claim_faucet("sultan1user").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cap reached"));
+    }
+
+    #[tokio::test]
+    async fn test_creation_fee_is_3_sltn() {
+        let factory = TokenFactory::new();
+        assert_eq!(factory.creation_fee, 3 * 1_000_000); // 3 SLTN
+    }
+
+    #[tokio::test]
+    async fn test_with_config() {
+        let factory = TokenFactory::with_config(
+            None,
+            5 * 1_000_000, // 5 SLTN fee
+            false,          // faucet disabled
+            20 * 1_000_000, // 20 SLTN per claim
+        );
+        
+        assert_eq!(factory.creation_fee, 5 * 1_000_000);
+        assert!(!factory.is_faucet_enabled());
+        assert_eq!(factory.faucet_amount, 20 * 1_000_000);
+    }
+
+    #[tokio::test]
+    async fn test_challenge_response_flow() {
+        use ed25519_dalek::{SigningKey, Signer};
+        use rand::rngs::OsRng;
+        
+        let factory = TokenFactory::new();
+        let address = "sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g";
+        
+        // Step 1: Generate challenge
+        let nonce = factory.generate_faucet_challenge(address).await.unwrap();
+        assert!(nonce.starts_with("sultan_faucet:"));
+        assert!(nonce.contains(address));
+        
+        // Step 2: Sign the challenge with Ed25519
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let pubkey = signing_key.verifying_key().to_bytes();
+        let signature = signing_key.sign(nonce.as_bytes());
+        
+        // Step 3: Claim with signature
+        let amount = factory.claim_faucet_with_signature(
+            address,
+            &nonce,
+            signature.to_bytes().as_ref(),
+            &pubkey,
+        ).await.unwrap();
+        
+        assert_eq!(amount, 10 * 1_000_000); // 10 SLTN
+        
+        // Verify balance was credited
+        let balance = factory.get_balance(TokenFactory::SLTN_DENOM, address).await;
+        assert_eq!(balance, 10 * 1_000_000);
+    }
+
+    #[tokio::test]
+    async fn test_challenge_expires() {
+        let factory = TokenFactory::new();
+        // Use a valid-format sultan address (43 chars with sultan1 prefix)
+        let address = "sultan1expxr3t3st9999999999999999999deadend";
+        
+        // Manually insert an expired challenge
+        let expired_time = 100; // Way in the past
+        factory.faucet_challenges.write().await.insert(
+            address.to_string(),
+            ("old_nonce".to_string(), expired_time),
+        );
+        
+        // Try to claim with expired challenge
+        let result = factory.claim_faucet_with_signature(
+            address,
+            "old_nonce",
+            &[0u8; 64], // Dummy sig
+            &[0u8; 32], // Dummy pubkey
+        ).await;
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("expired"));
+    }
+
+    #[tokio::test]
+    async fn test_wrong_nonce_rejected() {
+        use ed25519_dalek::{SigningKey, Signer};
+        use rand::rngs::OsRng;
+        
+        let factory = TokenFactory::new();
+        // Use a valid-format sultan address
+        let address = "sultan1wr9ngn0nc3t3st99999999999999999deadend";
+        
+        // Generate challenge
+        let nonce = factory.generate_faucet_challenge(address).await.unwrap();
+        
+        // Sign wrong message
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let pubkey = signing_key.verifying_key().to_bytes();
+        let signature = signing_key.sign(b"wrong_nonce");
+        
+        // Try to claim with wrong nonce
+        let result = factory.claim_faucet_with_signature(
+            address,
+            "wrong_nonce", // Not the challenge nonce
+            signature.to_bytes().as_ref(),
+            &pubkey,
+        ).await;
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid nonce"));
+    }
+
+    #[test]
+    fn test_address_validation() {
+        // Valid addresses
+        assert!(TokenFactory::validate_sultan_address("sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g"));
+        assert!(TokenFactory::validate_sultan_address("sultan1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5nvd7d"));
+        
+        // Invalid addresses
+        assert!(!TokenFactory::validate_sultan_address("cosmos1abc")); // Wrong prefix
+        assert!(!TokenFactory::validate_sultan_address("sultan1")); // Too short
+        assert!(!TokenFactory::validate_sultan_address("eth1234567890123456789012345678901234567890")); // Wrong prefix
+    }
+
+    #[test]
+    fn test_constant_time_compare() {
+        assert!(TokenFactory::constant_time_compare("secret", "secret"));
+        assert!(!TokenFactory::constant_time_compare("secret", "SECRET"));
+        assert!(!TokenFactory::constant_time_compare("secret", "secre"));
+        assert!(!TokenFactory::constant_time_compare("", "x"));
+        assert!(TokenFactory::constant_time_compare("", ""));
     }
 }
