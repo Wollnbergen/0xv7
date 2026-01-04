@@ -20,7 +20,7 @@ import {
 
 export function ConnectedAppsScreen() {
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
+  useTheme(); // Keep hook for context
   const [apps, setApps] = useState<ConnectedApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
