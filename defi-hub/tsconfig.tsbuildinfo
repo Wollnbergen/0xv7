@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/api/defiApi.ts","./src/components/Modal.tsx","./src/components/Toast.tsx","./src/components/TokenIcon.tsx","./src/components/index.ts","./src/pages/LaunchpadPage.tsx","./src/pages/PoolsPage.tsx","./src/pages/SwapPage.tsx"],"version":"5.7.3"}

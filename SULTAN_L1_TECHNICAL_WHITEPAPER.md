@@ -30,7 +30,7 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Staking APY** | 13.33% |
 
 | **Binary** | 15MB (stripped, LTO-optimized) |
-| **DEX Swap Fee** | 0.3% (to Liquidity Providers) |
+| **DEX Swap Fee** | 0.3% total (0.2% to LP, 0.1% to protocol treasury) |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
 **Wallet PWA:** `https://wallet.sltn.io`  

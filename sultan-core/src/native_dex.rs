@@ -9,9 +9,10 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, debug};
+use tracing::{info, debug, warn};
 
 use crate::token_factory::TokenFactory;
 
@@ -24,27 +25,109 @@ pub struct LiquidityPool {
     pub reserve_a: u128,
     pub reserve_b: u128,
     pub total_lp_tokens: u128,
-    pub lp_token_holders: HashMap<String, u128>,
+    /// LP token denom for transferable LP positions
+    pub lp_denom: String,
     pub created_at: u64,
     pub total_volume_a: u128,
     pub total_volume_b: u128,
-    pub fee_rate: u32, // Basis points (30 = 0.3%)
+    /// Total fee in basis points (30 = 0.3%)
+    pub fee_rate: u32,
+    /// Fee to LP providers in basis points (20 = 0.2%)
+    pub lp_fee_rate: u32,
+    /// Fee to protocol wallet in basis points (10 = 0.1%)
+    pub protocol_fee_rate: u32,
+    /// Total protocol fees collected (token_a)
+    pub protocol_fees_a: u128,
+    /// Total protocol fees collected (token_b)
+    pub protocol_fees_b: u128,
 }
 
 /// Native DEX for token swapping
 pub struct NativeDex {
     pub pools: Arc<RwLock<HashMap<String, LiquidityPool>>>,
     pub token_factory: Arc<TokenFactory>,
-    pub default_fee_rate: u32, // 30 basis points = 0.3%
+    /// Total fee rate in basis points (30 = 0.3%)
+    pub default_fee_rate: u32,
+    /// Fee to LP providers (20 = 0.2%)
+    pub default_lp_fee_rate: u32,
+    /// Fee to protocol wallet (10 = 0.1%)
+    pub default_protocol_fee_rate: u32,
+    /// Protocol fee recipient wallet address
+    pub protocol_fee_address: String,
+    /// Path to persist pool data
+    pub storage_path: Option<PathBuf>,
 }
 
 impl NativeDex {
+    /// Create a new DEX with default fee configuration
+    /// Fee split: 0.2% to LP providers, 0.1% to protocol wallet
     pub fn new(token_factory: Arc<TokenFactory>) -> Self {
         Self {
             pools: Arc::new(RwLock::new(HashMap::new())),
             token_factory,
-            default_fee_rate: 30, // 0.3% fee
+            default_fee_rate: 30,         // 0.3% total fee
+            default_lp_fee_rate: 20,      // 0.2% to LPs (stays in reserves)
+            default_protocol_fee_rate: 10, // 0.1% to protocol wallet
+            protocol_fee_address: String::new(), // Must be set before use
+            storage_path: None,
         }
+    }
+
+    /// Create a new DEX with custom protocol fee address and optional persistence
+    pub fn with_config(
+        token_factory: Arc<TokenFactory>,
+        protocol_fee_address: String,
+        storage_path: Option<PathBuf>,
+    ) -> Self {
+        let mut dex = Self::new(token_factory);
+        dex.protocol_fee_address = protocol_fee_address;
+        dex.storage_path = storage_path;
+        dex
+    }
+
+    /// Set the protocol fee address
+    pub fn set_protocol_fee_address(&mut self, address: String) {
+        self.protocol_fee_address = address;
+    }
+
+    /// Load pools from persistent storage
+    pub async fn load_from_storage(&self) -> Result<()> {
+        let Some(path) = &self.storage_path else {
+            return Ok(());
+        };
+        
+        let pools_file = path.join("pools.json");
+        if !pools_file.exists() {
+            info!("No existing DEX state found at {:?}", pools_file);
+            return Ok(());
+        }
+        
+        let data = tokio::fs::read_to_string(&pools_file).await?;
+        let loaded_pools: HashMap<String, LiquidityPool> = serde_json::from_str(&data)?;
+        
+        let mut pools = self.pools.write().await;
+        *pools = loaded_pools;
+        
+        info!("📂 Loaded {} pools from {:?}", pools.len(), pools_file);
+        Ok(())
+    }
+
+    /// Save pools to persistent storage
+    pub async fn save_to_storage(&self) -> Result<()> {
+        let Some(path) = &self.storage_path else {
+            return Ok(());
+        };
+        
+        // Ensure directory exists
+        tokio::fs::create_dir_all(path).await?;
+        
+        let pools_file = path.join("pools.json");
+        let pools = self.pools.read().await;
+        let data = serde_json::to_string_pretty(&*pools)?;
+        
+        tokio::fs::write(&pools_file, data).await?;
+        debug!("💾 Saved {} pools to {:?}", pools.len(), pools_file);
+        Ok(())
     }
     
     /// Internal: Create a new liquidity pool
@@ -89,6 +172,19 @@ impl NativeDex {
             bail!("Initial liquidity too small");
         }
         
+        // Create LP token as a real denom (transferable)
+        let lp_denom = format!("lp/{}/{}", token_a, token_b);
+        self.token_factory.create_lp_token_internal(
+            &lp_denom,
+            &pair_id,
+            lp_supply,
+            &token_a,
+            &token_b,
+        ).await?;
+        
+        // Transfer LP tokens to the creator
+        self.token_factory.transfer_internal(&lp_denom, &pair_id, creator, lp_supply).await?;
+        
         // Create pool
         let pool = LiquidityPool {
             pair_id: pair_id.clone(),
@@ -97,7 +193,7 @@ impl NativeDex {
             reserve_a,
             reserve_b,
             total_lp_tokens: lp_supply,
-            lp_token_holders: HashMap::from([(creator.to_string(), lp_supply)]),
+            lp_denom: lp_denom.clone(),
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -105,21 +201,32 @@ impl NativeDex {
             total_volume_a: 0,
             total_volume_b: 0,
             fee_rate: self.default_fee_rate,
+            lp_fee_rate: self.default_lp_fee_rate,
+            protocol_fee_rate: self.default_protocol_fee_rate,
+            protocol_fees_a: 0,
+            protocol_fees_b: 0,
         };
         
         // Store pool
         let mut pools = self.pools.write().await;
         pools.insert(pair_id.clone(), pool);
+        drop(pools);
+        
+        // Persist to storage
+        if let Err(e) = self.save_to_storage().await {
+            warn!("Failed to persist pool state: {}", e);
+        }
         
         info!("✅ Liquidity pool created: {} ({} + {})", 
             pair_id, reserve_a, reserve_b);
-        info!("   LP tokens minted: {} to {}", lp_supply, creator);
+        info!("   LP tokens minted: {} {} to {}", lp_supply, lp_denom, creator);
         
         Ok(pair_id)
     }
     
     /// Internal: Swap tokens using constant product formula
     /// Private method - use `swap_with_signature` for public API
+    /// Fee split: 0.2% to LP providers (stays in reserves), 0.1% to protocol wallet
     async fn swap_internal(
         &self,
         pair_id: &str,
@@ -146,12 +253,14 @@ impl NativeDex {
                 bail!("Invalid token for this pair");
             };
         
-        // Calculate swap output using constant product formula
-        // (x + Δx * 0.997) * (y - Δy) = x * y
-        // Δy = (y * Δx * 0.997) / (x + Δx * 0.997)
+        // Calculate fees: 0.3% total = 0.2% to LP (stays in pool) + 0.1% to protocol
+        // LP fee stays in reserves, protocol fee is extracted
+        let total_fee = (amount_in * pool.fee_rate as u128) / 10000;
+        let protocol_fee = (amount_in * pool.protocol_fee_rate as u128) / 10000;
+        let lp_fee = total_fee - protocol_fee; // 0.2% stays in reserves
         
-        let fee = (amount_in * pool.fee_rate as u128) / 10000;
-        let amount_in_after_fee = amount_in - fee;
+        // Amount used for swap calculation (after total fee)
+        let amount_in_after_fee = amount_in - total_fee;
         
         // Use checked arithmetic to prevent overflow with large reserves
         let numerator = reserve_out.checked_mul(amount_in_after_fee)
@@ -170,30 +279,53 @@ impl NativeDex {
                 min_amount_out, amount_out);
         }
         
-        // Update reserves and volume with overflow protection
+        // Update reserves with LP fee included, track protocol fees separately
+        // LP providers earn via the lp_fee staying in reserves
         if is_a_to_b {
-            pool.reserve_a = pool.reserve_a.checked_add(amount_in)
+            pool.reserve_a = pool.reserve_a.checked_add(amount_in - protocol_fee)
                 .ok_or_else(|| anyhow::anyhow!("Reserve overflow"))?;
             pool.reserve_b = pool.reserve_b.checked_sub(amount_out)
                 .ok_or_else(|| anyhow::anyhow!("Reserve underflow"))?;
             pool.total_volume_a += amount_in;
+            pool.protocol_fees_a += protocol_fee;
         } else {
-            pool.reserve_b += amount_in;
-            pool.reserve_a -= amount_out;
+            pool.reserve_b = pool.reserve_b.checked_add(amount_in - protocol_fee)
+                .ok_or_else(|| anyhow::anyhow!("Reserve overflow"))?;
+            pool.reserve_a = pool.reserve_a.checked_sub(amount_out)
+                .ok_or_else(|| anyhow::anyhow!("Reserve underflow"))?;
             pool.total_volume_b += amount_in;
+            pool.protocol_fees_b += protocol_fee;
         }
         
         // Clone values before dropping pool lock
         let token_out_clone = token_out.clone();
         let pair_id_clone = pair_id.to_string();
+        let protocol_fee_addr = self.protocol_fee_address.clone();
         drop(pools);
         
         // Execute token transfers
-        self.token_factory.transfer_internal(token_in, user, &pair_id_clone, amount_in).await?;
+        // User sends full amount_in (includes fees)
+        self.token_factory.transfer_internal(token_in, user, &pair_id_clone, amount_in - protocol_fee).await?;
+        
+        // Protocol fee goes directly to protocol wallet (if configured)
+        if protocol_fee > 0 && !protocol_fee_addr.is_empty() {
+            self.token_factory.transfer_internal(token_in, user, &protocol_fee_addr, protocol_fee).await?;
+            debug!("💰 Protocol fee: {} {} to {}", protocol_fee, token_in, protocol_fee_addr);
+        } else if protocol_fee > 0 {
+            // If no protocol address configured, fee stays in pool as extra LP rewards
+            self.token_factory.transfer_internal(token_in, user, &pair_id_clone, protocol_fee).await?;
+        }
+        
+        // User receives output tokens
         self.token_factory.transfer_internal(&token_out_clone, &pair_id_clone, user, amount_out).await?;
         
-        info!("✅ Swap executed: {} {} → {} {}", 
-            amount_in, token_in, amount_out, token_out_clone);
+        // Persist state
+        if let Err(e) = self.save_to_storage().await {
+            warn!("Failed to persist pool state: {}", e);
+        }
+        
+        info!("✅ Swap executed: {} {} → {} {} (LP fee: {}, protocol fee: {})", 
+            amount_in, token_in, amount_out, token_out_clone, lp_fee, protocol_fee);
         
         Ok(amount_out)
     }
@@ -249,19 +381,24 @@ impl NativeDex {
         pool.total_lp_tokens = pool.total_lp_tokens.checked_add(lp_tokens)
             .ok_or_else(|| anyhow::anyhow!("LP token overflow"))?;
         
-        // Mint LP tokens to user
-        let user_lp = pool.lp_token_holders.entry(user.to_string()).or_insert(0);
-        *user_lp += lp_tokens;
-        
         // Clone values before dropping lock
         let token_a = pool.token_a.clone();
         let token_b = pool.token_b.clone();
+        let lp_denom = pool.lp_denom.clone();
         let pair_id_clone = pair_id.to_string();
         drop(pools);
         
         // Transfer tokens to pool
         self.token_factory.transfer_internal(&token_a, user, &pair_id_clone, amount_a).await?;
         self.token_factory.transfer_internal(&token_b, user, &pair_id_clone, amount_b).await?;
+        
+        // Mint LP tokens to user (as real tokens)
+        self.token_factory.mint_internal(&lp_denom, user, lp_tokens).await?;
+        
+        // Persist state
+        if let Err(e) = self.save_to_storage().await {
+            warn!("Failed to persist pool state: {}", e);
+        }
         
         info!("✅ Liquidity added: {} {} + {} {} → {} LP tokens", 
             amount_a, token_a, amount_b, token_b, lp_tokens);
@@ -287,12 +424,12 @@ impl NativeDex {
         let pool = pools.get_mut(pair_id)
             .ok_or_else(|| anyhow::anyhow!("Liquidity pool not found"))?;
         
-        // Verify user has sufficient LP tokens
-        let user_lp = pool.lp_token_holders.get(user)
-            .ok_or_else(|| anyhow::anyhow!("No LP tokens found"))?;
+        // Verify user has sufficient LP tokens (check actual token balance)
+        let lp_denom = pool.lp_denom.clone();
+        let user_lp_balance = self.token_factory.get_balance(&lp_denom, user).await;
         
-        if *user_lp < lp_tokens {
-            bail!("Insufficient LP tokens: has {}, needs {}", user_lp, lp_tokens);
+        if user_lp_balance < lp_tokens {
+            bail!("Insufficient LP tokens: has {}, needs {}", user_lp_balance, lp_tokens);
         }
         
         // Calculate amounts to return (proportional to LP tokens)
@@ -312,19 +449,23 @@ impl NativeDex {
         pool.reserve_b -= amount_b;
         pool.total_lp_tokens -= lp_tokens;
         
-        // Burn LP tokens from user
-        let user_lp_mut = pool.lp_token_holders.get_mut(user).unwrap();
-        *user_lp_mut -= lp_tokens;
-        
         // Clone values before dropping lock
         let token_a = pool.token_a.clone();
         let token_b = pool.token_b.clone();
         let pair_id_clone = pair_id.to_string();
         drop(pools);
         
+        // Burn LP tokens from user (using burn_internal)
+        self.token_factory.burn_internal(&lp_denom, user, lp_tokens).await?;
+        
         // Transfer tokens back to user
         self.token_factory.transfer_internal(&token_a, &pair_id_clone, user, amount_a).await?;
         self.token_factory.transfer_internal(&token_b, &pair_id_clone, user, amount_b).await?;
+        
+        // Persist state
+        if let Err(e) = self.save_to_storage().await {
+            warn!("Failed to persist pool state: {}", e);
+        }
         
         info!("✅ Liquidity removed: {} LP tokens → {} {} + {} {}", 
             lp_tokens, amount_a, token_a, amount_b, token_b);
@@ -348,14 +489,98 @@ impl NativeDex {
         Ok(price)
     }
     
-    /// Get user's LP token balance
+    /// Get user's LP token balance (now uses token_factory for real token balance)
     pub async fn get_lp_balance(&self, pair_id: &str, user: &str) -> u128 {
         let pools = self.pools.read().await;
         if let Some(pool) = pools.get(pair_id) {
-            *pool.lp_token_holders.get(user).unwrap_or(&0)
+            let lp_denom = pool.lp_denom.clone();
+            drop(pools);
+            self.token_factory.get_balance(&lp_denom, user).await
         } else {
             0
         }
+    }
+    
+    /// Get the LP token denom for a pool
+    pub async fn get_lp_denom(&self, pair_id: &str) -> Option<String> {
+        let pools = self.pools.read().await;
+        pools.get(pair_id).map(|p| p.lp_denom.clone())
+    }
+    
+    /// Collect accumulated protocol fees to the protocol wallet
+    /// SECURITY: Only callable by protocol fee address (treasury) with signature verification
+    pub async fn collect_protocol_fees_with_signature(
+        &self,
+        pair_id: &str,
+        caller: &str,
+        signature: &[u8],
+        pubkey: &[u8; 32],
+    ) -> Result<(u128, u128)> {
+        // Verify caller is the protocol fee address (treasury only)
+        if caller != self.protocol_fee_address {
+            bail!("Only protocol treasury can collect fees");
+        }
+        
+        // Verify signature
+        let sign_data = format!("collect_fees:{}:{}", pair_id, caller);
+        if !Self::verify_ed25519_signature(pubkey, sign_data.as_bytes(), signature) {
+            bail!("Invalid Ed25519 signature on collect_fees");
+        }
+        
+        self.collect_protocol_fees_internal(pair_id).await
+    }
+    
+    /// Internal: Collect protocol fees (trusted caller only)
+    async fn collect_protocol_fees_internal(&self, pair_id: &str) -> Result<(u128, u128)> {
+        if self.protocol_fee_address.is_empty() {
+            bail!("Protocol fee address not configured");
+        }
+        
+        let mut pools = self.pools.write().await;
+        let pool = pools.get_mut(pair_id)
+            .ok_or_else(|| anyhow::anyhow!("Pool not found"))?;
+        
+        let fees_a = pool.protocol_fees_a;
+        let fees_b = pool.protocol_fees_b;
+        
+        if fees_a == 0 && fees_b == 0 {
+            return Ok((0, 0));
+        }
+        
+        // Reset collected fees
+        pool.protocol_fees_a = 0;
+        pool.protocol_fees_b = 0;
+        
+        let token_a = pool.token_a.clone();
+        let token_b = pool.token_b.clone();
+        let protocol_addr = self.protocol_fee_address.clone();
+        drop(pools);
+        
+        // Transfer fees to protocol wallet
+        if fees_a > 0 {
+            self.token_factory.transfer_internal(&token_a, pair_id, &protocol_addr, fees_a).await?;
+        }
+        if fees_b > 0 {
+            self.token_factory.transfer_internal(&token_b, pair_id, &protocol_addr, fees_b).await?;
+        }
+        
+        // Persist state
+        if let Err(e) = self.save_to_storage().await {
+            warn!("Failed to persist pool state: {}", e);
+        }
+        
+        info!("💰 Protocol fees collected: {} {} + {} {} to {}", 
+            fees_a, token_a, fees_b, token_b, protocol_addr);
+        
+        Ok((fees_a, fees_b))
+    }
+    
+    /// Get accumulated protocol fees for a pool (read-only)
+    pub async fn get_protocol_fees(&self, pair_id: &str) -> Result<(u128, u128)> {
+        let pools = self.pools.read().await;
+        let pool = pools.get(pair_id)
+            .ok_or_else(|| anyhow::anyhow!("Pool not found"))?;
+        Ok((pool.protocol_fees_a, pool.protocol_fees_b))
     }
 
     /// Verify Ed25519 signature for DEX operations

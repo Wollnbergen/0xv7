@@ -13,7 +13,7 @@ fn test_blockchain_initialization() {
     
     assert_eq!(blockchain.height(), 0);
     assert_eq!(blockchain.chain.len(), 1);
-    assert_eq!(blockchain.get_latest_block().index, 0);
+    assert_eq!(blockchain.get_latest_block().unwrap().index, 0);
 }
 
 #[test]
@@ -313,7 +313,7 @@ fn test_state_root_changes() {
     let mut blockchain = Blockchain::new();
     blockchain.init_account("alice".to_string(), 1000);
     
-    let genesis = blockchain.get_latest_block();
+    let genesis = blockchain.get_latest_block().unwrap();
     let genesis_state_root = genesis.state_root.clone();
     
     // Add transaction and create block
