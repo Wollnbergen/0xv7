@@ -1,9 +1,10 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.5  
-**Date:** December 30, 2025  
-**Classification:** Public Technical Reference
+**Version:** 3.6  
+**Date:** January 3, 2026  
+**Classification:** Public Technical Reference  
+**Binary:** v0.1.0 (SHA256: `6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51`)
 
 ---
 
@@ -60,7 +61,7 @@ Rust is a systems programming language known for:
 
 ### 1.1 Core Stack
 
-Sultan is a **native Rust L1 blockchain** built from scratch. Every component is custom-built for Sultan's specific requirements.
+Sultan is a **native Rust L1 blockchain**. Every component is custom-built for Sultan's specific requirements.
 
 | Layer | Technology | What It Is | Why It Matters |
 |-------|------------|------------|----------------|
@@ -76,20 +77,20 @@ The production codebase (`sultan-core/src/`) contains 22 Rust modules:
 
 ```
 sultan-core/src/
-├── main.rs               (2,938 lines) - Node binary, RPC (30+ endpoints), keygen CLI
+├── main.rs               (3,395 lines) - Node binary, RPC (30+ endpoints), keygen CLI
 ├── blockchain.rs         (374 lines)  - Block/TX structures (with memo field)
 ├── consensus.rs          (1,078 lines) - Validator management (17 tests, Ed25519)
 ├── p2p.rs                (1,025 lines) - libp2p networking (16 tests, Ed25519 sig verify)
 ├── block_sync.rs         (1,174 lines) - Byzantine-tolerant sync (31 tests, voter verify)
-├── storage.rs            (~1,120 lines) - RocksDB + AES-256-GCM encryption (14 tests)
+├── storage.rs            (1,159 lines) - RocksDB + AES-256-GCM encryption (14 tests)
 ├── economics.rs          (100 lines)  - Inflation/APY model
-├── staking.rs            (~1,540 lines) - Validator staking, auto-persist (21 tests)
-├── governance.rs         (~1,900 lines) - Governance with slashing proposals (21 tests)
-├── token_factory.rs      (~880 lines) - Native token creation, Ed25519 signatures (14 tests)
-├── native_dex.rs         (~970 lines) - AMM with Ed25519 signatures (13 tests)
+├── staking.rs            (1,534 lines) - Validator staking, auto-persist (21 tests)
+├── governance.rs         (1,920 lines) - Governance with slashing proposals (21 tests)
+├── token_factory.rs      (921 lines) - Native token creation, Ed25519 signatures (14 tests)
+├── native_dex.rs         (976 lines) - AMM with Ed25519 signatures (13 tests)
 ├── transaction_validator.rs (782 lines) - TX validation (18 tests, typed errors)
-├── bridge_fees.rs        (~680 lines) - Zero-fee bridge, async oracle (23 tests)
-├── bridge_integration.rs (~1,600 lines) - Bridge coordination, real proof verification (32 tests)
+├── bridge_fees.rs        (1,009 lines) - Zero-fee bridge, rate limiting, treasury governance (30 tests)
+├── bridge_integration.rs (1,987 lines) - Bridge coordination, real proof verification, TokenFactory mint (39 tests)
 ├── sharding_production.rs(2,244 lines)- PRODUCTION sharding (Ed25519, 2PC, WAL)
 ├── sharded_blockchain_production.rs (1,342 lines) - Production shard coordinator
 ├── sharding.rs           (362 lines)  - LEGACY (deprecated)
@@ -97,7 +98,7 @@ sultan-core/src/
 └── [supporting modules]
 ```
 
-**Total: 18,000+ lines of production Rust code, 274 tests passing**
+**Total: 22,050 lines of production Rust code, 294+ tests passing**
 
 ### 1.3 Key Design Decisions
 
@@ -1656,9 +1657,38 @@ fee_configs.insert("bitcoin".to_string(), BridgeFeeConfig {
 | Mechanism | What It Does | Why It Matters |
 |-----------|--------------|----------------|
 | **HTLC** | Atomic swaps with cryptographic locks | Either swap completes or no one loses money |
-| **Multi-sig** | Distributed custody (3-of-5, etc.) | No single party can steal funds |
+| **Multi-sig** | Distributed custody (2-of-3 for large tx, 3-of-5 for treasury) | No single party can steal funds |
+| **Rate Limiting** | 50 req/min per pubkey | Prevents spam and DoS attacks |
+| **Treasury Governance** | Multi-sig approval for treasury updates | Prevents unauthorized treasury changes |
+| **ZK Validation** | Groth16 structure checks + zero-element rejection | Cryptographic proof integrity |
 | **Fraud proofs** | Prove invalid state claims | Anyone can challenge a bad bridge transaction |
 | **Time-locks** | Large withdrawals have delay | Time to respond if attack detected |
+
+**Large Transaction Protection:**
+
+Transactions exceeding 100,000 units automatically require multi-signature approval:
+
+```rust
+// From bridge_integration.rs
+pub const LARGE_TX_THRESHOLD: u128 = 100_000;
+
+// 2-of-3 multi-sig for large transactions
+pub struct MultiSigConfig {
+    pub required_signatures: usize,  // Default: 2
+    pub authorized_pubkeys: Vec<[u8; 32]>,  // Default: 3 signers
+}
+```
+
+**Rate Limiting Implementation:**
+
+```rust
+// From bridge_fees.rs
+pub struct RateLimiter {
+    pub max_requests: u32,     // Default: 50
+    pub window_secs: u64,      // Default: 60 seconds
+    windows: HashMap<String, (u64, u32)>,  // per-pubkey tracking
+}
+```
 
 ### 9.6 Proof Verification (Production Implementation)
 
@@ -1922,19 +1952,19 @@ N ≥ 3f + 1
 Solving for f: f ≤ (N - 1) / 3
 ```
 
-**For Sultan with 9 validators:**
+**For Sultan with 6 validators:**
 
 ```
-f ≤ (9 - 1) / 3 = 2.67 → f = 2
+f ≤ (6 - 1) / 3 = 1.67 → f = 1
 
-We can tolerate 2 faulty validators.
+We can tolerate 1 faulty validator.
 ```
 
 | Total Validators | Max Faulty | Fault Tolerance |
 |-----------------|------------|-----------------|
 | 4 | 1 | 25% |
+| 6 | 1 | 16% |
 | 7 | 2 | 28% |
-| 9 | 2 | 22% |
 | 10 | 3 | 30% |
 | 100 | 33 | 33% |
 
@@ -1944,7 +1974,7 @@ We can tolerate 2 faulty validators.
 - Actively malicious
 - Running buggy software
 
-*Why it matters:* Even if 2 of 9 validators try to attack, the network continues producing correct blocks.
+*Why it matters:* Even if 1 of 6 validators tries to attack, the network continues producing correct blocks. As more validators join, fault tolerance increases.
 
 ### 11.2 Slashing Economics
 
@@ -2089,24 +2119,24 @@ Professional code review by specialized security firms. They look for:
 **ALWAYS USE:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `main.rs` | 2,938 | Node entry point, RPC (30+ endpoints), keygen CLI |
+| `main.rs` | 3,395 | Node entry point, RPC (30+ endpoints), keygen CLI |
 | `consensus.rs` | 1,078 | Validator logic (17 tests, Ed25519) |
 | `transaction_validator.rs` | 782 | TX validation (18 tests, typed errors) |
 | `blockchain.rs` | 374 | Block/TX structures |
 | `sharding_production.rs` | 2,244 | **PRODUCTION sharding** (32 tests) |
 | `sharded_blockchain_production.rs` | 1,342 | **PRODUCTION shard coordinator** |
-| `staking.rs` | 1,198 | Validator staking (21 tests) |
-| `governance.rs` | 911 | On-chain governance (21 tests) |
-| `storage.rs` | 1,120 | RocksDB persistence + AES-256-GCM encryption (14 tests) |
+| `staking.rs` | 1,534 | Validator staking (21 tests) |
+| `governance.rs` | 1,920 | On-chain governance (21 tests) |
+| `storage.rs` | 1,159 | RocksDB persistence + AES-256-GCM encryption (14 tests) |
 | `economics.rs` | 100 | Inflation model |
-| `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
-| `native_dex.rs` | ~970 | Built-in AMM with Ed25519 signatures (13 tests) |
-| `bridge_integration.rs` | ~1,600 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification (32 tests) |
-| `bridge_fees.rs` | ~680 | Zero-fee bridge with async oracle support (23 tests) |
+| `token_factory.rs` | 921 | Native token creation with Ed25519 signatures (14 tests) |
+| `native_dex.rs` | 976 | Built-in AMM with Ed25519 signatures (13 tests) |
+| `bridge_integration.rs` | 1,987 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification, TokenFactory mint (39 tests) |
+| `bridge_fees.rs` | 1,009 | Zero-fee bridge with async oracle support (30 tests) |
 | `p2p.rs` | 1,025 | **P2P networking** (16 tests, GossipSub, Kademlia, DoS, Ed25519 sig verify) |
 | `block_sync.rs` | 1,174 | **Byzantine-tolerant sync** (31 tests, voter verify, sig validation) |
 
-**Total: 18,000+ lines, 274 tests passing**
+**Total: 22,050 lines, 294+ tests passing**
 
 **Code Review Status (Phase 5 Complete):**
 | Module | Rating | Key Features |
@@ -2129,6 +2159,17 @@ Professional code review by specialized security firms. They look for:
 
 ### 12.2 Build & Run
 
+**Quick Install (Recommended):**
+```bash
+# One-line validator install
+curl -L https://wallet.sltn.io/install.sh | bash
+```
+
+**Or download directly from GitHub:**
+- Release: https://github.com/SultanL1/sultan-node/releases
+- Binary: `sultan-node-linux-amd64` (16MB)
+
+**Build from source:**
 ```bash
 # Build the node
 cd sultan-core
@@ -2709,14 +2750,14 @@ npm run build        # Outputs to dist/
 │  Signatures:          Ed25519                                   │
 │  Storage:             RocksDB                                   │
 │  Networking:          libp2p (Gossipsub + Kademlia)             │
-│  Language:            Rust (100% native, not a fork)            │
+│  Language:            Rust (100% native)                       │
 │  Binary Size:         14MB (stripped, LTO-optimized)            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **The Elevator Pitch:**
 
-> "Sultan is a Layer 1 blockchain with zero transaction fees, built in Rust from scratch. We use validator inflation instead of gas fees, so users never pay. We launch with 16 shards at 64,000 TPS and can scale to 64 million TPS. The network is live with dynamic validators - anyone can join with 10,000 SLTN stake."
+> "Sultan is a Layer 1 blockchain with zero transaction fees, built in native Rust. We use validator inflation instead of gas fees, so users never pay. We launch with 16 shards at 64,000 TPS and can scale to 64 million TPS. The network is live with dynamic validators - anyone can join with 10,000 SLTN stake."
 
 **The 30-Second Technical:**
 

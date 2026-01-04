@@ -6,7 +6,7 @@ This is the core blockchain implementation for Sultan Chain, written in Rust. It
 
 - ✅ Block creation and validation
 - ✅ Transaction processing  
-- ✅ Quantum-resistant cryptography
+- ✅ Ed25519 cryptography
 - ✅ Consensus mechanism
 - ✅ P2P networking
 - ✅ Persistent storage

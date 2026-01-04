@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint, Substrate, or any external framework. Every component is custom-built for Sultan's specific requirements.
+Sultan is a **native Rust L1 blockchain** with every component custom-built for Sultan's specific requirements.
 
 ---
 
@@ -20,8 +20,8 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
 | `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
 | `native_dex.rs` | ~970 | Built-in AMM with Ed25519 signatures (13 tests) |
-| `bridge_integration.rs` | ~1,600 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification (32 tests) |
-| `bridge_fees.rs` | ~680 | Zero-fee bridge with async oracle support (23 tests) |
+| `bridge_integration.rs` | ~1,965 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification, rate limiting, multi-sig (39 tests) |
+| `bridge_fees.rs` | ~880 | Zero-fee bridge with rate limiting, treasury governance, async oracle (30 tests) |
 | `sharding_production.rs` | 2,244 | **PRODUCTION** shard routing with Ed25519, 2PC, WAL recovery |
 | `sharded_blockchain_production.rs` | 1,342 | **PRODUCTION** multi-shard coordinator |
 | `economics.rs` | 100 | Inflation (fixed 4%), rewards, APY calculations |
@@ -29,7 +29,6 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 | `blockchain.rs` | 374 | Block/Transaction structures (with memo) |
 | `p2p.rs` | 1,025 | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify, 16 tests) |
 | `block_sync.rs` | 1,174 | Byzantine-tolerant block sync (voter verification, signature validation, 31 tests) |
-| `quantum.rs` | ~200 | Post-quantum cryptography (Dilithium) |
 | `mev_protection.rs` | ~100 | MEV resistance |
 | `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
 | `sharded_blockchain.rs` | 179 | ⚠️ LEGACY (deprecated, tests only) |
@@ -49,7 +48,7 @@ Sultan is a **native Rust L1 blockchain** - NOT based on Cosmos SDK, Tendermint,
 
 ## Key Design Decisions
 
-### Why Native Rust (Not Cosmos SDK)?
+### Why Native Rust?
 
 | Challenge | Our Solution |
 |-----------|--------------|
@@ -110,6 +109,9 @@ pub async fn swap(
 | Mempool Ordering | Deterministic (timestamp/from/nonce) |
 | Signature Verification | Ed25519 STRICT mode |
 | Tests | 274 passing (lib tests) |
+| DEX Swap Fee | 0.3% (to Liquidity Providers) |
+| Binary Version | v0.1.0 |
+| Binary SHA256 | `6440e837...de51` |
 
 ---
 
@@ -126,8 +128,8 @@ Sultan uses **production-grade authenticated encryption** for sensitive data:
 | Authentication | Built-in integrity verification |
 | Multi-tenant | Custom salt support for isolation |
 
-### Wallet Security (PWA) - v1.1.0
-The Sultan Wallet PWA has undergone comprehensive security review (December 2025):
+### Wallet Security (PWA) - v1.0.0
+The Sultan Wallet PWA has undergone comprehensive security review (January 2026):
 
 | Feature | Implementation |
 |---------|---------------|
@@ -137,7 +139,8 @@ The Sultan Wallet PWA has undergone comprehensive security review (December 2025
 | API Security | 30s timeouts, Zod validation, retry with backoff |
 | BIP39 Passphrase | Optional 25th word for plausible deniability |
 | High-Value Protection | Confirmation for transactions >1000 SLTN |
-| Test Coverage | 219 tests passing (10/10 on all security priorities) |
+| TOTP 2FA | With 8 backup codes |
+| Test Coverage | 219 tests passing |
 
 ### Governance Security
 | Protection | Mechanism |
@@ -193,4 +196,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: December 31, 2025 - Code Review Phase 5 Complete (274 tests node, 219 tests wallet, 10/10 rating on all modules)*
+*Last updated: January 3, 2026 - Phase 6 security audit complete, v0.1.0 binary released, wallet v1.0.0 deployed*

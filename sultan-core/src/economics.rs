@@ -37,8 +37,11 @@ impl Economics {
     }
     
     pub fn apply_burn(&mut self, amount: u64) -> u64 {
-        let burn_amount = (amount as f64 * self.current_burn_rate) as u64;
-        self.total_burned += burn_amount;
+        // Use fixed-point math to avoid f64 precision loss across nodes
+        const PRECISION: u64 = 1_000_000;
+        let burn_rate_scaled = (self.current_burn_rate * PRECISION as f64) as u64;
+        let burn_amount = ((amount as u128) * (burn_rate_scaled as u128) / (PRECISION as u128)) as u64;
+        self.total_burned = self.total_burned.saturating_add(burn_amount);
         burn_amount
     }
     

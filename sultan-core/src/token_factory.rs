@@ -57,6 +57,8 @@ impl TokenFactory {
     
     /// Internal: Create a new token
     /// Private method - use `create_token_with_signature` for public API
+    /// Used by test suite to bypass signature requirements
+    #[allow(dead_code)]  // Used in #[cfg(test)] module
     pub(crate) async fn create_token_internal(
         &self,
         creator: &str,
@@ -172,10 +174,11 @@ impl TokenFactory {
         
         *from_balance -= amount;
         
-        // Add to recipient
+        // Add to recipient with overflow protection
         let to_key = (denom.to_string(), to.to_string());
         let to_balance = balances.entry(to_key).or_insert(0);
-        *to_balance += amount;
+        *to_balance = to_balance.checked_add(amount)
+            .ok_or_else(|| anyhow::anyhow!("Recipient balance overflow"))?;
         
         info!("✅ Transferred {} {} from {} to {}", amount, denom, from, to);
         Ok(())
@@ -359,12 +362,52 @@ impl TokenFactory {
         }
         *from_balance -= amount;
         
-        // Add to recipient
+        // Add to recipient with overflow protection
         let to_key = (denom.to_string(), to.to_string());
         let to_balance = balances.entry(to_key).or_insert(0);
-        *to_balance += amount;
+        *to_balance = to_balance.checked_add(amount)
+            .ok_or_else(|| anyhow::anyhow!("Recipient balance overflow"))?;
         
         info!("✅ Transferred {} {} from {} to {}", amount, denom, from, to);
+        Ok(())
+    }
+
+    /// Internal mint for trusted callers (e.g., BridgeManager)
+    /// SECURITY: Only call this from trusted system components
+    /// For user-initiated mints, use `mint_to_with_signature`
+    pub async fn mint_internal(
+        &self,
+        denom: &str,
+        recipient: &str,
+        amount: u128,
+    ) -> Result<()> {
+        // Get token metadata and check minting
+        let mut tokens = self.tokens.write().await;
+        let metadata = tokens.get_mut(denom)
+            .ok_or_else(|| anyhow::anyhow!("Token not found: {}", denom))?;
+        
+        // Check if minting is enabled and respects max supply (with overflow protection)
+        let new_supply = metadata.total_supply.checked_add(amount)
+            .ok_or_else(|| anyhow::anyhow!("Supply overflow"))?;
+        if let Some(max_supply) = metadata.max_supply {
+            if new_supply > max_supply {
+                bail!("Minting would exceed max supply of {}", max_supply);
+            }
+        }
+        
+        // Update total supply in metadata
+        metadata.total_supply = new_supply;
+        let symbol = metadata.symbol.clone();
+        drop(tokens);
+        
+        // Mint tokens to recipient balance with overflow protection
+        let mut balances = self.balances.write().await;
+        let key = (denom.to_string(), recipient.to_string());
+        let balance = balances.entry(key).or_insert(0);
+        *balance = balance.checked_add(amount)
+            .ok_or_else(|| anyhow::anyhow!("Recipient balance overflow"))?;
+        
+        info!("🪙 Minted {} {} to {} (internal)", amount, symbol, recipient);
         Ok(())
     }
 
@@ -391,20 +434,24 @@ impl TokenFactory {
         
         // Check if minting is enabled and respects max supply
         if let Some(max_supply) = metadata.max_supply {
-            if metadata.total_supply + amount > max_supply {
+            // Check supply overflow before adding
+            let new_supply = metadata.total_supply.checked_add(amount)
+                .ok_or_else(|| anyhow::anyhow!("Supply overflow"))?;
+            if new_supply > max_supply {
                 bail!("Minting would exceed max supply of {}", max_supply);
             }
             
             // Update total supply in metadata (O(1))
-            metadata.total_supply += amount;
+            metadata.total_supply = new_supply;
             let symbol = metadata.symbol.clone();
             drop(tokens);
             
-            // Mint tokens to recipient balance
+            // Mint tokens to recipient balance with overflow protection
             let mut balances = self.balances.write().await;
             let key = (denom.to_string(), recipient.to_string());
             let balance = balances.entry(key).or_insert(0);
-            *balance += amount;
+            *balance = balance.checked_add(amount)
+                .ok_or_else(|| anyhow::anyhow!("Recipient balance overflow"))?;
             
             info!("✅ Minted {} {} to {}", amount, symbol, recipient);
             Ok(())

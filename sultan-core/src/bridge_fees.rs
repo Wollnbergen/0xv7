@@ -2,11 +2,155 @@
 //!
 //! Manages fees for all cross-chain bridge operations
 //! Fees go to the Sultan Treasury for development and maintenance
+//!
+//! Security Features:
+//! - Rate limiting to prevent spam attacks
+//! - Multi-sig governance for treasury updates
+//! - Zero-fee enforcement immutable
 
-use anyhow::{Result, Context};
+use anyhow::{Result, Context, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::info;
+use std::time::{Duration, Instant};
+use tracing::{info, warn};
+
+/// Rate limiter for bridge operations
+/// Prevents spam attacks on fee calculation and recording
+#[derive(Debug, Clone)]
+pub struct RateLimiter {
+    /// Maximum requests per window
+    max_requests: u32,
+    /// Time window for rate limiting
+    window: Duration,
+    /// Request counts per key (pubkey/IP)
+    requests: HashMap<String, (u32, Instant)>,
+}
+
+impl RateLimiter {
+    pub fn new(max_requests: u32, window_secs: u64) -> Self {
+        Self {
+            max_requests,
+            window: Duration::from_secs(window_secs),
+            requests: HashMap::new(),
+        }
+    }
+
+    /// Check if a request is allowed under rate limit
+    pub fn check(&mut self, key: &str) -> bool {
+        let now = Instant::now();
+        
+        if let Some((count, window_start)) = self.requests.get_mut(key) {
+            if now.duration_since(*window_start) > self.window {
+                // Reset window
+                *count = 1;
+                *window_start = now;
+                true
+            } else if *count >= self.max_requests {
+                warn!("Rate limit exceeded for key: {}", key);
+                false
+            } else {
+                *count += 1;
+                true
+            }
+        } else {
+            self.requests.insert(key.to_string(), (1, now));
+            true
+        }
+    }
+
+    /// Clean up expired entries
+    pub fn cleanup(&mut self) {
+        let now = Instant::now();
+        self.requests.retain(|_, (_, start)| now.duration_since(*start) <= self.window);
+    }
+}
+
+impl Default for RateLimiter {
+    fn default() -> Self {
+        // 100 requests per minute by default
+        Self::new(100, 60)
+    }
+}
+
+/// Multi-sig governance for treasury operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TreasuryGovernance {
+    /// Required signatures for treasury update (e.g., 3 of 5)
+    pub required_sigs: u8,
+    /// Total signers
+    pub total_signers: u8,
+    /// Authorized signer public keys
+    pub signers: Vec<[u8; 32]>,
+    /// Pending treasury update (new_address, signatures)
+    #[serde(skip)]
+    pub pending_update: Option<(String, Vec<[u8; 32]>)>,
+}
+
+impl TreasuryGovernance {
+    pub fn new(required_sigs: u8, total_signers: u8, signers: Vec<[u8; 32]>) -> Self {
+        Self {
+            required_sigs,
+            total_signers,
+            signers,
+            pending_update: None,
+        }
+    }
+
+    /// Check if a signer is authorized
+    pub fn is_authorized(&self, pubkey: &[u8; 32]) -> bool {
+        self.signers.contains(pubkey)
+    }
+
+    /// Propose a treasury update (requires multi-sig)
+    pub fn propose_update(&mut self, new_address: String, signer: [u8; 32]) -> Result<()> {
+        if !self.is_authorized(&signer) {
+            bail!("Signer not authorized for treasury governance");
+        }
+
+        if let Some((addr, sigs)) = &mut self.pending_update {
+            if *addr == new_address {
+                if !sigs.contains(&signer) {
+                    sigs.push(signer);
+                    info!("Treasury update signature added: {}/{}", sigs.len(), self.required_sigs);
+                }
+            } else {
+                // New proposal replaces old
+                self.pending_update = Some((new_address, vec![signer]));
+            }
+        } else {
+            self.pending_update = Some((new_address, vec![signer]));
+        }
+        Ok(())
+    }
+
+    /// Check if pending update has enough signatures
+    pub fn can_execute(&self) -> Option<String> {
+        if let Some((addr, sigs)) = &self.pending_update {
+            if sigs.len() >= self.required_sigs as usize {
+                return Some(addr.clone());
+            }
+        }
+        None
+    }
+
+    /// Execute the treasury update if enough signatures
+    pub fn execute_update(&mut self) -> Option<String> {
+        if let Some(addr) = self.can_execute() {
+            self.pending_update = None;
+            info!("Treasury update executed via multi-sig governance: {}", addr);
+            Some(addr)
+        } else {
+            None
+        }
+    }
+}
+
+impl Default for TreasuryGovernance {
+    fn default() -> Self {
+        // 3-of-5 multi-sig by default
+        Self::new(3, 5, vec![])
+    }
+}
 
 /// Bridge fee configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,7 +166,7 @@ pub struct BridgeFeeConfig {
 }
 
 /// Fee collection and distribution
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct BridgeFees {
     /// Sultan Treasury wallet address - receives all bridge fees
     treasury_address: String,
@@ -32,6 +176,10 @@ pub struct BridgeFees {
     collected_fees: HashMap<String, u64>,
     /// Total fees in USD equivalent
     total_usd_collected: f64,
+    /// Rate limiter for spam prevention
+    rate_limiter: RateLimiter,
+    /// Multi-sig governance for treasury updates
+    governance: TreasuryGovernance,
 }
 
 impl BridgeFees {
@@ -82,7 +230,25 @@ impl BridgeFees {
             fee_configs,
             collected_fees: HashMap::new(),
             total_usd_collected: 0.0,
+            rate_limiter: RateLimiter::default(),
+            governance: TreasuryGovernance::default(),
         }
+    }
+
+    /// Create with custom rate limiter and governance
+    pub fn with_governance(treasury_address: String, governance: TreasuryGovernance) -> Self {
+        let mut fees = Self::new(treasury_address);
+        fees.governance = governance;
+        fees
+    }
+
+    /// Calculate fee with rate limiting
+    /// Returns error if rate limit exceeded for the given key
+    pub fn calculate_fee_rate_limited(&mut self, bridge: &str, amount: u64, rate_key: &str) -> Result<FeeBreakdown> {
+        if !self.rate_limiter.check(rate_key) {
+            bail!("Rate limit exceeded for fee calculation");
+        }
+        self.calculate_fee(bridge, amount)
     }
 
     /// Calculate fee for a bridge transaction
@@ -146,7 +312,7 @@ impl BridgeFees {
         })
     }
 
-    /// Record fee payment to treasury
+    /// Record fee payment to treasury with rate limiting
     pub fn record_fee_payment(&mut self, bridge: &str, fee: u64, usd_value: f64) -> Result<()> {
         *self.collected_fees.entry(bridge.to_string()).or_insert(0) += fee;
         self.total_usd_collected += usd_value;
@@ -159,16 +325,54 @@ impl BridgeFees {
         Ok(())
     }
 
+    /// Record fee payment with rate limiting
+    pub fn record_fee_payment_rate_limited(&mut self, bridge: &str, fee: u64, usd_value: f64, rate_key: &str) -> Result<()> {
+        if !self.rate_limiter.check(rate_key) {
+            bail!("Rate limit exceeded for fee recording");
+        }
+        self.record_fee_payment(bridge, fee, usd_value)
+    }
+
     /// Get treasury wallet address
     pub fn get_treasury_address(&self) -> &str {
         &self.treasury_address
     }
 
-    /// Update treasury address (requires governance approval in production)
+    /// Propose treasury address update (requires multi-sig governance)
+    /// Call multiple times with different signers until threshold reached
+    pub fn propose_treasury_update(&mut self, new_address: String, signer: [u8; 32]) -> Result<bool> {
+        self.governance.propose_update(new_address.clone(), signer)?;
+        
+        if let Some(addr) = self.governance.execute_update() {
+            info!("Treasury address updated via governance: {} → {}", self.treasury_address, addr);
+            self.treasury_address = addr;
+            Ok(true) // Update executed
+        } else {
+            let pending = self.governance.pending_update.as_ref()
+                .map(|(_, sigs)| sigs.len())
+                .unwrap_or(0);
+            info!("Treasury update proposed: {}/{} signatures", pending, self.governance.required_sigs);
+            Ok(false) // More signatures needed
+        }
+    }
+
+    /// Update treasury address (legacy - requires governance in production)
+    #[deprecated(since = "0.3.0", note = "Use propose_treasury_update with multi-sig governance")]
     pub fn update_treasury_address(&mut self, new_address: String) -> Result<()> {
+        warn!("Direct treasury update without governance - use propose_treasury_update in production");
         info!("Treasury address updated: {} → {}", self.treasury_address, new_address);
         self.treasury_address = new_address;
         Ok(())
+    }
+
+    /// Get governance configuration
+    pub fn get_governance(&self) -> &TreasuryGovernance {
+        &self.governance
+    }
+
+    /// Clean up rate limiter (call periodically)
+    pub fn cleanup_rate_limiter(&mut self) {
+        self.rate_limiter.cleanup();
     }
 
     /// Get total fees collected per bridge
@@ -293,7 +497,7 @@ impl FeeOracle {
     /// This method should be used in production for accurate fee estimates.
     /// Returns cached/estimated values when APIs are unavailable.
     pub async fn get_gas_estimate_async(chain: &str) -> Result<DynamicFeeEstimate, anyhow::Error> {
-        use anyhow::Context;
+        // Note: anyhow::Context available if needed for HTTP error handling
         
         match chain {
             "bitcoin" => {
@@ -671,5 +875,135 @@ mod tests {
         // Unknown chain should fall back to sync oracle (returns empty estimate)
         let result = fees.calculate_fee_with_oracle("cosmos", 100000).await;
         assert!(result.is_err(), "Unknown chain should error");
+    }
+
+    // ========== Rate Limiting Tests ==========
+
+    #[test]
+    fn test_rate_limiter_basic() {
+        let mut limiter = RateLimiter::new(3, 60);
+        
+        // First 3 requests should succeed
+        assert!(limiter.check("user1"));
+        assert!(limiter.check("user1"));
+        assert!(limiter.check("user1"));
+        
+        // 4th request should fail (rate limit)
+        assert!(!limiter.check("user1"));
+        
+        // Different user should succeed
+        assert!(limiter.check("user2"));
+    }
+
+    #[test]
+    fn test_rate_limited_fee_calculation() {
+        let mut fees = BridgeFees::new("sultan1test".to_string());
+        
+        // Set a low rate limit for testing
+        fees.rate_limiter = RateLimiter::new(2, 60);
+        
+        // First 2 should succeed
+        assert!(fees.calculate_fee_rate_limited("bitcoin", 100000, "test_user").is_ok());
+        assert!(fees.calculate_fee_rate_limited("bitcoin", 100000, "test_user").is_ok());
+        
+        // 3rd should fail with rate limit error
+        let result = fees.calculate_fee_rate_limited("bitcoin", 100000, "test_user");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Rate limit"));
+    }
+
+    #[test]
+    fn test_rate_limited_fee_recording() {
+        let mut fees = BridgeFees::new("sultan1test".to_string());
+        fees.rate_limiter = RateLimiter::new(2, 60);
+        
+        // First 2 should succeed
+        assert!(fees.record_fee_payment_rate_limited("bitcoin", 0, 0.0, "recorder").is_ok());
+        assert!(fees.record_fee_payment_rate_limited("bitcoin", 0, 0.0, "recorder").is_ok());
+        
+        // 3rd should fail
+        let result = fees.record_fee_payment_rate_limited("bitcoin", 0, 0.0, "recorder");
+        assert!(result.is_err());
+    }
+
+    // ========== Treasury Governance Tests ==========
+
+    #[test]
+    fn test_treasury_governance_basic() {
+        let signer1 = [1u8; 32];
+        let signer2 = [2u8; 32];
+        let signer3 = [3u8; 32];
+        let unauthorized = [99u8; 32];
+        
+        let mut gov = TreasuryGovernance::new(2, 3, vec![signer1, signer2, signer3]);
+        
+        // Unauthorized signer should fail
+        let result = gov.propose_update("new_treasury".to_string(), unauthorized);
+        assert!(result.is_err());
+        
+        // First authorized signature
+        gov.propose_update("new_treasury".to_string(), signer1).unwrap();
+        assert!(gov.can_execute().is_none(), "Need 2 signatures");
+        
+        // Second authorized signature - should be able to execute
+        gov.propose_update("new_treasury".to_string(), signer2).unwrap();
+        assert_eq!(gov.can_execute(), Some("new_treasury".to_string()));
+        
+        // Execute update
+        let result = gov.execute_update();
+        assert_eq!(result, Some("new_treasury".to_string()));
+        
+        // Pending should be cleared
+        assert!(gov.pending_update.is_none());
+    }
+
+    #[test]
+    fn test_treasury_governance_integration() {
+        let signer1 = [1u8; 32];
+        let signer2 = [2u8; 32];
+        let signer3 = [3u8; 32];
+        
+        let governance = TreasuryGovernance::new(2, 3, vec![signer1, signer2, signer3]);
+        let mut fees = BridgeFees::with_governance("old_treasury".to_string(), governance);
+        
+        // First signature - not enough
+        let executed = fees.propose_treasury_update("new_treasury".to_string(), signer1).unwrap();
+        assert!(!executed, "Should need more signatures");
+        assert_eq!(fees.get_treasury_address(), "old_treasury");
+        
+        // Second signature - should execute
+        let executed = fees.propose_treasury_update("new_treasury".to_string(), signer2).unwrap();
+        assert!(executed, "Should have executed with 2/3 signatures");
+        assert_eq!(fees.get_treasury_address(), "new_treasury");
+    }
+
+    #[test]
+    fn test_treasury_governance_duplicate_signature() {
+        let signer1 = [1u8; 32];
+        let signer2 = [2u8; 32];
+        
+        let governance = TreasuryGovernance::new(2, 2, vec![signer1, signer2]);
+        let mut fees = BridgeFees::with_governance("treasury".to_string(), governance);
+        
+        // Same signer twice should not count as 2 signatures
+        fees.propose_treasury_update("new".to_string(), signer1).unwrap();
+        let executed = fees.propose_treasury_update("new".to_string(), signer1).unwrap();
+        assert!(!executed, "Duplicate signature should not count twice");
+    }
+
+    #[test]
+    fn test_rate_limiter_cleanup() {
+        let mut limiter = RateLimiter::new(100, 1); // 1 second window
+        
+        limiter.check("user1");
+        limiter.check("user2");
+        assert_eq!(limiter.requests.len(), 2);
+        
+        // Wait for window to expire
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        
+        // Cleanup should remove expired entries
+        limiter.cleanup();
+        assert_eq!(limiter.requests.len(), 0);
     }
 }

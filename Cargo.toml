@@ -1,11 +1,11 @@
 [workspace]
 members = [
     "sultan-core",
-    "sultan-cosmos-bridge",
 ]
 exclude = [
     "contracts",
     "_archive",
+    "sultan-cosmos-bridge",  # Legacy Cosmos SDK experiment (abandoned)
 ]
 resolver = "2"
 
@@ -14,11 +14,21 @@ tokio = { version = "1.35", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 anyhow = "1.0"
 
-# Production release profile - fast builds for development
+# Production release profile - optimized for deployment
 [profile.release]
 opt-level = 3           # Maximum optimization
-lto = false             # Disabled for faster builds
-codegen-units = 16      # Parallel codegen for faster builds
+lto = true              # Link-time optimization for smaller/faster binary
+codegen-units = 1       # Single codegen unit for best optimization (slower build)
 panic = "abort"         # Abort on panic (smaller binary, no unwinding)
 strip = true            # Strip symbols for smaller binary
+debug = false           # No debug info in release
 overflow-checks = false # Disable overflow checks for performance
+
+# Development release - faster builds for testing
+[profile.release-dev]
+inherits = "release"
+lto = false             # Faster builds
+codegen-units = 16      # Parallel codegen
+
+# To remove build paths from binary, build with:
+# RUSTFLAGS="--remap-path-prefix=$HOME/.cargo=/cargo --remap-path-prefix=$(pwd)=/sultan" cargo build --release

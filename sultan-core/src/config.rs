@@ -30,13 +30,25 @@ pub struct FeatureFlags {
     /// Cross-chain bridges (currently active)
     pub bridges_enabled: bool,
     
-    /// CosmWasm smart contracts (to be activated via governance)
+    /// Token Factory - custom token creation (post-genesis)
+    /// Allows users to create their own tokens on Sultan L1
+    pub token_factory_enabled: bool,
+    
+    /// Native DEX - AMM swap functionality (post-genesis)
+    /// Requires token_factory_enabled to be true
+    pub native_dex_enabled: bool,
+    
+    /// Smart contracts - VM to be selected post-launch (future)
+    /// Options: wasmer/wasmtime, Move VM, or custom
     pub wasm_contracts_enabled: bool,
     
-    /// EVM smart contracts (future, to be activated via governance)
+    /// EVM compatibility layer (future)
     pub evm_contracts_enabled: bool,
     
-    /// IBC protocol (future, to be activated via governance)
+    /// Quantum-resistant signatures using Dilithium3 (future)
+    pub quantum_signatures_enabled: bool,
+    
+    /// Reserved for future cross-chain protocol (future)
     pub ibc_enabled: bool,
 }
 
@@ -62,9 +74,14 @@ impl Default for FeatureFlags {
             governance_enabled: true,
             bridges_enabled: true,
             
-            // Disabled at launch, activated later via governance
+            // Active at genesis - can be disabled via governance if issues found
+            token_factory_enabled: true,   // Custom token creation
+            native_dex_enabled: true,      // AMM DEX
+            
+            // Future features - activated via governance
             wasm_contracts_enabled: false,
             evm_contracts_enabled: false,
+            quantum_signatures_enabled: false,
             ibc_enabled: false,
         }
     }
@@ -88,12 +105,28 @@ impl Config {
     /// Update a feature flag (used by governance)
     pub fn update_feature(&mut self, feature: &str, enabled: bool) -> Result<()> {
         match feature {
-            "wasm_contracts_enabled" => {
+            "token_factory_enabled" => {
+                self.features.token_factory_enabled = enabled;
+                Ok(())
+            }
+            "native_dex_enabled" => {
+                // DEX requires token factory
+                if enabled && !self.features.token_factory_enabled {
+                    anyhow::bail!("native_dex requires token_factory to be enabled first");
+                }
+                self.features.native_dex_enabled = enabled;
+                Ok(())
+            }
+            "wasm_contracts_enabled" | "smart_contracts_enabled" => {
                 self.features.wasm_contracts_enabled = enabled;
                 Ok(())
             }
             "evm_contracts_enabled" => {
                 self.features.evm_contracts_enabled = enabled;
+                Ok(())
+            }
+            "quantum_signatures_enabled" => {
+                self.features.quantum_signatures_enabled = enabled;
                 Ok(())
             }
             "ibc_enabled" => {

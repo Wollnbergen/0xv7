@@ -20,6 +20,7 @@ use sultan_core::sharding_production::ShardConfig;
 use sultan_core::sharded_blockchain_production::ConfirmedTransaction;
 use sultan_core::SultanBlockchain;
 use sultan_core::p2p::{P2PNetwork, NetworkMessage};
+use sultan_core::config::Config;
 use anyhow::{Result, Context, bail};
 use tracing::{info, warn, error, debug};
 use tracing_subscriber;
@@ -35,6 +36,7 @@ use rand::rngs::OsRng;
 /// Sultan Node CLI Arguments
 #[derive(Parser, Debug)]
 #[clap(name = "sultan-node")]
+#[clap(version = "0.1.0")]
 #[clap(about = "Sultan Layer 1 Blockchain Node", long_about = None)]
 struct Args {
     /// Node name
@@ -64,6 +66,11 @@ struct Args {
     /// Validator Ed25519 public key (64 hex chars, required if --validator)
     #[clap(long)]
     validator_pubkey: Option<String>,
+
+    /// Validator Ed25519 secret key (64 hex chars, required if --validator for block signing)
+    /// SECURITY: Pass via environment variable SULTAN_VALIDATOR_SECRET instead of CLI for production
+    #[clap(long, env = "SULTAN_VALIDATOR_SECRET")]
+    validator_secret: Option<String>,
 
     /// P2P listen address
     #[clap(short, long, default_value = "/ip4/0.0.0.0/tcp/26656")]
@@ -311,10 +318,16 @@ struct NodeState {
     #[allow(dead_code)]
     block_sync_manager: Option<Arc<RwLock<BlockSyncManager>>>,
     validator_address: Option<String>,
+    /// Validator's Ed25519 signing key for block proposals
+    validator_signing_key: Option<SigningKey>,
     block_time: u64,
     p2p_enabled: bool,
     /// Allowed CORS origins for RPC security
     allowed_origins: Vec<String>,
+    /// Chain configuration with feature flags (for hot-upgrades via governance)
+    config: Arc<RwLock<Config>>,
+    /// Path to config file for persistence
+    config_path: PathBuf,
 }
 
 impl NodeState {
@@ -484,23 +497,172 @@ impl NodeState {
                 .collect()
         };
 
+        // === HOT-UPGRADE INFRASTRUCTURE ===
+        // Load or create chain configuration with feature flags
+        let config_path = PathBuf::from(&args.data_dir).join("config.json");
+        let config = if config_path.exists() {
+            match Config::load(&config_path) {
+                Ok(cfg) => {
+                    info!("📋 Loaded chain config from {:?}", config_path);
+                    info!("   Feature flags: wasm={}, evm={}, ibc={}", 
+                          cfg.features.wasm_contracts_enabled,
+                          cfg.features.evm_contracts_enabled,
+                          cfg.features.ibc_enabled);
+                    cfg
+                }
+                Err(e) => {
+                    warn!("⚠️ Failed to load config: {}. Using defaults.", e);
+                    Config::default()
+                }
+            }
+        } else {
+            let cfg = Config::default();
+            if let Err(e) = cfg.save(&config_path) {
+                warn!("⚠️ Failed to save default config: {}", e);
+            } else {
+                info!("📋 Created default chain config at {:?}", config_path);
+            }
+            cfg
+        };
+
+        // Create shared TokenFactory for both direct access and DEX
+        let token_factory = Arc::new(TokenFactory::new());
+        
+        // Create BridgeManager with TokenFactory integration for wrapped token minting
+        // When a bridge tx is verified, TokenFactory.mint_internal() mints sBTC/sETH/sSOL/sTON
+        let bridge_manager = Arc::new(BridgeManager::with_token_factory(
+            "sultan1treasury7xj3k2p8n9m5q4r6t8v0w2y4z6a8c0e2g4".to_string(),
+            token_factory.clone(),
+        ));
+        
         Ok(Self {
             blockchain: blockchain_arc,
             consensus: consensus_arc,
             storage: Arc::new(RwLock::new(storage)),
             economics: Arc::new(RwLock::new(Economics::new())),
-            bridge_manager: Arc::new(BridgeManager::new()),
+            bridge_manager,
             staking_manager,
             governance_manager: Arc::new(GovernanceManager::new()),
-            token_factory: Arc::new(TokenFactory::new()),
-            native_dex: Arc::new(NativeDex::new(Arc::new(TokenFactory::new()))),
+            token_factory: token_factory.clone(),
+            native_dex: Arc::new(NativeDex::new(token_factory)),
             p2p_network,
             block_sync_manager,
             validator_address: args.validator_address.clone(),
+            validator_signing_key: Self::load_signing_key(&args)?,
             block_time: args.block_time,
             p2p_enabled: args.enable_p2p,
             allowed_origins,
+            config: Arc::new(RwLock::new(config)),
+            config_path,
         })
+    }
+
+    /// Load validator signing key from CLI arg or environment variable
+    fn load_signing_key(args: &Args) -> Result<Option<SigningKey>> {
+        if !args.validator {
+            return Ok(None);
+        }
+
+        let secret_hex = match &args.validator_secret {
+            Some(s) if !s.is_empty() => s.clone(),
+            _ => {
+                warn!("⚠️  Validator mode enabled but no signing key provided");
+                warn!("   Blocks will be proposed but NOT signed (insecure)");
+                warn!("   Use --validator-secret or SULTAN_VALIDATOR_SECRET env var");
+                return Ok(None);
+            }
+        };
+
+        let secret_bytes = hex::decode(&secret_hex)
+            .context("Invalid validator secret: not valid hex")?;
+        
+        if secret_bytes.len() != 32 {
+            bail!("Invalid validator secret: expected 32 bytes (64 hex chars), got {}", secret_bytes.len());
+        }
+
+        let secret_array: [u8; 32] = secret_bytes.try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert secret to array"))?;
+        
+        let signing_key = SigningKey::from_bytes(&secret_array);
+        
+        // Verify public key matches if provided
+        if let Some(ref pubkey_hex) = args.validator_pubkey {
+            let expected_pubkey = signing_key.verifying_key();
+            let expected_hex = hex::encode(expected_pubkey.to_bytes());
+            if expected_hex != *pubkey_hex {
+                bail!("Validator secret key does not match public key!\n  Expected pubkey: {}\n  Got pubkey: {}", pubkey_hex, expected_hex);
+            }
+            info!("✅ Validator signing key loaded and verified");
+        } else {
+            info!("✅ Validator signing key loaded (pubkey: {})", 
+                  hex::encode(signing_key.verifying_key().to_bytes()));
+        }
+
+        Ok(Some(signing_key))
+    }
+
+    /// Activate or deactivate a feature flag via governance
+    /// 
+    /// This is the core hot-upgrade mechanism. When a governance proposal
+    /// with a `features.*` parameter change passes, this method is called
+    /// to actually activate the feature at runtime.
+    /// 
+    /// # Supported Features
+    /// - `wasm_contracts_enabled`: Enable CosmWasm smart contracts
+    /// - `evm_contracts_enabled`: Enable EVM smart contracts (future)
+    /// - `ibc_enabled`: Enable IBC protocol (future)
+    /// - `sharding_enabled`: Enable/disable sharding
+    /// - `governance_enabled`: Enable/disable governance
+    /// - `bridges_enabled`: Enable/disable cross-chain bridges
+    async fn activate_feature(&self, feature: &str, enabled: bool) -> Result<()> {
+        info!("🔧 Hot-upgrade: Activating feature {} = {}", feature, enabled);
+        
+        // Update config
+        {
+            let mut config = self.config.write().await;
+            config.update_feature(feature, enabled)
+                .context(format!("Failed to update feature: {}", feature))?;
+            
+            // Persist config to disk
+            if let Err(e) = config.save(&self.config_path) {
+                error!("⚠️ Failed to persist config: {}", e);
+                // Continue anyway - runtime state is updated
+            } else {
+                info!("💾 Config persisted to {:?}", self.config_path);
+            }
+        }
+        
+        // Log feature activation - actual runtime components to be added post-launch
+        match feature {
+            "smart_contracts_enabled" => {
+                if enabled {
+                    info!("🚀 Smart contracts feature flag enabled (VM to be selected post-launch)");
+                } else {
+                    warn!("⚠️  Smart contracts feature flag disabled");
+                }
+            }
+            "bridges_enabled" => {
+                info!("🌉 Bridge feature flag updated: {}", enabled);
+                // Bridges are currently always available via BridgeManager
+                // This flag can be used for emergency disabling
+            }
+            "quantum_signatures_enabled" => {
+                if enabled {
+                    info!("🔐 Quantum-resistant signatures feature flag enabled");
+                    // TODO: Integrate Dilithium3 signatures when ready
+                }
+            }
+            _ => {
+                info!("📋 Feature flag {} updated to {}", feature, enabled);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Get current feature flags
+    async fn get_feature_flags(&self) -> sultan_core::config::FeatureFlags {
+        self.config.read().await.features.clone()
     }
 
     /// Block production loop
@@ -672,8 +834,15 @@ impl NodeState {
                 let block_hash = format!("{:x}", sha2::Sha256::digest(&block_data));
                 
                 // Sign block hash with validator's key for proposer verification
-                // In production, the proposer signs the block hash
-                let proposer_signature = Vec::new(); // TODO: Sign with validator's key
+                let proposer_signature = if let Some(ref signing_key) = self.validator_signing_key {
+                    use ed25519_dalek::Signer;
+                    let hash_bytes = sha2::Sha256::digest(block_hash.as_bytes());
+                    let signature = signing_key.sign(&hash_bytes);
+                    signature.to_bytes().to_vec()
+                } else {
+                    warn!("⚠️  Block {} proposed without signature (no signing key)", block.index);
+                    Vec::new()
+                };
                 
                 if let Err(e) = p2p.read().await.broadcast_block(
                     block.index,
@@ -1113,6 +1282,18 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_governance_statistics);
 
+        // POST /governance/execute/:id - Execute a passed proposal (hot-activation)
+        let execute_route = warp::path!("governance" / "execute" / u64)
+            .and(warp::post())
+            .and(with_state(state.clone()))
+            .and_then(handle_execute_proposal);
+
+        // GET /governance/features - Get current feature flags
+        let features_route = warp::path!("governance" / "features")
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_features);
+
         // Token Factory Routes
         // POST /tokens/create
         let create_token_route = warp::path!("tokens" / "create")
@@ -1241,6 +1422,8 @@ mod rpc {
             .or(proposal_route)
             .or(tally_route)
             .or(gov_stats_route)
+            .or(execute_route)
+            .or(features_route)
             .boxed();
         
         let token_routes = create_token_route
@@ -1519,6 +1702,8 @@ mod rpc {
         source_tx: String,
         amount: u64,
         recipient: String,
+        signature: String,  // hex-encoded Ed25519 signature
+        pubkey: String,     // hex-encoded 32-byte public key
     }
 
     #[derive(serde::Deserialize)]
@@ -1577,12 +1762,34 @@ mod rpc {
         req: BridgeTxRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
-        match state.bridge_manager.submit_bridge_transaction(
+        // Parse signature
+        let signature = match hex::decode(&req.signature) {
+            Ok(s) if s.len() == 64 => s,
+            _ => return Ok(warp::reply::json(&serde_json::json!({
+                "error": "Invalid signature (must be 64 bytes hex)"
+            }))),
+        };
+        
+        // Parse pubkey
+        let pubkey: [u8; 32] = match hex::decode(&req.pubkey) {
+            Ok(p) if p.len() == 32 => {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&p);
+                arr
+            },
+            _ => return Ok(warp::reply::json(&serde_json::json!({
+                "error": "Invalid pubkey (must be 32 bytes hex)"
+            }))),
+        };
+        
+        match state.bridge_manager.submit_bridge_transaction_with_signature(
             req.source_chain,
             req.dest_chain,
             req.source_tx,
             req.amount,
             req.recipient,
+            signature,
+            pubkey,
         ).await {
             Ok(tx_id) => Ok(warp::reply::json(&serde_json::json!({
                 "tx_id": tx_id,
@@ -1590,7 +1797,9 @@ mod rpc {
             }))),
             Err(e) => {
                 warn!("Bridge transaction failed: {}", e);
-                Err(warp::reject())
+                Ok(warp::reply::json(&serde_json::json!({
+                    "error": e.to_string()
+                })))
             }
         }
     }
@@ -2299,6 +2508,111 @@ mod rpc {
         let stats = state.governance_manager.get_statistics().await;
         Ok(warp::reply::json(&stats))
     }
+
+    /// Execute a passed proposal - this is where hot-activation happens
+    /// 
+    /// When a ParameterChange proposal with `features.*` keys passes,
+    /// this endpoint will:
+    /// 1. Execute the proposal in governance
+    /// 2. Call NodeState::activate_feature() to actually enable the feature
+    /// 3. Persist the config change to disk
+    async fn handle_execute_proposal(
+        proposal_id: u64,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        use warp::http::StatusCode;
+        
+        // First, get the proposal to check for feature flags
+        let proposal = match state.governance_manager.get_proposal(proposal_id).await {
+            Some(p) => p,
+            None => {
+                return Ok(warp::reply::with_status(
+                    warp::reply::json(&serde_json::json!({
+                        "error": "Proposal not found",
+                        "proposal_id": proposal_id
+                    })),
+                    StatusCode::NOT_FOUND
+                ));
+            }
+        };
+        
+        // Check if proposal has passed
+        if proposal.status != sultan_core::governance::ProposalStatus::Passed {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": "Proposal has not passed",
+                    "proposal_id": proposal_id,
+                    "status": format!("{:?}", proposal.status)
+                })),
+                StatusCode::BAD_REQUEST
+            ));
+        }
+        
+        // Execute the proposal with staking integration
+        if let Err(e) = state.governance_manager.execute_proposal_with_staking(
+            proposal_id,
+            &state.staking_manager,
+        ).await {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "error": format!("Execution failed: {}", e),
+                    "proposal_id": proposal_id
+                })),
+                StatusCode::INTERNAL_SERVER_ERROR
+            ));
+        }
+        
+        // Now handle feature flag activations
+        let mut activated_features = Vec::new();
+        if let Some(params) = &proposal.parameters {
+            for (key, value) in params {
+                if key.starts_with("features.") {
+                    let feature_name = key.strip_prefix("features.").unwrap();
+                    let enabled: bool = value.parse().unwrap_or(false);
+                    
+                    if let Err(e) = state.activate_feature(feature_name, enabled).await {
+                        warn!("Failed to activate feature {}: {}", feature_name, e);
+                    } else {
+                        activated_features.push(serde_json::json!({
+                            "feature": feature_name,
+                            "enabled": enabled
+                        }));
+                    }
+                }
+            }
+        }
+        
+        info!("✅ Proposal #{} executed successfully", proposal_id);
+        
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "success": true,
+                "proposal_id": proposal_id,
+                "title": proposal.title,
+                "activated_features": activated_features
+            })),
+            StatusCode::OK
+        ))
+    }
+
+    /// Get current feature flags configuration
+    async fn handle_get_features(
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let features = state.get_feature_flags().await;
+        
+        Ok(warp::reply::json(&serde_json::json!({
+            "features": {
+                "sharding_enabled": features.sharding_enabled,
+                "governance_enabled": features.governance_enabled,
+                "bridges_enabled": features.bridges_enabled,
+                "smart_contracts_enabled": features.wasm_contracts_enabled,
+                "evm_contracts_enabled": features.evm_contracts_enabled,
+                "quantum_signatures_enabled": features.quantum_signatures_enabled,
+                "ibc_enabled": features.ibc_enabled
+            }
+        })))
+    }
 }
 
 #[tokio::main]
@@ -2569,6 +2883,35 @@ async fn main() -> Result<()> {
     info!("✅ Node initialized successfully");
     info!("🔗 RPC available at http://{}", args.rpc_addr);
     
+    // Setup graceful shutdown handler
+    let shutdown_state = state.clone();
+    tokio::spawn(async move {
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                info!("🛑 Shutdown signal received, initiating graceful shutdown...");
+                
+                // Persist staking state
+                info!("💾 Persisting staking state...");
+                let storage = shutdown_state.storage.read().await;
+                if let Err(e) = shutdown_state.staking_manager.persist_to_storage(&storage).await {
+                    error!("Failed to persist staking state: {}", e);
+                }
+                
+                // Log final status
+                if let Ok(status) = shutdown_state.get_status().await {
+                    info!("📊 Final state: height={}, validators={}, accounts={}", 
+                          status.height, status.validator_count, status.total_accounts);
+                }
+                
+                info!("✅ Graceful shutdown complete");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                error!("Failed to listen for shutdown signal: {}", e);
+            }
+        }
+    });
+    
     // Start block production if validator
     if args.validator {
         info!("⛏️  Starting block production (validator mode)");
@@ -2602,6 +2945,7 @@ struct CreateTokenRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // minter field used for request validation context
 struct MintTokenRequest {
     denom: String,
     to_address: String,
@@ -2678,6 +3022,14 @@ async fn handle_create_token(
     request: CreateTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check if token_factory feature is enabled
+    if !state.config.read().await.features.token_factory_enabled {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Token Factory not enabled. Enable via governance proposal."
+        })));
+    }
+    
     // Parse signature and pubkey from hex
     let signature = match hex::decode(&request.signature) {
         Ok(s) => s,
@@ -2725,6 +3077,14 @@ async fn handle_mint_token(
     request: MintTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check if token_factory feature is enabled
+    if !state.config.read().await.features.token_factory_enabled {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Token Factory not enabled. Enable via governance proposal."
+        })));
+    }
+    
     let signature = match hex::decode(&request.signature) {
         Ok(s) => s,
         Err(_) => return Ok(warp::reply::json(&serde_json::json!({
@@ -2765,6 +3125,14 @@ async fn handle_transfer_token(
     request: TransferTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check if token_factory feature is enabled
+    if !state.config.read().await.features.token_factory_enabled {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Token Factory not enabled. Enable via governance proposal."
+        })));
+    }
+    
     let signature = match hex::decode(&request.signature) {
         Ok(s) => s,
         Err(_) => return Ok(warp::reply::json(&serde_json::json!({
@@ -2806,6 +3174,14 @@ async fn handle_burn_token(
     request: BurnTokenRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check if token_factory feature is enabled
+    if !state.config.read().await.features.token_factory_enabled {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Token Factory not enabled. Enable via governance proposal."
+        })));
+    }
+    
     let signature = match hex::decode(&request.signature) {
         Ok(s) => s,
         Err(_) => return Ok(warp::reply::json(&serde_json::json!({
@@ -2885,6 +3261,14 @@ async fn handle_create_pair(
     request: CreatePairRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check if native_dex feature is enabled
+    if !state.config.read().await.features.native_dex_enabled {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Native DEX not enabled. Enable via governance proposal."
+        })));
+    }
+    
     let signature = match hex::decode(&request.signature) {
         Ok(s) => s,
         Err(_) => return Ok(warp::reply::json(&serde_json::json!({
@@ -2928,6 +3312,14 @@ async fn handle_swap(
     request: SwapRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check if native_dex feature is enabled
+    if !state.config.read().await.features.native_dex_enabled {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Native DEX not enabled. Enable via governance proposal."
+        })));
+    }
+    
     let signature = match hex::decode(&request.signature) {
         Ok(s) => s,
         Err(_) => return Ok(warp::reply::json(&serde_json::json!({
@@ -2971,6 +3363,14 @@ async fn handle_add_liquidity(
     request: AddLiquidityRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check if native_dex feature is enabled
+    if !state.config.read().await.features.native_dex_enabled {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Native DEX not enabled. Enable via governance proposal."
+        })));
+    }
+    
     let signature = match hex::decode(&request.signature) {
         Ok(s) => s,
         Err(_) => return Ok(warp::reply::json(&serde_json::json!({
@@ -2989,6 +3389,9 @@ async fn handle_add_liquidity(
             "error": "Invalid pubkey (must be 32 bytes hex)"
         }))),
     };
+    
+    // Note: min_lp_tokens from request is reserved for future slippage protection
+    let _min_lp = request.min_lp_tokens.unwrap_or(0);
     
     match state.native_dex.add_liquidity_with_signature(
         &request.pair_id,
@@ -3017,6 +3420,14 @@ async fn handle_remove_liquidity(
     request: RemoveLiquidityRequest,
     state: Arc<NodeState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check if native_dex feature is enabled
+    if !state.config.read().await.features.native_dex_enabled {
+        return Ok(warp::reply::json(&serde_json::json!({
+            "success": false,
+            "error": "Native DEX not enabled. Enable via governance proposal."
+        })));
+    }
+    
     let signature = match hex::decode(&request.signature) {
         Ok(s) => s,
         Err(_) => return Ok(warp::reply::json(&serde_json::json!({

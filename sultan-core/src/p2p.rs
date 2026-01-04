@@ -319,6 +319,7 @@ impl P2PNetwork {
         let is_running = self.is_running.clone();
         let message_tx = self.message_tx.clone();
         let bootstrap_peers_for_reconnect = self.bootstrap_peers.clone();
+        let peer_rate_limits = self.peer_rate_limits.clone();
         
         // Create broadcast channel - receiver for event loop, sender stays in self
         let (broadcast_tx, mut broadcast_rx) = mpsc::unbounded_channel::<(String, Vec<u8>)>();
@@ -377,7 +378,29 @@ impl P2PNetwork {
                         }
                         SwarmEvent::Behaviour(event) => {
                             match event {
-                                SultanBehaviourEvent::Gossipsub(gossipsub::Event::Message { message, .. }) => {
+                                SultanBehaviourEvent::Gossipsub(gossipsub::Event::Message { propagation_source, message, .. }) => {
+                                    // CRITICAL: Enforce rate limiting to prevent DoS attacks
+                                    // Check if this peer has exceeded their message quota
+                                    {
+                                        let mut limits = peer_rate_limits.write().await;
+                                        
+                                        // Periodic cleanup of stale rate limit entries
+                                        if limits.len() > RATE_LIMIT_CLEANUP_THRESHOLD {
+                                            let now = std::time::Instant::now();
+                                            limits.retain(|_, limit| {
+                                                limit.window_start
+                                                    .map(|start| now.duration_since(start).as_secs() < 120)
+                                                    .unwrap_or(false)
+                                            });
+                                        }
+                                        
+                                        let limit = limits.entry(propagation_source).or_default();
+                                        if !limit.record_message() {
+                                            warn!("⚠️ Rate limit exceeded for peer {}, dropping message", propagation_source);
+                                            continue;
+                                        }
+                                    }
+                                    
                                     // Parse and forward message
                                     if let Ok(network_msg) = bincode::deserialize::<NetworkMessage>(&message.data) {
                                         debug!("📨 Received message: {:?}", network_msg);

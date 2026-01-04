@@ -43,18 +43,22 @@ node/                  # Separate crate - NOT the main node code
 | Feature | Current Status | What's Missing |
 |---------|---------------|----------------|
 | **Quantum Crypto (Dilithium3)** | ✅ Implemented, compiles | ❌ Not integrated into transaction flow |
-| **Feature Flags** | ✅ Config struct exists | ❌ Not loaded by NodeState, not persisted |
-| **Governance Hot-Activation** | ✅ Logging exists | ❌ Actual runtime activation missing |
-| **WASM Runtime** | ❌ Not implemented | ❌ Need full WasmRuntime struct |
-| **EVM Runtime** | ❌ Not implemented | ❌ Future feature |
-| **IBC Protocol** | ❌ Not implemented | ❌ Future feature |
+| **Feature Flags** | ✅ Config in NodeState | ✅ Loaded at startup, persisted |
+| **Governance Hot-Activation** | ✅ Full integration | ✅ execute_proposal → activate_feature |
+| **Smart Contracts** | ❌ VM not selected | ❌ To be decided post-launch (wasmer/wasmtime/Move) |
+| **EVM Compatibility** | ❌ Not implemented | ❌ Future feature |
 
-### ⚠️ Critical Gap: Config Not Used!
-The `Config` struct exists in `config.rs` but **NodeState in main.rs doesn't use it**! Currently:
-- `NodeState` has no `config: Config` field
-- Feature flags are never checked
-- No config file is loaded at startup
-- Governance can't actually activate features
+### ✅ Hot-Upgrade Infrastructure Complete (Jan 2026)
+The hot-upgrade pipeline is now fully wired:
+- `NodeState` has `config: Arc<RwLock<Config>>` field
+- Config is loaded from `data/config.json` at startup
+- `NodeState::activate_feature()` method updates config and logs changes
+- `POST /governance/execute/:id` calls `activate_feature` for feature flags
+- `GET /governance/features` shows current feature status
+- Config changes are persisted to disk after activation
+
+**Note**: Sultan is NOT a Cosmos chain. Feature flags for smart contracts exist as placeholders
+until a VM is selected post-launch. The infrastructure is ready for any VM choice.
 
 ---
 

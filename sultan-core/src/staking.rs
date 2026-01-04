@@ -330,8 +330,11 @@ impl StakingManager {
         }
 
         // Calculate total block reward based on inflation
-        // Annual inflation distributed per block
-        let annual_inflation_amount = (total_staked as f64 * inflation_rate) as u64;
+        // Use fixed-point math with 18 decimal precision to avoid f64 drift
+        // inflation_rate is ~0.1333 (13.33%), so we scale by 1e18
+        const PRECISION: u128 = 1_000_000_000_000_000_000; // 1e18
+        let inflation_scaled = (inflation_rate * PRECISION as f64) as u128;
+        let annual_inflation_amount = ((total_staked as u128) * inflation_scaled / PRECISION) as u64;
         let block_reward = annual_inflation_amount / BLOCKS_PER_YEAR;
 
         let mut validators = self.validators.write().await;
@@ -340,21 +343,31 @@ impl StakingManager {
         let mut validator_rewards = HashMap::new();
         let mut delegator_rewards = HashMap::new();
 
-        // Distribute rewards proportionally to stake
+        // Distribute rewards proportionally to stake using u128 intermediate math
         for (addr, validator) in validators.iter_mut() {
             if validator.jailed {
                 continue;
             }
 
-            let validator_share = (validator.total_stake as f64 / total_staked as f64) * block_reward as f64;
-            let validator_share = validator_share as u64;
+            // validator_share = (validator.total_stake / total_staked) * block_reward
+            // Using u128 to prevent overflow: multiply first, divide last
+            let validator_share = ((validator.total_stake as u128) * (block_reward as u128) 
+                / (total_staked as u128)) as u64;
 
-            // Commission from delegators
-            let delegator_share = (validator.delegated_stake as f64 / validator.total_stake as f64) * validator_share as f64;
-            let commission = (delegator_share as f64 * validator.commission_rate) as u64;
+            if validator.total_stake == 0 {
+                continue;
+            }
+
+            // delegator_share = (delegated_stake / total_stake) * validator_share
+            let delegator_share = ((validator.delegated_stake as u128) * (validator_share as u128) 
+                / (validator.total_stake as u128)) as u64;
+
+            // commission = delegator_share * commission_rate (commission_rate is typically 0.05-0.20)
+            let commission_scaled = (validator.commission_rate * PRECISION as f64) as u128;
+            let commission = ((delegator_share as u128) * commission_scaled / PRECISION) as u64;
 
             // Validator gets: their share of self-stake + commission
-            let self_stake_share = validator_share - (delegator_share as u64);
+            let self_stake_share = validator_share.saturating_sub(delegator_share);
             let validator_total_reward = self_stake_share + commission;
 
             validator.rewards_accumulated += validator_total_reward;
@@ -362,16 +375,15 @@ impl StakingManager {
             validator_rewards.insert(addr.clone(), validator_total_reward);
 
             // Distribute remaining rewards to delegators
-            // Iterate through all delegators to find those delegating to this validator
             if validator.delegated_stake > 0 {
-                let delegator_reward_pool = (delegator_share as u64).saturating_sub(commission);
+                let delegator_reward_pool = delegator_share.saturating_sub(commission);
                 
                 for (_delegator_addr, delegator_list) in delegations.iter_mut() {
                     for delegation in delegator_list.iter_mut() {
                         if delegation.validator_address == *addr {
-                            let delegator_reward = (delegation.amount as f64 / validator.delegated_stake as f64) 
-                                * delegator_reward_pool as f64;
-                            let delegator_reward = delegator_reward as u64;
+                            // delegator_reward = (delegation.amount / delegated_stake) * pool
+                            let delegator_reward = ((delegation.amount as u128) * (delegator_reward_pool as u128)
+                                / (validator.delegated_stake as u128)) as u64;
 
                             delegation.rewards_accumulated += delegator_reward;
                             delegation.last_reward_height = block_height;
@@ -406,6 +418,7 @@ impl StakingManager {
     }
 
     /// Slash a validator for misbehavior
+    /// Also slashes tokens in the unbonding queue to prevent slashing escape
     pub async fn slash_validator(
         &self,
         validator_address: &str,
@@ -428,6 +441,24 @@ impl StakingManager {
 
         let mut total_staked = self.total_staked.write().await;
         *total_staked = total_staked.saturating_sub(slash_amount);
+        drop(validators);
+        drop(total_staked);
+
+        // CRITICAL: Also slash tokens in unbonding queue to prevent slashing escape
+        // Without this, a validator could unbond before misbehaving and escape the slash
+        let mut unbonding_slashed: u64 = 0;
+        {
+            let mut unbonding_queue = self.unbonding_queue.write().await;
+            for entry in unbonding_queue.iter_mut() {
+                if entry.validator_address == validator_address {
+                    let entry_slash = (entry.amount as f64 * slash_percentage) as u64;
+                    entry.amount = entry.amount.saturating_sub(entry_slash);
+                    unbonding_slashed += entry_slash;
+                }
+            }
+        }
+
+        let total_slashed = slash_amount + unbonding_slashed;
 
         let event = SlashingEvent {
             validator_address: validator_address.to_string(),
@@ -436,7 +467,7 @@ impl StakingManager {
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_secs(),
             reason,
-            amount_slashed: slash_amount,
+            amount_slashed: total_slashed,
             jail_duration: jail_duration_blocks,
         };
 
@@ -444,9 +475,10 @@ impl StakingManager {
         slashing_history.push(event);
 
         warn!(
-            "Validator {} slashed: {} SLTN ({:.1}%), jailed for {} blocks",
+            "Validator {} slashed: {} SLTN staked + {} SLTN unbonding ({:.1}%), jailed for {} blocks",
             validator_address,
             slash_amount / 1_000_000_000,
+            unbonding_slashed / 1_000_000_000,
             slash_percentage * 100.0,
             jail_duration_blocks
         );
