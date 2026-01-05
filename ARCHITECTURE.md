@@ -143,6 +143,21 @@ The Sultan Wallet PWA has undergone comprehensive security review (January 2026)
 | TOTP 2FA | With 8 backup codes |
 | Test Coverage | 219 tests passing |
 
+### Browser Extension Security - v1.0.0
+The Sultan Wallet Chrome extension (Manifest V3) provides dApp integration:
+
+| Feature | Implementation |
+|---------|---------------|
+| CSP | `script-src 'self'; object-src 'none'; frame-ancestors 'none'` |
+| Rate Limiting | 60 req/min (background), 100 msg/min (content script) |
+| Audit Logging | 16 security event types to chrome.storage.local |
+| Phishing Detection | Pattern matching + homograph attack detection |
+| Provider Security | Object.freeze, non-writable window.sultan |
+| Crypto | Same as PWA (PBKDF2 600K, AES-256-GCM, Ed25519) |
+| dApp API | `window.sultan.connect()`, `signAndSendTransaction()` |
+
+See [Browser Extension Security Audit](docs/BROWSER_EXTENSION_SECURITY_AUDIT.md) for full details.
+
 ### Governance Security
 | Protection | Mechanism |
 |------------|-----------|

@@ -32,32 +32,39 @@
 
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["content-script.js"],
       "run_at": "document_start",
-      "all_frames": true
+      "all_frames": false
     }
   ],
 
   "web_accessible_resources": [
     {
       "resources": ["inpage-provider.js"],
-      "matches": ["<all_urls>"]
+      "matches": ["http://*/*", "https://*/*"]
     }
   ],
 
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs",
+    "alarms"
   ],
 
   "host_permissions": [
-    "http://206.189.224.142:8545/*",
-    "https://rpc.sltn.io/*",
-    "https://api.sltn.io/*"
+    "http://*/*",
+    "https://*/*"
   ],
 
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
-  }
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-ancestors 'none'"
+  },
+  
+  "externally_connectable": {
+    "matches": []
+  },
+  
+  "minimum_chrome_version": "102"
 }

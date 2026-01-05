@@ -47,6 +47,47 @@
   border-radius: var(--radius-sm);
 }
 
+/* Phishing Warning */
+.phishing-warning {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: rgba(239, 68, 68, 0.15);
+  border: 2px solid #ef4444;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+  animation: pulse-warning 2s infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.phishing-warning .warning-icon {
+  width: 24px;
+  height: 24px;
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.phishing-warning .warning-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.phishing-warning .warning-content strong {
+  color: #ef4444;
+  font-size: 0.875rem;
+}
+
+.phishing-warning .warning-content p {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
 .origin-card {
   display: flex;
   align-items: center;

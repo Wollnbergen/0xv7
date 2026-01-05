@@ -208,6 +208,14 @@ export default function Settings() {
         <div className="settings-section">
           <h3>Security Details</h3>
           
+          <div className="setting-item" onClick={() => navigate('/connected-apps')}>
+            <div className="setting-info">
+              <span className="setting-label">Connected Apps</span>
+              <span className="setting-hint">Manage dApp connections</span>
+            </div>
+            <span className="setting-arrow"><ChevronRightIcon /></span>
+          </div>
+          
           <div className="setting-item" onClick={() => setModal('totp')}>
             <div className="setting-info">
               <span className="setting-label">Two-Factor Authentication</span>

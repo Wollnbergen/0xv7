@@ -1038,10 +1038,24 @@ Validators should monitor:
 Official non-custodial wallet with enterprise-grade security:
 
 - **Encryption:** AES-256-GCM
-- **Key Derivation:** PBKDF2 (100,000 iterations)
+- **Key Derivation:** PBKDF2 (600,000 iterations)
 - **Mnemonic:** BIP39 24-word seed phrases
 - **Signatures:** Ed25519
 - **Features:** Send, receive, stake, governance
+
+**Available Formats:**
+
+| Format | URL/Status | Use Case |
+|--------|------------|----------|
+| **PWA** | [wallet.sltn.io](https://wallet.sltn.io) | Browser-based, installable |
+| **Chrome Extension** | Chrome Web Store | dApp integration via `window.sultan` |
+
+**Browser Extension Security:**
+- Manifest V3 with strict CSP
+- Rate limiting (60 req/min per origin)
+- Phishing detection with homograph attack protection
+- Audit logging for all security events
+- Object.freeze on injected provider
 
 **Repository:** `github.com/Wollnbergen/SLTN`
 
@@ -1086,6 +1100,7 @@ Official non-custodial wallet with enterprise-grade security:
 - [ ] Ethereum bridge (Light Client)
 - [ ] DEX deployment
 - [ ] Mobile wallet (iOS/Android)
+- [ ] WalletConnect v2 integration (mobile dApp connectivity)
 - [ ] Security audit (Trail of Bits)
 
 ### Q3 2026 📋 Planned

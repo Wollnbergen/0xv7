@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, X, Check, AlertTriangle, Globe, FileText, ArrowRightLeft, Coins } from 'lucide-react';
 import { useWallet } from '../hooks/useWallet';
+import { broadcastTransaction } from '../api/sultanAPI';
 import {
   ApprovalRequest,
   getPendingApprovals,
@@ -21,12 +22,31 @@ import '../styles/approval.css';
 
 export function ApprovalScreen() {
   const navigate = useNavigate();
-  const { wallet, currentAccount } = useWallet();
+  const { wallet, currentAccount, isInitialized, isLocked } = useWallet();
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+
+  // Security check: Must have wallet created and unlocked
+  useEffect(() => {
+    if (!isInitialized) {
+      // No wallet created - reject all pending approvals and go to welcome
+      if (isExtensionContext()) {
+        getPendingApprovals().then(pending => {
+          pending.forEach(req => rejectRequest(req.id));
+        });
+      }
+      navigate('/');
+      return;
+    }
+    if (isLocked) {
+      // Wallet locked - go to unlock (which will redirect back here)
+      navigate('/unlock');
+      return;
+    }
+  }, [isInitialized, isLocked, navigate]);
 
   // Load pending approvals
   useEffect(() => {
@@ -88,16 +108,41 @@ export function ApprovalScreen() {
         case 'signTransaction': {
           const tx = current.data.transaction as Record<string, unknown>;
           const signature = await wallet.signTransaction(tx, currentAccount.index);
-          result = {
+          
+          // Build result object
+          const signResult: Record<string, unknown> = {
             signature,
             publicKey: currentAccount.publicKey,
             transaction: tx
           };
           
-          // TODO: If broadcast requested, send to RPC
+          // Broadcast to RPC if requested
           if (current.data.broadcast) {
-            // Would call RPC here
+            try {
+              const broadcastResult = await broadcastTransaction({
+                transaction: {
+                  from: tx.from as string,
+                  to: tx.to as string,
+                  amount: tx.amount as string,
+                  memo: tx.memo as string | undefined,
+                  nonce: tx.nonce as number,
+                  timestamp: tx.timestamp as number,
+                },
+                signature,
+                publicKey: currentAccount.publicKey,
+              });
+              signResult.hash = broadcastResult.hash;
+              signResult.broadcasted = true;
+            } catch (broadcastError) {
+              // Still return signature but indicate broadcast failed
+              signResult.broadcasted = false;
+              signResult.broadcastError = broadcastError instanceof Error 
+                ? broadcastError.message 
+                : 'Broadcast failed';
+            }
           }
+          
+          result = signResult;
           break;
         }
 
@@ -213,6 +258,17 @@ export function ApprovalScreen() {
           </span>
         )}
       </header>
+
+      {/* Phishing Warning */}
+      {Boolean((current.data as Record<string, unknown>)?.phishingWarning) && (
+        <div className="phishing-warning">
+          <AlertTriangle className="warning-icon" />
+          <div className="warning-content">
+            <strong>⚠️ Phishing Warning</strong>
+            <p>This site matches known phishing patterns. Proceed with extreme caution.</p>
+          </div>
+        </div>
+      )}
 
       {/* Origin */}
       <div className="origin-card">

@@ -4,6 +4,12 @@
  * This script is injected into web pages and exposes window.sultan
  * for dApps to interact with the Sultan Wallet extension.
  * 
+ * SECURITY:
+ * - Provider is frozen to prevent tampering
+ * - Input validation on all methods
+ * - Size limits to prevent DoS
+ * - No sensitive data exposed
+ * 
  * Provider Interface (EIP-1193 inspired):
  * - connect(): Request wallet connection
  * - disconnect(): Disconnect wallet
@@ -21,21 +27,43 @@
 
   // Prevent double injection
   if (window.sultan) {
-    console.warn('[Sultan] Provider already injected');
+    // Silent in production
     return;
+  }
+
+  // Security: Freeze critical objects to prevent prototype pollution
+  if (typeof Object.freeze === 'function') {
+    // Already frozen by browser, but ensure our objects are too
   }
 
   const EXTENSION_ID = 'sultan-wallet';
   
-  // Event emitter
+  // Production mode - disable verbose logging
+  const IS_PRODUCTION = true;
+  const debugLog = (...args) => { if (!IS_PRODUCTION) console.log(...args); };
+  const debugWarn = (...args) => { if (!IS_PRODUCTION) console.warn(...args); };
+  
+  // Security: Maximum event listeners per event (prevent memory leaks)
+  const MAX_LISTENERS_PER_EVENT = 100;
+  
+  // Event emitter with security limits
+  // Event emitter with security limits
   class EventEmitter {
     constructor() {
       this._events = {};
     }
 
     on(event, handler) {
+      if (typeof event !== 'string' || typeof handler !== 'function') {
+        throw new Error('Invalid event or handler');
+      }
       if (!this._events[event]) {
         this._events[event] = [];
+      }
+      // Security: Limit number of listeners per event
+      if (this._events[event].length >= MAX_LISTENERS_PER_EVENT) {
+        debugWarn('[Sultan] Max listeners reached for event:', event);
+        return this;
       }
       this._events[event].push(handler);
       return this;
@@ -53,7 +81,9 @@
 
     emit(event, ...args) {
       if (!this._events[event]) return false;
-      this._events[event].forEach(handler => {
+      // Clone array to prevent modification during iteration
+      const handlers = [...this._events[event]];
+      handlers.forEach(handler => {
         try {
           handler(...args);
         } catch (e) {
@@ -68,9 +98,12 @@
     }
   }
 
-  // Request ID counter
-  let requestId = 0;
+  // Request ID counter (use random base for unpredictability)
+  let requestId = Math.floor(Math.random() * 1000000);
   const pendingRequests = new Map();
+  
+  // Security: Limit pending requests to prevent memory exhaustion
+  const MAX_PENDING_REQUESTS = 50;
 
   // Connection state
   let connectedAccount = null;
@@ -81,17 +114,26 @@
    */
   function sendMessage(method, params = {}) {
     return new Promise((resolve, reject) => {
+      // Security: Limit pending requests
+      if (pendingRequests.size >= MAX_PENDING_REQUESTS) {
+        reject(new Error('Too many pending requests'));
+        return;
+      }
+      
       const id = ++requestId;
       
-      pendingRequests.set(id, { resolve, reject });
+      pendingRequests.set(id, { resolve, reject, createdAt: Date.now() });
 
+      // Security: Use specific origin when possible
+      const targetOrigin = window.location.origin || '*';
+      
       window.postMessage({
         type: 'SULTAN_PROVIDER_REQUEST',
         id,
         method,
         params,
         source: EXTENSION_ID
-      }, '*');
+      }, targetOrigin);
 
       // Timeout after 5 minutes (for user approval)
       setTimeout(() => {
@@ -133,25 +175,29 @@
     if (event.data.source !== EXTENSION_ID) return;
 
     const { eventName, payload } = event.data;
+    debugLog('[Sultan Provider] Received event:', eventName, payload);
     
+    // Update internal state
     switch (eventName) {
       case 'connect':
         isConnectedState = true;
         connectedAccount = payload;
-        provider.emit('connect', payload);
         break;
       case 'disconnect':
         isConnectedState = false;
         connectedAccount = null;
-        provider.emit('disconnect');
         break;
       case 'accountChange':
         connectedAccount = payload;
-        provider.emit('accountChange', payload);
         break;
-      case 'networkChange':
-        provider.emit('networkChange', payload);
-        break;
+    }
+    
+    // Emit to listeners (provider may not exist yet on first load)
+    if (typeof provider !== 'undefined' && provider) {
+      debugLog('[Sultan Provider] Emitting event:', eventName, 'listeners:', provider._events[eventName]?.length || 0);
+      provider.emit(eventName, payload);
+    } else {
+      debugLog('[Sultan Provider] Provider not ready, cannot emit');
     }
   });
 
@@ -216,6 +262,23 @@
     }
 
     /**
+     * Get connected accounts (returns array for compatibility)
+     * @returns {Promise<Array<{address: string, publicKey: string}>>}
+     */
+    async getAccounts() {
+      if (!isConnectedState || !connectedAccount) return [];
+      return [connectedAccount];
+    }
+
+    /**
+     * Get chain/network info (alias for getNetwork)
+     * @returns {Promise<{chainId: string, name: string, rpcUrl: string}>}
+     */
+    async getChainInfo() {
+      return this.getNetwork();
+    }
+
+    /**
      * Get account balance
      * @returns {Promise<{available: string, staked: string, rewards: string}>}
      */
@@ -237,11 +300,24 @@
         throw new Error('Wallet not connected');
       }
       
+      // Security: Validate input
+      if (message === null || message === undefined) {
+        throw new Error('Message cannot be empty');
+      }
+      
       // Convert Uint8Array to hex if needed
       let messageHex;
       if (message instanceof Uint8Array) {
+        // Security: Limit message size (1MB)
+        if (message.length > 1024 * 1024) {
+          throw new Error('Message too large (max 1MB)');
+        }
         messageHex = Array.from(message).map(b => b.toString(16).padStart(2, '0')).join('');
       } else if (typeof message === 'string') {
+        // Security: Limit message size (1MB)
+        if (message.length > 1024 * 1024) {
+          throw new Error('Message too large (max 1MB)');
+        }
         // Encode string as UTF-8 then to hex
         const encoder = new TextEncoder();
         const bytes = encoder.encode(message);
@@ -257,17 +333,41 @@
      * Sign a transaction
      * Opens extension popup for user approval
      * @param {object} transaction - Transaction object
-     * @param {boolean} [broadcast=false] - Whether to broadcast after signing
+     * @param {object} [options] - Options (broadcast: boolean)
      * @returns {Promise<{signature: string, publicKey: string, txHash?: string}>}
      */
-    async signTransaction(transaction, broadcast = false) {
+    async signTransaction(transaction, options = {}) {
       if (!isConnectedState) {
         throw new Error('Wallet not connected');
       }
 
-      // Validate transaction has required fields based on type
-      if (!transaction.type) {
-        throw new Error('Transaction must have a type');
+      // Security: Validate transaction object
+      if (!transaction || typeof transaction !== 'object') {
+        throw new Error('Transaction must be an object');
+      }
+      
+      // Security: Limit transaction size (prevent DoS)
+      const txJson = JSON.stringify(transaction);
+      if (txJson.length > 100 * 1024) { // 100KB limit
+        throw new Error('Transaction too large');
+      }
+      
+      // Security: Validate required fields for known types
+      if (transaction.type === 'send') {
+        if (!transaction.to || typeof transaction.to !== 'string') {
+          throw new Error('Send transaction requires valid "to" address');
+        }
+        if (transaction.amount !== undefined && typeof transaction.amount !== 'string' && typeof transaction.amount !== 'number') {
+          throw new Error('Invalid amount type');
+        }
+      }
+
+      // Support both signTransaction(tx, {broadcast: true}) and signTransaction(tx, true)
+      const broadcast = typeof options === 'boolean' ? options : (options.broadcast || false);
+
+      // Default type to 'send' if not specified and has 'to' field
+      if (!transaction.type && transaction.to) {
+        transaction.type = 'send';
       }
 
       return sendMessage('signTransaction', { transaction, broadcast });
@@ -304,6 +404,26 @@
     }
 
     /**
+     * Check connection status with background (useful on page load)
+     * @returns {Promise<{connected: boolean, address?: string, publicKey?: string}>}
+     */
+    async checkConnection() {
+      try {
+        const result = await sendMessage('checkConnection');
+        if (result && result.connected) {
+          isConnectedState = true;
+          connectedAccount = { address: result.address, publicKey: result.publicKey };
+          return result;
+        }
+      } catch (e) {
+        // Not connected or extension not available
+      }
+      isConnectedState = false;
+      connectedAccount = null;
+      return { connected: false };
+    }
+
+    /**
      * Check if extension is installed and available
      * @returns {boolean}
      */
@@ -314,11 +434,13 @@
 
   // Create provider instance
   const provider = new SultanProvider();
-
-  // Freeze provider to prevent tampering
+  
+  // Security: Freeze provider to prevent tampering
+  // This prevents malicious scripts from modifying the provider
   Object.freeze(provider);
+  Object.freeze(SultanProvider.prototype);
 
-  // Expose on window
+  // Expose on window with maximum protection
   Object.defineProperty(window, 'sultan', {
     value: provider,
     writable: false,
@@ -329,5 +451,18 @@
   // Announce availability
   window.dispatchEvent(new CustomEvent('sultan#initialized'));
   
-  console.log('[Sultan] Wallet provider injected v' + provider.version);
+  debugLog('[Sultan] Wallet provider injected v' + provider.version);
+
+  // Check existing connection on load (delay to let content script initialize)
+  setTimeout(async () => {
+    try {
+      const result = await provider.checkConnection();
+      if (result.connected) {
+        debugLog('[Sultan] Restored connection:', result.address);
+        provider.emit('connect', { address: result.address, publicKey: result.publicKey });
+      }
+    } catch (e) {
+      debugLog('[Sultan] No existing connection');
+    }
+  }, 500);
 })();

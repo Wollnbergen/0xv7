@@ -53,7 +53,7 @@ Rust is a systems programming language known for:
 10. [Governance](#10-governance)
 11. [Security Architecture](#11-security-architecture)
 12. [Production File Reference](#12-production-file-reference)
-13. [Sultan Wallet (PWA)](#13-sultan-wallet-pwa)
+13. [Sultan Wallet](#13-sultan-wallet)
 
 ---
 
@@ -2202,11 +2202,22 @@ Base URL: `https://rpc.sltn.io`
 
 ---
 
-## 13. Sultan Wallet (PWA)
+## 13. Sultan Wallet
 
-### 13.1 Overview
+The Sultan Wallet is available in two formats: a **Progressive Web App (PWA)** for browser-based access and a **Chrome Browser Extension** for dApp integration. Both share the same security-first architecture with enterprise-grade cryptography.
 
-The Sultan Wallet is a **non-custodial Progressive Web App (PWA)** that allows users to interact with the Sultan blockchain directly from any browser. It is designed with security as the primary concern - private keys never leave the user's device.
+| Format | URL/Distribution | Primary Use Case |
+|--------|------------------|------------------|
+| **PWA** | [wallet.sltn.io](https://wallet.sltn.io) | Standalone wallet, mobile-friendly |
+| **Chrome Extension** | Chrome Web Store | dApp integration via `window.sultan` |
+
+---
+
+### 13.1 PWA Wallet
+
+#### 13.1.1 Overview
+
+The Sultan Wallet PWA is a **non-custodial Progressive Web App** that allows users to interact with the Sultan blockchain directly from any browser. It is designed with security as the primary concern - private keys never leave the user's device.
 
 **What is a PWA?**
 
@@ -2646,6 +2657,255 @@ npm run build        # Outputs to dist/
 - HTTPS (required for service worker)
 - `manifest.json` in public folder
 - Service worker for offline caching
+
+---
+
+### 13.2 Browser Extension
+
+#### 13.2.1 Overview
+
+The Sultan Wallet Browser Extension is a **Chrome extension (Manifest V3)** that enables seamless dApp integration with Sultan blockchain directly from the browser. It provides the same security-first architecture as the PWA while exposing a JavaScript API for decentralized applications.
+
+**Why a Browser Extension?**
+
+| Feature | PWA | Extension |
+|---------|-----|-----------|
+| **dApp Integration** | ❌ No | ✅ `window.sultan` API |
+| **Automatic Injection** | ❌ No | ✅ Content script |
+| **Cross-tab State** | ❌ Limited | ✅ Service worker |
+| **Transaction Approval** | ❌ Manual | ✅ Popup dialogs |
+| **Chrome Web Store** | ❌ N/A | ✅ Discoverable |
+
+### 14.2 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    BROWSER EXTENSION ARCHITECTURE               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────────────┐     ┌─────────────────┐                    │
+│  │   dApp Website  │     │   Extension     │                    │
+│  │                 │     │    Popup UI     │                    │
+│  │  window.sultan  │     │  (React/Vite)   │                    │
+│  └────────┬────────┘     └────────┬────────┘                    │
+│           │                       │                              │
+│           ▼                       ▼                              │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                   CONTENT SCRIPT                            ││
+│  │    • Injects inpage-provider.js                             ││
+│  │    • Rate limiting (100/min)                                ││
+│  │    • Message validation & sender verification               ││
+│  └──────────────────────────┬──────────────────────────────────┘│
+│                              │ chrome.runtime.sendMessage        │
+│                              ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                   SERVICE WORKER (background.js)            ││
+│  │    • Wallet state management                                ││
+│  │    • Key derivation (PBKDF2 600K)                          ││
+│  │    • Ed25519 signing                                        ││
+│  │    • Rate limiting (60/min per origin)                      ││
+│  │    • Audit logging (16 event types)                         ││
+│  │    • Phishing detection                                     ││
+│  └──────────────────────────┬──────────────────────────────────┘│
+│                              │ HTTPS                             │
+│                              ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                    RPC ENDPOINTS                            ││
+│  │    Primary: https://rpc.sltn.io                             ││
+│  │    Fallback: https://api.sltn.io                            ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 14.3 Security Model
+
+**Enterprise-Grade Security Features:**
+
+| Layer | Feature | Implementation |
+|-------|---------|----------------|
+| **Manifest** | Content Security Policy | `script-src 'self'; object-src 'none'; frame-ancestors 'none'` |
+| **Manifest** | External Connectable | `{"matches": []}` - No external extensions allowed |
+| **Manifest** | Minimum Chrome Version | `102` (Manifest V3 stable) |
+| **Background** | Rate Limiting | 60 requests/minute per origin |
+| **Background** | Audit Logging | 16 security event types logged to chrome.storage.local |
+| **Background** | Nonce Tracking | Prevents replay attacks |
+| **Background** | Phishing Detection | Pattern matching + homograph attack detection |
+| **Content Script** | Rate Limiting | 100 messages/minute |
+| **Content Script** | Sender Verification | Validates chrome.runtime.id |
+| **Content Script** | Message Validation | Type checking on all fields |
+| **Inpage Provider** | Object.freeze | Provider immutable after creation |
+| **Inpage Provider** | defineProperty | Non-writable, non-configurable window.sultan |
+| **Inpage Provider** | Listener Limits | MAX_LISTENERS_PER_EVENT = 100 |
+| **Crypto** | Key Derivation | PBKDF2 600,000 iterations |
+| **Crypto** | Encryption | AES-256-GCM |
+| **Crypto** | Memory Protection | SecureString XOR encryption, secureWipe on key material |
+
+### 14.4 Phishing Protection
+
+The extension includes multi-layer phishing detection:
+
+```javascript
+// Phishing Detection Patterns
+const PHISHING_PATTERNS = [
+  /free.*sltn/i,          // Free SLTN scams
+  /claim.*reward/i,        // Fake rewards
+  /wallet.*verify/i,       // Wallet verification scams
+  /urgent.*action/i,       // Urgency tactics
+  /connect.*now/i,         // Pressure tactics
+  /sultan.*giveaway/i,     // Fake giveaways
+  /airdrop.*claim/i,       // Airdrop scams
+  /double.*crypto/i,       // Doubling scams
+];
+
+// Homograph Attack Detection
+function containsHomographAttack(url) {
+  const homoglyphs = { 'а': 'a', 'е': 'e', 'о': 'o', ... };
+  // Detects Cyrillic/Greek lookalikes in URLs
+}
+
+// Whitelist for trusted domains
+const WHITELIST_DOMAINS = [
+  'sltn.io',
+  'sultan.io',
+  'localhost',
+];
+```
+
+### 14.5 dApp Integration API
+
+**Injected Provider (`window.sultan`):**
+
+```typescript
+interface SultanProvider {
+  // Connect to wallet
+  connect(): Promise<{ address: string }>;
+  
+  // Get connected accounts
+  getAccounts(): Promise<string[]>;
+  
+  // Get balance
+  getBalance(address: string): Promise<{ balance: string }>;
+  
+  // Sign and send transaction
+  signAndSendTransaction(tx: {
+    to: string;
+    amount: string;
+    memo?: string;
+  }): Promise<{ txHash: string }>;
+  
+  // Event listeners
+  on(event: 'connect' | 'disconnect' | 'accountsChanged', 
+     callback: Function): void;
+  removeListener(event: string, callback: Function): void;
+  
+  // Provider info
+  isConnected(): boolean;
+  chainId: string;  // 'sultan-mainnet-1'
+}
+
+// Usage in dApp
+if (window.sultan) {
+  const { address } = await window.sultan.connect();
+  console.log('Connected:', address);
+}
+```
+
+### 14.6 Audit Logging
+
+All security-relevant events are logged with timestamps:
+
+| Event Type | Description |
+|------------|-------------|
+| `wallet_unlock` | Wallet unlocked with PIN |
+| `wallet_lock` | Wallet locked (manual or timeout) |
+| `connect_approved` | dApp connection approved |
+| `connect_rejected` | dApp connection rejected |
+| `tx_signed` | Transaction signed |
+| `tx_rejected` | Transaction rejected by user |
+| `rate_limited` | Request rate limited |
+| `phishing_blocked` | Phishing site blocked |
+| `invalid_message` | Invalid message format |
+| `unknown_origin` | Request from unknown origin |
+| `nonce_duplicate` | Duplicate nonce detected |
+| `signature_failed` | Signature operation failed |
+
+**Log Format:**
+```json
+{
+  "timestamp": "2026-01-03T12:00:00.000Z",
+  "event": "tx_signed",
+  "origin": "https://dapp.example.com",
+  "details": { "amount": "1000000000", "to": "sultan1..." }
+}
+```
+
+### 14.7 Rate Limiting
+
+**Multi-layer protection against DoS:**
+
+| Layer | Limit | Window | Action on Exceed |
+|-------|-------|--------|------------------|
+| Background (per origin) | 60 requests | 1 minute | Request rejected, logged |
+| Content Script | 100 messages | 1 minute | Message dropped |
+| RPC Calls | Inherited | - | Fallback to secondary RPC |
+
+### 14.8 File Structure
+
+```
+wallet-extension/
+├── extension/
+│   ├── background.js      # Service worker (Manifest V3)
+│   ├── content-script.js  # Content script bridge
+│   └── inpage-provider.js # Injected window.sultan
+├── public/
+│   ├── manifest.json      # Extension manifest
+│   └── icons/             # Extension icons
+├── src/
+│   ├── screens/           # Popup UI screens
+│   ├── core/              # wallet.ts, security.ts
+│   └── components/        # React components
+├── dist-extension/        # Production build
+└── sultan-wallet-extension.zip  # Distributable (310KB)
+```
+
+### 14.9 Build & Distribution
+
+**Build Commands:**
+```bash
+cd wallet-extension
+npm install
+npm run build:extension   # Outputs to dist-extension/
+npm run package:extension # Creates .zip for Chrome Web Store
+```
+
+**Chrome Web Store Submission:**
+1. Build extension: `npm run build:extension`
+2. Package: `npm run package:extension`
+3. Upload `sultan-wallet-extension.zip` to Chrome Developer Dashboard
+4. Complete store listing with screenshots and description
+
+**Developer Loading:**
+1. Navigate to `chrome://extensions`
+2. Enable "Developer mode"
+3. Click "Load unpacked"
+4. Select `dist-extension/` folder
+
+### 14.10 Security Checklist
+
+| Requirement | Status |
+|-------------|--------|
+| CSP with frame-ancestors: 'none' | ✅ |
+| externally_connectable: [] | ✅ |
+| No all_frames in content scripts | ✅ |
+| Rate limiting on all layers | ✅ |
+| HTTPS RPC endpoints only | ✅ |
+| Audit logging enabled | ✅ |
+| Phishing detection active | ✅ |
+| PBKDF2 ≥ 600,000 iterations | ✅ |
+| Object.freeze on provider | ✅ |
+| Production logging disabled | ✅ |
+| Nonce replay protection | ✅ |
+| Message validation | ✅ |
 
 ---
 

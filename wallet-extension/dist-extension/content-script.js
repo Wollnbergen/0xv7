@@ -4,6 +4,11 @@
  * This script runs in the context of web pages and acts as a bridge
  * between the inpage provider (window.sultan) and the background service worker.
  * 
+ * SECURITY:
+ * - Validates all messages from page
+ * - Rate limits requests
+ * - Verifies extension context
+ * 
  * Message flow:
  * dApp → inpage-provider.js → content-script.js → background.js → popup
  */
@@ -12,6 +17,56 @@
   'use strict';
 
   const EXTENSION_ID = 'sultan-wallet';
+  
+  // Production mode - disable verbose logging
+  const IS_PRODUCTION = true;
+  const debugLog = (...args) => { if (!IS_PRODUCTION) console.log(...args); };
+  const debugWarn = (...args) => { if (!IS_PRODUCTION) console.warn(...args); };
+  
+  // Security: Rate limiting (100 requests per minute)
+  const REQUEST_LIMIT = 100;
+  const REQUEST_WINDOW_MS = 60000;
+  let requestTimestamps = [];
+  
+  function isRateLimited() {
+    const now = Date.now();
+    requestTimestamps = requestTimestamps.filter(ts => ts > now - REQUEST_WINDOW_MS);
+    if (requestTimestamps.length >= REQUEST_LIMIT) {
+      debugWarn('[Sultan Content] Rate limit exceeded');
+      return true;
+    }
+    requestTimestamps.push(now);
+    return false;
+  }
+  
+  // Security: Allowed RPC methods (whitelist)
+  const ALLOWED_METHODS = Object.freeze([
+    'connect', 'disconnect', 'checkConnection',
+    'getBalance', 'signMessage', 'signTransaction',
+    'addToken', 'getNetwork'
+  ]);
+
+  /**
+   * Security: Validate message structure strictly
+   */
+  function isValidMessage(data) {
+    // Type checks
+    if (!data || typeof data !== 'object') return false;
+    if (typeof data.id !== 'number' || !Number.isInteger(data.id) || data.id < 0) return false;
+    if (typeof data.method !== 'string') return false;
+    if (!ALLOWED_METHODS.includes(data.method)) return false;
+    if (data.params !== undefined && data.params !== null && typeof data.params !== 'object') return false;
+    if (data.source !== EXTENSION_ID) return false;
+    
+    // Limit message size (prevent DoS)
+    const messageSize = JSON.stringify(data).length;
+    if (messageSize > 1024 * 100) { // 100KB max
+      debugWarn('[Sultan Content] Message too large:', messageSize);
+      return false;
+    }
+    
+    return true;
+  }
 
   /**
    * Inject the inpage provider script into the page
@@ -22,6 +77,13 @@
       const script = document.createElement('script');
       script.src = chrome.runtime.getURL('inpage-provider.js');
       script.type = 'text/javascript';
+      
+      // Security: Set nonce if CSP requires it
+      const nonce = document.querySelector('script[nonce]')?.nonce;
+      if (nonce) {
+        script.nonce = nonce;
+      }
+      
       script.onload = function() {
         this.remove();
       };
@@ -46,6 +108,29 @@
     if (event.data.source !== EXTENSION_ID) return;
 
     const { id, method, params } = event.data;
+    
+    // Security: Rate limiting
+    if (isRateLimited()) {
+      window.postMessage({
+        type: 'SULTAN_PROVIDER_RESPONSE',
+        id,
+        error: { message: 'Rate limit exceeded. Please slow down.' },
+        source: EXTENSION_ID
+      }, window.location.origin);
+      return;
+    }
+    
+    // Security: Validate message structure
+    if (!isValidMessage(event.data)) {
+      debugWarn('[Sultan Content] Invalid message rejected:', method);
+      window.postMessage({
+        type: 'SULTAN_PROVIDER_RESPONSE',
+        id,
+        error: { message: 'Invalid request' },
+        source: EXTENSION_ID
+      }, window.location.origin);
+      return;
+    }
 
     try {
       // Forward to background service worker
@@ -58,14 +143,14 @@
         href: window.location.href
       });
 
-      // Send response back to inpage provider
+      // Send response back to inpage provider (use specific origin, not '*')
       window.postMessage({
         type: 'SULTAN_PROVIDER_RESPONSE',
         id,
         result: response.result,
         error: response.error,
         source: EXTENSION_ID
-      }, '*');
+      }, window.location.origin);
     } catch (error) {
       // Handle extension context invalidation
       window.postMessage({
@@ -73,22 +158,31 @@
         id,
         error: { message: error.message || 'Extension communication failed' },
         source: EXTENSION_ID
-      }, '*');
+      }, window.location.origin);
     }
   });
 
   /**
    * Listen for events from background service worker
+   * Security: Verify sender is our extension
    */
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Security: Only accept messages from our own extension
+    if (sender.id !== chrome.runtime.id) {
+      debugWarn('[Sultan Content] Rejected message from unknown sender:', sender.id);
+      return;
+    }
+    
     if (message.type === 'SULTAN_PROVIDER_EVENT') {
-      // Forward event to inpage provider
+      debugLog('[Sultan Content] Received event from background:', message.eventName, message.payload);
+      // Forward event to inpage provider (use specific origin)
       window.postMessage({
         type: 'SULTAN_PROVIDER_EVENT',
         eventName: message.eventName,
         payload: message.payload,
         source: EXTENSION_ID
-      }, '*');
+      }, window.location.origin);
+      sendResponse({ received: true });
     }
     
     // Return true to indicate we may respond asynchronously
