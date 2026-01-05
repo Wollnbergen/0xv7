@@ -1,0 +1,147 @@
+name: Wallet Extension CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'wallet-extension/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'wallet-extension/**'
+
+defaults:
+  run:
+    working-directory: wallet-extension
+
+jobs:
+  parity-check:
+    name: PWA ↔ Extension Parity
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wallet-extension/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Verify PWA ↔ Extension Parity
+        run: npm run verify:parity
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: parity-check
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wallet-extension/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run tests
+        run: npm test
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: wallet-extension/coverage/lcov.info
+          flags: wallet-extension
+
+  build:
+    name: Build PWA & Extension
+    runs-on: ubuntu-latest
+    needs: [parity-check, test]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wallet-extension/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build PWA
+        run: npm run build
+      
+      - name: Build Extension
+        run: npm run build:extension
+      
+      - name: Verify builds exist
+        run: |
+          test -d dist || (echo "PWA build missing" && exit 1)
+          test -d dist-extension || (echo "Extension build missing" && exit 1)
+          test -f dist-extension/background.js || (echo "background.js missing" && exit 1)
+          test -f dist-extension/manifest.json || (echo "manifest.json missing" && exit 1)
+      
+      - name: Upload PWA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sultan-wallet-pwa
+          path: wallet-extension/dist/
+          retention-days: 14
+      
+      - name: Upload Extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sultan-wallet-extension
+          path: wallet-extension/dist-extension/
+          retention-days: 14
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: parity-check
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wallet-extension/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      
+      - name: Check for forbidden patterns
+        run: |
+          # Check for eval()
+          if grep -r "eval(" src/ --include="*.ts" --include="*.tsx"; then
+            echo "❌ eval() found in source code"
+            exit 1
+          fi
+          
+          # Check for Math.random() in crypto context
+          if grep -r "Math.random" src/core/ --include="*.ts"; then
+            echo "❌ Math.random() found in core/ - use crypto.getRandomValues()"
+            exit 1
+          fi
+          
+          echo "✅ No forbidden patterns found"

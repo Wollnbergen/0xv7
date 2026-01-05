@@ -7,9 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:extension": "tsc -b && vite build --config vite.config.extension.ts",
+    "build:all": "npm run build && npm run build:extension",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:parity": "node scripts/verify-parity.mjs",
+    "precommit": "npm run verify:parity && npm run test",
     "dev:client": "vite dev --port 5000",
     "package:chrome": "npm run build:extension && cd dist-extension && zip -r ../sultan-wallet-chrome.zip .",
     "package:firefox": "npm run build:extension && cd dist-extension && zip -r ../sultan-wallet-firefox.zip ."
