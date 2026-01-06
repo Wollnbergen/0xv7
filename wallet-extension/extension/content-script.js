@@ -18,6 +18,10 @@
 
   const EXTENSION_ID = 'sultan-wallet';
   
+  // Version stamp for debugging cache issues
+  const CONTENT_SCRIPT_VERSION = '2.0.0-staking';
+  console.log('[Sultan Content] Loaded version:', CONTENT_SCRIPT_VERSION);
+  
   // Production mode - disable verbose logging
   const IS_PRODUCTION = true;
   const debugLog = (...args) => { if (!IS_PRODUCTION) console.log(...args); };
@@ -43,7 +47,7 @@
   const ALLOWED_METHODS = Object.freeze([
     'connect', 'disconnect', 'checkConnection',
     'getBalance', 'signMessage', 'signTransaction',
-    'addToken', 'getNetwork'
+    'addToken', 'getNetwork', 'getStakingInfo', 'getValidators'
   ]);
 
   /**
