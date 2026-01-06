@@ -9,7 +9,6 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../hooks/useWallet';
 import PinInput from '../components/PinInput';
 import MnemonicDisplay from '../components/MnemonicDisplay';
-import BackgroundAnimation from '../components/BackgroundAnimation';
 import './CreateWallet.css';
 
 type Step = 'pin' | 'confirm-pin' | 'mnemonic' | 'verify';
@@ -93,7 +92,6 @@ export default function CreateWallet() {
   if (isLoading) {
     return (
       <>
-        <BackgroundAnimation />
         <div className="create-screen">
           <div className="create-content">
             <div className="spinner" />
@@ -106,7 +104,6 @@ export default function CreateWallet() {
 
   return (
     <>
-      <BackgroundAnimation />
       <div className="create-screen">
         <div className="create-content fade-in">
           {step === 'pin' && (

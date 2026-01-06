@@ -10,7 +10,6 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../hooks/useWallet';
 import PinInput from '../components/PinInput';
 import TOTPVerify from '../components/TOTPVerify';
-import BookmarkReminder from '../components/BookmarkReminder';
 import { is2FAEnabled } from '../core/totp';
 import { getPendingApprovals, isExtensionContext } from '../core/extension-bridge';
 import './Unlock.css';
@@ -152,7 +151,6 @@ export default function Unlock() {
 
   return (
     <div className="unlock-screen">
-      <BookmarkReminder />
       <div className="unlock-content fade-in">
         <div className="sultan-icon">
           <SultanLogo size={64} isDark={isDark} />

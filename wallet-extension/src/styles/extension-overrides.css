@@ -35,7 +35,7 @@ body {
   position: relative !important;
 }
 
-/* All screen containers - allow natural height for scrolling */
+/* All screen containers - fixed 600px height to fill extension popup */
 .dashboard-screen,
 .settings-screen,
 .stake-screen,
@@ -45,16 +45,52 @@ body {
 .send-screen,
 .receive-screen,
 .become-validator-screen,
-.connected-apps-screen {
+.connected-apps-screen,
+.validator-screen {
+  height: 600px !important;
   min-height: 600px !important;
-  height: auto !important;
-  overflow: visible !important;
+  max-height: 600px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
   position: relative !important;
-  padding-bottom: 80px !important;
+  background: var(--bg-gradient) !important;
+}
+
+/* Content areas fill remaining space and scroll */
+.send-content,
+.stake-content,
+.nft-content,
+.governance-content,
+.settings-content,
+.receive-content,
+.validator-content,
+.activity-content {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--bg-gradient) !important;
+}
+
+/* Empty states fill content area */
+.nft-empty,
+.nft-loading,
+.nft-error,
+.empty-state,
+.loading-state {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 400px !important;
 }
 
 /* ============================================
-   SCREEN HEADERS - More Compact & Properly Centered
+   SCREEN HEADERS - Compact & Title Between Buttons
    ============================================ */
 
 .screen-header {
@@ -62,20 +98,30 @@ body {
   min-height: 48px !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: space-between !important;
-  position: relative !important;
+  gap: var(--ext-spacing-sm) !important;
   width: 100% !important;
+  flex-shrink: 0 !important;
 }
 
-/* Title centered between back and right icons */
+/* Title fills space between buttons - centered within that space */
 .screen-header h2 {
-  font-size: 1.1rem !important;
-  position: absolute !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
+  flex: 1 !important;
+  text-align: center !important;
+  font-size: 1rem !important;
   margin: 0 !important;
   padding: 0 !important;
   white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Header button groups */
+.header-left,
+.header-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  flex-shrink: 0 !important;
 }
 
 /* Header buttons - compact */
@@ -93,12 +139,6 @@ body {
 .screen-header .theme-toggle svg {
   width: 16px !important;
   height: 16px !important;
-}
-
-.header-right {
-  display: flex !important;
-  gap: 4px !important;
-  flex-shrink: 0 !important;
 }
 
 /* Override inline styles on header icon groups */
@@ -375,12 +415,80 @@ body {
 }
 
 /* ============================================
-   SEND/RECEIVE SCREENS - Compact Forms
+   SEND/RECEIVE SCREENS - Fill 600px
    ============================================ */
 
 .send-screen,
 .receive-screen {
+  height: 600px !important;
+  min-height: 600px !important;
+  max-height: 600px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  background: var(--bg-gradient) !important;
+}
+
+.send-content,
+.receive-content {
+  flex: 1 1 auto !important;
   padding: var(--ext-spacing-md) !important;
+  padding-bottom: 16px !important;
+  overflow-y: auto !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--bg-gradient) !important;
+}
+
+/* Push Continue button to bottom of send screen */
+.send-content > .btn-primary,
+.send-content > .btn.btn-primary {
+  margin-top: auto !important;
+  flex-shrink: 0 !important;
+}
+
+/* Fee notice stays with form, button goes to bottom */
+.send-content .fee-notice {
+  margin-bottom: auto !important;
+}
+
+/* ============================================
+   STAKE SCREEN - Fill 600px
+   ============================================ */
+
+.stake-screen {
+  height: 600px !important;
+  min-height: 600px !important;
+  max-height: 600px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  background: var(--bg-gradient) !important;
+}
+
+.stake-content {
+  flex: 1 1 auto !important;
+  padding: var(--ext-spacing-md) !important;
+  padding-bottom: 16px !important;
+  overflow-y: auto !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--bg-gradient) !important;
+}
+
+/* Push Stake SLTN button to bottom */
+.stake-form {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+}
+
+.stake-form > .btn-primary,
+.stake-form > .btn.btn-primary {
+  margin-top: auto !important;
+  flex-shrink: 0 !important;
 }
 
 .form-group {
@@ -448,7 +556,7 @@ body {
    STAKING - Compact Cards
    ============================================ */
 
-.stake-screen {
+.stake-content {
   padding: var(--ext-spacing-md) !important;
 }
 
@@ -831,15 +939,80 @@ body::-webkit-scrollbar-thumb:hover {
 }
 
 /* ============================================
-   NFT SCREEN
+   NFT SCREEN - Fill 600px, NO floating lines
    ============================================ */
 
 .nft-screen {
+  height: 600px !important;
+  min-height: 600px !important;
+  max-height: 600px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
   padding: 0 !important;
+  background: var(--bg-gradient) !important;
+}
+
+/* Hide any background animation in NFT screen */
+.nft-screen .background-animation,
+.nft-screen .floating-lines {
+  display: none !important;
 }
 
 .nft-content {
+  flex: 1 1 auto !important;
   padding: var(--ext-spacing-md) !important;
+  overflow-y: auto !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--bg-gradient) !important;
+}
+
+/* NFT empty state - fill available space and center content */
+.nft-empty {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 450px !important;
+  height: 100% !important;
+  background: transparent !important;
+  text-align: center !important;
+  padding: 20px !important;
+}
+
+/* NFT loading state */
+.nft-loading {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 450px !important;
+  text-align: center !important;
+}
+
+.nft-empty .empty-icon {
+  width: 80px !important;
+  height: 80px !important;
+  margin-bottom: 24px !important;
+  opacity: 0.7 !important;
+}
+
+.nft-empty h3 {
+  font-size: 1.25rem !important;
+  margin-bottom: 12px !important;
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+}
+
+.nft-empty p {
+  font-size: 0.9rem !important;
+  color: var(--text-muted) !important;
+  max-width: 280px !important;
+  line-height: 1.5 !important;
 }
 
 .nft-stats {
@@ -1072,6 +1245,40 @@ body::-webkit-scrollbar-thumb:hover {
    MNEMONIC DISPLAY - Compact Grid
    ============================================ */
 
+.mnemonic-display {
+  width: 100% !important;
+}
+
+.mnemonic-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-bottom: 12px !important;
+}
+
+.mnemonic-header .visibility-toggle,
+.mnemonic-header .copy-btn {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 0.8rem !important;
+  cursor: pointer !important;
+  color: var(--text-primary) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 36px !important;
+  min-width: 80px !important;
+  box-sizing: border-box !important;
+}
+
+.mnemonic-header .visibility-toggle:hover,
+.mnemonic-header .copy-btn:hover {
+  border-color: var(--accent-primary) !important;
+}
+
 .mnemonic-grid {
   grid-template-columns: repeat(3, 1fr) !important;
   gap: 4px !important;
@@ -1082,7 +1289,8 @@ body::-webkit-scrollbar-thumb:hover {
   font-size: 0.75rem !important;
 }
 
-.mnemonic-word .word-num {
+.mnemonic-word .word-num,
+.mnemonic-word .word-index {
   font-size: 0.6rem !important;
 }
 

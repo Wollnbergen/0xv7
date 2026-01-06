@@ -30,8 +30,53 @@
     <meta name="description" content="SLTN Wallet - Zero-fee blockchain wallet for SLTN" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>SLTN Wallet</title>
-    <script type="module" crossorigin src="/assets/index-CvDyrwqw.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DEbcxtsE.css">
+    <!-- Extension popup dimensions -->
+    <style>
+      html {
+        width: 380px !important;
+        min-width: 380px !important;
+        max-width: 380px !important;
+        height: 600px !important;
+        min-height: 600px !important;
+        max-height: 600px !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      body {
+        width: 380px !important;
+        height: 600px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        position: relative !important;
+      }
+      #root {
+        width: 380px !important;
+        height: 600px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        position: relative !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      /* All screens scroll within root */
+      .dashboard-screen,
+      .settings-screen,
+      .stake-screen,
+      .governance-screen,
+      .activity-screen,
+      .nft-screen,
+      .send-screen,
+      .receive-screen,
+      .become-validator-screen {
+        min-height: auto !important;
+        height: auto !important;
+        overflow: visible !important;
+        position: relative !important;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-C5gy4S_5.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BASWkszI.css">
   <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
   <body>
     <div id="root"></div>

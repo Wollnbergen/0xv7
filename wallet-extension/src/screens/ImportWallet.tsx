@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../hooks/useWallet';
 import PinInput from '../components/PinInput';
-import BackgroundAnimation from '../components/BackgroundAnimation';
 import './ImportWallet.css';
 
 type Step = 'mnemonic' | 'pin' | 'confirm-pin';
@@ -98,7 +97,6 @@ export default function ImportWallet() {
   if (isLoading) {
     return (
       <>
-        <BackgroundAnimation />
         <div className="import-screen">
           <div className="import-content">
             <div className="spinner" />
@@ -111,7 +109,6 @@ export default function ImportWallet() {
 
   return (
     <>
-      <BackgroundAnimation />
       <div className="import-screen">
         <div className="import-content fade-in">
           {step === 'mnemonic' && (

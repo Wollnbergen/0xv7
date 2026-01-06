@@ -13,7 +13,6 @@ import PinInput from '../components/PinInput';
 import MnemonicDisplay from '../components/MnemonicDisplay';
 import TOTPSetup from '../components/TOTPSetup';
 import { is2FAEnabled } from '../core/totp';
-import BackgroundAnimation from '../components/BackgroundAnimation';
 import './Settings.css';
 
 // Premium SVG Icons
@@ -139,7 +138,6 @@ export default function Settings() {
 
   return (
     <div className="settings-screen">
-      <BackgroundAnimation />
       <header className="screen-header">
         <button className="btn-back" onClick={() => navigate('/dashboard')}>
           <BackIcon />
@@ -251,7 +249,7 @@ export default function Settings() {
           <div className="setting-item">
             <div className="setting-info">
               <span className="setting-label">Version</span>
-              <span className="setting-value">1.0.0</span>
+              <span className="setting-value">1.6.0</span>
             </div>
           </div>
           

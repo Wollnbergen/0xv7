@@ -404,6 +404,102 @@
     }
 
     /**
+     * Get staking information for the connected wallet
+     * @returns {Promise<{address: string, staked: string, pendingRewards: string, stakingAPY: number, validator?: string}>}
+     */
+    async getStakingInfo() {
+      if (!isConnectedState) {
+        throw new Error('Wallet not connected');
+      }
+      return sendMessage('getStakingInfo');
+    }
+
+    /**
+     * Get list of available validators
+     * @returns {Promise<Array<{address: string, name: string, totalStaked: string, commission: number, uptime: number, status: string}>>}
+     */
+    async getValidators() {
+      return sendMessage('getValidators');
+    }
+
+    /**
+     * Stake tokens to a validator
+     * Opens extension popup for user approval
+     * @param {string} validatorAddress - The validator address to stake to
+     * @param {string} amount - Amount in base units (atomic)
+     * @returns {Promise<{signature: string, publicKey: string, txHash: string}>}
+     */
+    async stake(validatorAddress, amount) {
+      if (!isConnectedState) {
+        throw new Error('Wallet not connected');
+      }
+
+      // Security: Validate inputs
+      if (!validatorAddress || typeof validatorAddress !== 'string') {
+        throw new Error('Invalid validator address');
+      }
+      if (!amount || (typeof amount !== 'string' && typeof amount !== 'number')) {
+        throw new Error('Invalid amount');
+      }
+
+      const transaction = {
+        type: 'stake',
+        to: validatorAddress,
+        amount: String(amount),
+      };
+
+      return sendMessage('signTransaction', { transaction, broadcast: true });
+    }
+
+    /**
+     * Unstake tokens from a validator
+     * Opens extension popup for user approval
+     * @param {string} validatorAddress - The validator address to unstake from
+     * @param {string} amount - Amount in base units (atomic)
+     * @returns {Promise<{signature: string, publicKey: string, txHash: string}>}
+     */
+    async unstake(validatorAddress, amount) {
+      if (!isConnectedState) {
+        throw new Error('Wallet not connected');
+      }
+
+      // Security: Validate inputs
+      if (!validatorAddress || typeof validatorAddress !== 'string') {
+        throw new Error('Invalid validator address');
+      }
+      if (!amount || (typeof amount !== 'string' && typeof amount !== 'number')) {
+        throw new Error('Invalid amount');
+      }
+
+      const transaction = {
+        type: 'unstake',
+        to: validatorAddress,
+        amount: String(amount),
+      };
+
+      return sendMessage('signTransaction', { transaction, broadcast: true });
+    }
+
+    /**
+     * Claim staking rewards
+     * Opens extension popup for user approval
+     * @param {string} [validatorAddress] - Optional specific validator, or all if not specified
+     * @returns {Promise<{signature: string, publicKey: string, txHash: string}>}
+     */
+    async claimRewards(validatorAddress) {
+      if (!isConnectedState) {
+        throw new Error('Wallet not connected');
+      }
+
+      const transaction = {
+        type: 'claimRewards',
+        to: validatorAddress || '',
+      };
+
+      return sendMessage('signTransaction', { transaction, broadcast: true });
+    }
+
+    /**
      * Check connection status with background (useful on page load)
      * @returns {Promise<{connected: boolean, address?: string, publicKey?: string}>}
      */

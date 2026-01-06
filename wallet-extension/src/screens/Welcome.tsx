@@ -8,7 +8,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BackgroundAnimation from '../components/BackgroundAnimation';
-import BookmarkReminder from '../components/BookmarkReminder';
 import { isExtensionContext, getPendingApprovals, rejectRequest } from '../core/extension-bridge';
 import './Welcome.css';
 
@@ -90,7 +89,6 @@ export default function Welcome() {
   return (
     <>
       <BackgroundAnimation />
-      <BookmarkReminder />
       <div className="welcome-screen">
 
         <div className="welcome-content fade-in">
