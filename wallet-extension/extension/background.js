@@ -207,7 +207,7 @@ function isValidMethod(method) {
   const allowedMethods = [
     'connect', 'disconnect', 'checkConnection',
     'getBalance', 'signMessage', 'signTransaction',
-    'addToken', 'getNetwork'
+    'addToken', 'getNetwork', 'getStakingInfo', 'getValidators'
   ];
   return typeof method === 'string' && allowedMethods.includes(method);
 }
@@ -662,6 +662,89 @@ async function handleRpcRequest(method, params, origin) {
           rpcUrl: rpcUrl
         }
       };
+    }
+
+    case 'getStakingInfo': {
+      const conn = getConnection(origin);
+      if (!conn) {
+        return { error: { message: 'Not connected' } };
+      }
+
+      try {
+        const rpcUrl = await getRpcUrl();
+        const response = await fetch(`${rpcUrl}/staking/delegations/${conn.address}`);
+        const delegations = await response.json();
+        
+        // Sum up all delegations
+        const totalStaked = Array.isArray(delegations) 
+          ? delegations.reduce((sum, d) => sum + (d.amount || 0), 0)
+          : 0;
+        const totalRewards = Array.isArray(delegations)
+          ? delegations.reduce((sum, d) => sum + (d.rewards_accumulated || 0), 0)
+          : 0;
+        const firstValidator = Array.isArray(delegations) && delegations.length > 0 
+          ? delegations[0].validator_address 
+          : undefined;
+
+        return {
+          result: {
+            address: conn.address,
+            staked: totalStaked.toString(),
+            pendingRewards: totalRewards.toString(),
+            stakingAPY: 13.33,
+            validator: firstValidator
+          }
+        };
+      } catch (error) {
+        // Return zero staking info on error (user may not have staked)
+        return {
+          result: {
+            address: conn.address,
+            staked: '0',
+            pendingRewards: '0',
+            stakingAPY: 13.33
+          }
+        };
+      }
+    }
+
+    case 'getValidators': {
+      try {
+        const rpcUrl = await getRpcUrl();
+        const response = await fetch(`${rpcUrl}/staking/validators`);
+        const validators = await response.json();
+        
+        if (!Array.isArray(validators) || validators.length === 0) {
+          return { result: [] };
+        }
+
+        // Map validator names
+        const validatorNames = {
+          'sultanval1london': 'London Validator',
+          'sultanval2singapore': 'Singapore Validator',
+          'sultanval3amsterdam': 'Amsterdam Validator',
+          'sultanval6newyork': 'New York Validator',
+        };
+
+        const result = validators.map(v => {
+          const name = validatorNames[v.validator_address] || v.validator_address;
+          const totalBlocks = (v.blocks_signed || 0) + (v.blocks_missed || 0);
+          const uptime = totalBlocks > 0 ? (v.blocks_signed / totalBlocks) * 100 : 99.9;
+          
+          return {
+            address: v.validator_address,
+            name: name,
+            totalStaked: (v.total_stake || 0).toString(),
+            commission: v.commission_rate || 0.05,
+            uptime: Math.round(uptime * 10) / 10,
+            status: v.jailed ? 'jailed' : 'active'
+          };
+        });
+
+        return { result };
+      } catch (error) {
+        return { result: [] };
+      }
     }
 
     default:
