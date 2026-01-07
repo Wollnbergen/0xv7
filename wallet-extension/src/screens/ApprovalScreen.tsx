@@ -2,11 +2,12 @@
  * Sultan Wallet - Approval Screen
  * 
  * Displays pending dApp approval requests and allows user to approve/reject.
+ * Includes transaction simulation preview and "Remember this site" option.
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, X, Check, AlertTriangle, Globe, FileText, ArrowRightLeft, Coins } from 'lucide-react';
+import { Shield, X, Check, AlertTriangle, Globe, FileText, ArrowRightLeft, Coins, Star } from 'lucide-react';
 import { useWallet } from '../hooks/useWallet';
 import { broadcastTransaction } from '../api/sultanAPI';
 import {
@@ -16,8 +17,11 @@ import {
   rejectRequest,
   formatOrigin,
   getFaviconUrl,
-  isExtensionContext
+  isExtensionContext,
+  addTrustedSite,
+  isTrustedSite
 } from '../core/extension-bridge';
+import { TransactionSimulation } from '../components/TransactionSimulation';
 import '../styles/approval.css';
 
 export function ApprovalScreen() {
@@ -28,6 +32,8 @@ export function ApprovalScreen() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [rememberSite, setRememberSite] = useState(false);
+  const [alreadyTrusted, setAlreadyTrusted] = useState(false);
 
   // Security check: Must have wallet created and unlocked
   useEffect(() => {
@@ -73,6 +79,18 @@ export function ApprovalScreen() {
   }, [navigate]);
 
   const current = approvals[currentIndex];
+
+  // Check if current site is already trusted
+  useEffect(() => {
+    async function checkTrusted() {
+      if (!current) return;
+      const trusted = await isTrustedSite(current.origin, current.type as any);
+      setAlreadyTrusted(trusted);
+      // Reset remember checkbox when changing requests
+      setRememberSite(false);
+    }
+    checkTrusted();
+  }, [current]);
 
   const handleApprove = async () => {
     if (!current || !wallet || !currentAccount) return;
@@ -153,6 +171,11 @@ export function ApprovalScreen() {
       }
 
       await approveRequest(current.id, result);
+
+      // Save to trusted sites if "remember" was checked
+      if (rememberSite && current.type === 'connect') {
+        await addTrustedSite(current.origin, formatOrigin(current.origin), ['connect']);
+      }
       
       // Move to next or close
       if (currentIndex < approvals.length - 1) {
@@ -316,12 +339,17 @@ export function ApprovalScreen() {
         )}
 
         {current.type === 'signTransaction' && (
-          <div className="transaction-preview">
-            <span className="detail-label">Transaction</span>
-            <pre className="transaction-content">
-              {JSON.stringify(current.data.transaction, null, 2)}
-            </pre>
-          </div>
+          <>
+            <TransactionSimulation 
+              transaction={current.data.transaction as any}
+            />
+            <div className="transaction-preview">
+              <span className="detail-label">Raw Transaction</span>
+              <pre className="transaction-content">
+                {JSON.stringify(current.data.transaction, null, 2)}
+              </pre>
+            </div>
+          </>
         )}
 
         {current.type === 'addToken' && (
@@ -343,6 +371,26 @@ export function ApprovalScreen() {
         <AlertTriangle className="warning-icon" />
         <span>Only approve requests from sites you trust</span>
       </div>
+
+      {/* Remember This Site */}
+      {current.type === 'connect' && !alreadyTrusted && (
+        <label className="remember-site-option">
+          <input
+            type="checkbox"
+            checked={rememberSite}
+            onChange={(e) => setRememberSite(e.target.checked)}
+          />
+          <Star className="remember-icon" size={16} />
+          <span>Remember this site (auto-approve future connections)</span>
+        </label>
+      )}
+
+      {alreadyTrusted && (
+        <div className="trusted-badge">
+          <Star className="trusted-icon" size={16} />
+          <span>Trusted site</span>
+        </div>
+      )}
 
       {/* Error */}
       {error && (

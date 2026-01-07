@@ -131,3 +131,108 @@ export function formatOrigin(origin: string): string {
 export function getFaviconUrl(origin: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(origin)}&sz=64`;
 }
+
+/**
+ * Trusted site info (auto-approve connections)
+ */
+export interface TrustedSite {
+  origin: string;
+  name: string;
+  addedAt: number;
+  permissions: ('connect' | 'signMessage' | 'signTransaction')[];
+}
+
+const TRUSTED_SITES_KEY = 'sultan_trusted_sites';
+
+/**
+ * Get all trusted sites
+ */
+export async function getTrustedSites(): Promise<TrustedSite[]> {
+  if (!isExtensionContext()) {
+    // Fallback to localStorage for PWA
+    const stored = localStorage.getItem(TRUSTED_SITES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  }
+  
+  return new Promise<TrustedSite[]>((resolve) => {
+    chrome.storage.local.get([TRUSTED_SITES_KEY], (result) => {
+      const sites = result[TRUSTED_SITES_KEY] as TrustedSite[] | undefined;
+      resolve(sites || []);
+    });
+  });
+}
+
+/**
+ * Add a trusted site
+ */
+export async function addTrustedSite(
+  origin: string, 
+  name: string,
+  permissions: TrustedSite['permissions'] = ['connect']
+): Promise<void> {
+  const sites = await getTrustedSites();
+  
+  // Check if already exists
+  const existing = sites.find(s => s.origin === origin);
+  if (existing) {
+    // Update permissions
+    existing.permissions = [...new Set([...existing.permissions, ...permissions])];
+    existing.addedAt = Date.now();
+  } else {
+    sites.push({
+      origin,
+      name,
+      addedAt: Date.now(),
+      permissions,
+    });
+  }
+  
+  if (!isExtensionContext()) {
+    localStorage.setItem(TRUSTED_SITES_KEY, JSON.stringify(sites));
+    return;
+  }
+  
+  return new Promise<void>((resolve) => {
+    chrome.storage.local.set({ [TRUSTED_SITES_KEY]: sites }, () => resolve());
+  });
+}
+
+/**
+ * Remove a trusted site
+ */
+export async function removeTrustedSite(origin: string): Promise<void> {
+  const sites = await getTrustedSites();
+  const filtered = sites.filter(s => s.origin !== origin);
+  
+  if (!isExtensionContext()) {
+    localStorage.setItem(TRUSTED_SITES_KEY, JSON.stringify(filtered));
+    return;
+  }
+  
+  return new Promise<void>((resolve) => {
+    chrome.storage.local.set({ [TRUSTED_SITES_KEY]: filtered }, () => resolve());
+  });
+}
+
+/**
+ * Check if origin is trusted for a specific permission
+ */
+export async function isTrustedSite(origin: string, permission: TrustedSite['permissions'][0] = 'connect'): Promise<boolean> {
+  const sites = await getTrustedSites();
+  const site = sites.find(s => s.origin === origin);
+  return site ? site.permissions.includes(permission) : false;
+}
+
+/**
+ * Clear all trusted sites
+ */
+export async function clearTrustedSites(): Promise<void> {
+  if (!isExtensionContext()) {
+    localStorage.removeItem(TRUSTED_SITES_KEY);
+    return;
+  }
+  
+  return new Promise<void>((resolve) => {
+    chrome.storage.local.remove([TRUSTED_SITES_KEY], () => resolve());
+  });
+}
