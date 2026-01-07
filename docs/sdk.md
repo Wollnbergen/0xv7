@@ -409,6 +409,118 @@ async function main() {
 
 ---
 
+## Wallet Integration (dApps)
+
+Connect your dApp to Sultan Wallet (browser extension or mobile PWA). The SDK automatically handles:
+
+- **Desktop browsers**: Uses browser extension if installed
+- **Mobile browsers**: Opens PWA wallet via deep link
+- **Mobile-to-mobile**: Seamless app switching with session handoff
+
+### Installation
+
+```bash
+npm install @sultan/wallet-sdk
+```
+
+### Basic Usage
+
+```typescript
+import { SultanWalletSDK } from '@sultan/wallet-sdk';
+
+const wallet = new SultanWalletSDK();
+
+// Connect - auto-detects extension vs mobile
+const account = await wallet.connect();
+console.log('Connected:', account.address);
+
+// Sign a transaction
+const signed = await wallet.signTransaction({
+  to: 'sultan1recipient...',
+  amount: '1000000000', // 1 SLTN
+  memo: 'Payment'
+});
+```
+
+### Connection Options
+
+```typescript
+const wallet = new SultanWalletSDK({
+  // Force WalletLink even if extension is available
+  forceWalletLink: false,
+  
+  // Custom relay server (default: wss://relay.sltn.io)
+  relayUrl: 'wss://relay.sltn.io',
+  
+  // Container for QR code (desktop) or connect button (mobile)
+  qrContainerId: 'wallet-connect-container',
+  
+  // Callbacks
+  onQRReady: (qrData) => console.log('QR ready'),
+  onDeepLinkReady: (url) => console.log('Deep link:', url),
+  onWaiting: () => console.log('Waiting for wallet...'),
+  
+  // Auto-redirect on mobile (default: true)
+  autoRedirectMobile: true,
+});
+```
+
+### Mobile-to-Mobile Connection
+
+When your dApp runs in a mobile browser and the user doesn't have the extension, the SDK automatically:
+
+1. Generates a WalletLink session
+2. Creates a deep link: `https://wallet.sltn.io/connect?session=...`
+3. Shows an "Open Sultan Wallet" button
+4. Auto-redirects to wallet after 500ms
+5. Wallet shows connection approval screen
+6. On approval, redirects back to your dApp
+
+```typescript
+// The SDK handles this automatically, but you can customize:
+const wallet = new SultanWalletSDK({
+  qrContainerId: 'connect-area',
+  autoRedirectMobile: true,
+  onDeepLinkReady: (deepLink) => {
+    // Custom handling if needed
+    console.log('Wallet deep link:', deepLink);
+  }
+});
+```
+
+### Event Handling
+
+```typescript
+// Listen for account changes
+wallet.on('accountChange', (account) => {
+  console.log('New account:', account.address);
+});
+
+// Listen for disconnect
+wallet.on('disconnect', () => {
+  console.log('Wallet disconnected');
+});
+
+// Clean disconnect
+wallet.disconnect();
+```
+
+### Check Wallet Availability
+
+```typescript
+// Check if extension is installed
+if (SultanWalletSDK.isExtensionAvailable()) {
+  console.log('Extension detected');
+}
+
+// Check if on mobile
+if (SultanWalletSDK.isMobile()) {
+  console.log('Mobile browser - will use deep link');
+}
+```
+
+---
+
 ## Core API Reference
 
 ### Network Status

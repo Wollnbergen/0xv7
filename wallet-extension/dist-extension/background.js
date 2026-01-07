@@ -7,7 +7,33 @@
  * - Pending approval queue
  * - RPC communication with Sultan node
  * - Dynamic icon switching based on system color scheme
+ * 
+ * Cross-browser compatible: Chrome (MV3) and Firefox (MV2)
  */
+
+// =====================================================
+// Cross-browser compatibility layer
+// =====================================================
+
+// Detect browser type
+const IS_FIREFOX = typeof browser !== 'undefined' && browser.runtime?.id;
+const IS_CHROME = typeof chrome !== 'undefined' && chrome.runtime?.id && !IS_FIREFOX;
+
+// Use appropriate API namespace
+const browserAPI = IS_FIREFOX ? browser : chrome;
+
+/**
+ * Get the action/browserAction API (MV3 uses action, MV2 uses browserAction)
+ */
+function getActionAPI() {
+  if (browserAPI.action) {
+    return browserAPI.action;
+  }
+  if (browserAPI.browserAction) {
+    return browserAPI.browserAction;
+  }
+  return null;
+}
 
 // Production RPC endpoints (HTTPS required)
 const SULTAN_RPC_URLS = [
@@ -336,17 +362,31 @@ loadBlocklist();
  */
 function updateIcon(isDark) {
   const suffix = isDark ? '-dark' : '-light';
-  chrome.action.setIcon({
-    path: {
-      16: `icons/icon-16${suffix}.png`,
-      32: `icons/icon-32${suffix}.png`,
-      48: `icons/icon-48${suffix}.png`,
-      128: `icons/icon-128${suffix}.png`
-    }
-  }).catch(err => {
-    // Fallback to default icons if themed ones don't exist
-    debugLog('[Sultan BG] Themed icons not found, using defaults');
-  });
+  const actionAPI = getActionAPI();
+  if (!actionAPI) {
+    debugLog('[Sultan BG] Action API not available');
+    return;
+  }
+  
+  const iconPaths = {
+    16: `icons/icon-16${suffix}.png`,
+    32: `icons/icon-32${suffix}.png`,
+    48: `icons/icon-48${suffix}.png`,
+    128: `icons/icon-128${suffix}.png`
+  };
+  
+  // Firefox MV2 uses callback style, Chrome MV3 uses promises
+  if (actionAPI.setIcon.length > 1 || IS_FIREFOX) {
+    actionAPI.setIcon({ path: iconPaths }, () => {
+      if (chrome.runtime.lastError) {
+        debugLog('[Sultan BG] Themed icons not found, using defaults');
+      }
+    });
+  } else {
+    actionAPI.setIcon({ path: iconPaths }).catch(err => {
+      debugLog('[Sultan BG] Themed icons not found, using defaults');
+    });
+  }
 }
 
 /**
@@ -457,11 +497,17 @@ function createApprovalRequest(type, origin, data) {
       createdAt: Date.now()
     });
 
-    // Open popup for approval
-    chrome.action.openPopup().catch(() => {
-      // Popup may already be open or blocked
-      // User can click the extension icon
-    });
+    // Open popup for approval (if API available)
+    const actionAPI = getActionAPI();
+    if (actionAPI && actionAPI.openPopup) {
+      // Chrome MV3 supports openPopup
+      actionAPI.openPopup().catch(() => {
+        // Popup may already be open or blocked
+        // User can click the extension icon
+      });
+    }
+    // Firefox MV2 doesn't support programmatic popup opening
+    // User must click the extension icon
 
     // Timeout after 5 minutes
     setTimeout(() => {

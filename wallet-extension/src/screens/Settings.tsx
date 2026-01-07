@@ -214,6 +214,14 @@ export default function Settings() {
             <span className="setting-arrow"><ChevronRightIcon /></span>
           </div>
           
+          <div className="setting-item" onClick={() => navigate('/walletlink')}>
+            <div className="setting-info">
+              <span className="setting-label">WalletLink</span>
+              <span className="setting-hint">Connect to desktop dApps via QR</span>
+            </div>
+            <span className="setting-arrow"><ChevronRightIcon /></span>
+          </div>
+          
           <div className="setting-item" onClick={() => setModal('totp')}>
             <div className="setting-info">
               <span className="setting-label">Two-Factor Authentication</span>

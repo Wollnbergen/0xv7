@@ -19,6 +19,8 @@ import Governance from './screens/Governance';
 import NFTs from './screens/NFTs';
 import { ApprovalScreen } from './screens/ApprovalScreen';
 import { ConnectedAppsScreen } from './screens/ConnectedAppsScreen';
+import { WalletLinkScreen } from './components/WalletLinkScreen';
+import { DeepLinkConnect } from './components/DeepLinkConnect';
 
 function App() {
   const { isInitialized, isLocked, isLoading } = useWallet();
@@ -124,6 +126,18 @@ function App() {
       <Route 
         path="/connected-apps" 
         element={isInitialized && !isLocked ? <ConnectedAppsScreen /> : <Navigate to="/" replace />} 
+      />
+      <Route 
+        path="/walletlink" 
+        element={isInitialized && !isLocked ? <WalletLinkScreen /> : <Navigate to="/" replace />} 
+      />
+      <Route 
+        path="/connect" 
+        element={
+          !isInitialized ? <Navigate to="/" replace /> :
+          isLocked ? <Navigate to="/unlock" replace /> :
+          <DeepLinkConnect />
+        } 
       />
       
       {/* Fallback */}
