@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Sultan Wallet</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --text: #e5e5e5;
+      --text-muted: #a3a3a3;
+      --accent: #d4af37;
+      --border: #262626;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 40px 20px;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .logo {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+    
+    .updated {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    
+    h2 {
+      font-size: 1.5rem;
+      color: var(--accent);
+      margin: 40px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    h3 {
+      font-size: 1.2rem;
+      margin: 24px 0 12px;
+    }
+    
+    p {
+      margin-bottom: 16px;
+      color: var(--text-muted);
+    }
+    
+    .highlight {
+      background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin: 24px 0;
+    }
+    
+    .highlight p {
+      color: var(--text);
+      font-weight: 500;
+      margin: 0;
+    }
+    
+    ul {
+      margin: 16px 0 16px 24px;
+      color: var(--text-muted);
+    }
+    
+    li {
+      margin-bottom: 8px;
+    }
+    
+    .no-collect {
+      list-style: none;
+      margin-left: 0;
+    }
+    
+    .no-collect li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .no-collect li::before {
+      content: "❌";
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+    
+    th, td {
+      text-align: left;
+      padding: 12px;
+      border: 1px solid var(--border);
+    }
+    
+    th {
+      background: rgba(212, 175, 55, 0.1);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    
+    td {
+      color: var(--text-muted);
+    }
+    
+    .security-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      list-style: none;
+      margin-left: 0;
+    }
+    
+    .security-list li {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .security-list li::before {
+      content: "✓";
+      color: #22c55e;
+      font-weight: bold;
+    }
+    
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    
+    a:hover {
+      text-decoration: underline;
+    }
+    
+    footer {
+      margin-top: 64px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+    }
+    
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 16px;
+    }
+    
+    @media (max-width: 600px) {
+      h1 { font-size: 1.75rem; }
+      h2 { font-size: 1.25rem; }
+      .security-list { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">👑</div>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last Updated: January 7, 2026</p>
+    </header>
+
+    <main>
+      <div class="highlight">
+        <p>🔒 We do not collect, store, or transmit any personal data to external servers. Sultan Wallet operates entirely locally on your device.</p>
+      </div>
+
+      <h2>Information We Do NOT Collect</h2>
+      <ul class="no-collect">
+        <li>Personal identification information</li>
+        <li>Email addresses or contact information</li>
+        <li>Browsing history or web activity</li>
+        <li>IP addresses or location data</li>
+        <li>Analytics or usage tracking data</li>
+        <li>Cookies or tracking identifiers</li>
+      </ul>
+
+      <h2>Data Storage</h2>
+      <h3>Local Storage Only</h3>
+      <p>All wallet data is stored exclusively on your device using your browser's secure local storage mechanisms.</p>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Data Type</th>
+            <th>Storage Method</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Encrypted seed phrase</td>
+            <td>AES-256-GCM encrypted</td>
+            <td>Wallet recovery</td>
+          </tr>
+          <tr>
+            <td>Derived addresses</td>
+            <td>Plain text</td>
+            <td>Display and transactions</td>
+          </tr>
+          <tr>
+            <td>Connected dApps</td>
+            <td>Plain text</td>
+            <td>Remember approved sites</td>
+          </tr>
+          <tr>
+            <td>User preferences</td>
+            <td>Plain text</td>
+            <td>Theme, account names</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Network Communications</h2>
+      <p>Sultan Wallet communicates with the following external services:</p>
+      
+      <h3>1. Sultan L1 RPC Nodes</h3>
+      <p>Purpose: Query blockchain state and submit transactions. Endpoints: rpc.sltn.io, api.sltn.io</p>
+      
+      <h3>2. WalletLink Relay Server (Optional)</h3>
+      <p>Purpose: Connect mobile wallet to desktop dApps. All messages are end-to-end encrypted.</p>
+      
+      <h3>3. Favicon Service</h3>
+      <p>Purpose: Display website icons for connected dApps using Google Favicon API.</p>
+
+      <h2>Security Measures</h2>
+      <ul class="security-list">
+        <li>AES-256-GCM Encryption</li>
+        <li>PBKDF2 Key Derivation (600K iterations)</li>
+        <li>No Remote Key Storage</li>
+        <li>Content Security Policy</li>
+        <li>Rate Limiting</li>
+        <li>Phishing Detection</li>
+      </ul>
+
+      <h2>Third-Party Services</h2>
+      <p>Sultan Wallet does not integrate with any third-party analytics, advertising, or tracking services.</p>
+
+      <h2>Your Rights</h2>
+      <p>You have complete control over your data:</p>
+      <ul>
+        <li><strong>Access:</strong> View all stored data in your browser's developer tools</li>
+        <li><strong>Delete:</strong> Remove the extension to delete all associated data</li>
+        <li><strong>Export:</strong> Export your seed phrase for backup purposes</li>
+        <li><strong>Portability:</strong> Use your seed phrase in any compatible wallet</li>
+      </ul>
+
+      <h2>Open Source</h2>
+      <p>Sultan Wallet is fully open source. Review our code to verify our privacy practices:</p>
+      <p><a href="https://github.com/Wollnbergen/0xv7">github.com/Wollnbergen/0xv7</a></p>
+
+      <h2>Contact</h2>
+      <p>For privacy-related questions:</p>
+      <ul>
+        <li>Email: <a href="mailto:privacy@sltn.io">privacy@sltn.io</a></li>
+        <li>Website: <a href="https://sltn.io">sltn.io</a></li>
+      </ul>
+
+      <div class="highlight">
+        <p>By using Sultan Wallet, you acknowledge that you have read and understood this Privacy Policy.</p>
+      </div>
+    </main>
+
+    <footer>
+      <div class="footer-links">
+        <a href="https://sltn.io">Home</a>
+        <a href="https://docs.sltn.io">Documentation</a>
+        <a href="https://github.com/Wollnbergen/0xv7">GitHub</a>
+      </div>
+      <p>© 2026 Sultan Foundation. All rights reserved.</p>
+    </footer>
+  </div>
+</body>
+</html>
