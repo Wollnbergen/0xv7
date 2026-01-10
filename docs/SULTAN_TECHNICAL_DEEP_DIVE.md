@@ -1,10 +1,10 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.6  
-**Date:** January 3, 2026  
+**Version:** 3.7  
+**Date:** January 10, 2026  
 **Classification:** Public Technical Reference  
-**Binary:** v0.1.0 (SHA256: `6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51`)
+**Binary:** v0.1.4 (SHA256: `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff`)
 
 ---
 
@@ -35,7 +35,7 @@ Rust is a systems programming language known for:
 | Active Validators | Dynamic | Anyone can join with 10,000 SLTN stake |
 | Active Shards | 16 | Horizontal scaling for throughput |
 | Transaction Fees | Zero (0) | Users never pay gas fees |
-| Validator APY | 13.33% | Annual return for staking |
+| Validator APY | ~13.33% | Annual return for staking (variable) |
 
 ---
 
@@ -80,7 +80,7 @@ sultan-core/src/
 ├── main.rs               (3,395 lines) - Node binary, RPC (30+ endpoints), keygen CLI
 ├── blockchain.rs         (374 lines)  - Block/TX structures (with memo field)
 ├── consensus.rs          (1,078 lines) - Validator management (17 tests, Ed25519)
-├── p2p.rs                (1,025 lines) - libp2p networking (16 tests, Ed25519 sig verify)
+├── p2p.rs                (1,200+ lines) - libp2p networking (16 tests, Ed25519 sig verify, persistent keys, validator discovery)
 ├── block_sync.rs         (1,174 lines) - Byzantine-tolerant sync (31 tests, voter verify)
 ├── storage.rs            (1,159 lines) - RocksDB + AES-256-GCM encryption (14 tests)
 ├── economics.rs          (100 lines)  - Inflation/APY model
@@ -1119,6 +1119,81 @@ A framework for building secure channels. Used by WhatsApp, WireGuard, and Light
 
 *Why it matters:* Every connection is encrypted and authenticated. You can't eavesdrop on node traffic or inject fake messages.
 
+### 6.7 Persistent Node Identity (v0.1.4+)
+
+**The Problem:** If node keys are generated fresh on each restart, the PeerId changes. Other nodes' bootstrap peer configurations become stale.
+
+**The Solution:** Persist Ed25519 keypairs to disk.
+
+```rust
+// From p2p.rs - load_or_generate_keypair()
+const NODE_KEY_FILE: &str = "node_key.bin";
+
+pub fn load_or_generate_keypair(data_dir: &Path) -> Result<Keypair> {
+    let key_path = data_dir.join(NODE_KEY_FILE);
+    
+    if key_path.exists() {
+        // Load existing key
+        let bytes = std::fs::read(&key_path)?;
+        Ok(Keypair::ed25519_from_bytes(bytes)?)
+    } else {
+        // Generate and save new key with secure permissions (0600)
+        let keypair = Keypair::generate_ed25519();
+        std::fs::write(&key_path, keypair.to_bytes())?;
+        Ok(keypair)
+    }
+}
+```
+
+**Key Features:**
+- Keys stored in `<data-dir>/node_key.bin`
+- File permissions: 0600 (owner read/write only)
+- PeerId survives restarts
+- Enables stable bootstrap peer addressing
+
+### 6.8 P2P Validator Discovery (v0.1.4+)
+
+**The Problem:** New nodes joining the network need to discover all active validators. Previously required manual configuration.
+
+**The Solution:** Automatic validator discovery via gossipsub.
+
+**New Message Types:**
+
+```rust
+// Request full validator set (on startup or when behind)
+ValidatorSetRequest { 
+    known_count: u32  // How many validators the requester knows
+},
+
+// Response with full validator list
+ValidatorSetResponse { 
+    validators: Vec<ValidatorInfo>  // All known validators
+},
+```
+
+**Discovery Flow:**
+
+```
+New Node Joins:
+1. Connect to bootstrap peer
+2. Send ValidatorSetRequest { known_count: 0 }
+3. Receive ValidatorSetResponse with all validators
+4. Add validators to local consensus engine
+5. Begin participating in consensus
+
+Periodic Re-announcement (every 60s):
+1. Each validator broadcasts ValidatorAnnounce
+2. All nodes update their validator registry
+3. Ensures network consistency even during churn
+```
+
+**Bootstrap Peer (Production):**
+```
+/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7
+```
+
+*Why it matters:* Validators automatically discover each other. No manual configuration required beyond pointing to a bootstrap peer.
+
 ---
 
 ## 7. Storage Layer
@@ -2133,7 +2208,7 @@ Professional code review by specialized security firms. They look for:
 | `native_dex.rs` | 976 | Built-in AMM with Ed25519 signatures (13 tests) |
 | `bridge_integration.rs` | 1,987 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification, TokenFactory mint (39 tests) |
 | `bridge_fees.rs` | 1,009 | Zero-fee bridge with async oracle support (30 tests) |
-| `p2p.rs` | 1,025 | **P2P networking** (16 tests, GossipSub, Kademlia, DoS, Ed25519 sig verify) |
+| `p2p.rs` | 1,200+ | **P2P networking** (16 tests, GossipSub, Kademlia, DoS, Ed25519 sig verify, persistent node keys, validator discovery) |
 | `block_sync.rs` | 1,174 | **Byzantine-tolerant sync** (31 tests, voter verify, sig validation) |
 
 **Total: 22,050 lines, 294+ tests passing**
