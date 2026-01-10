@@ -2,11 +2,11 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.6  
-**Date:** January 3, 2026  
+**Version:** 3.7  
+**Date:** January 10, 2026  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
-**Binary:** v0.1.0 (SHA256: `6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51`)
+**Binary:** v0.1.4 (SHA256: `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff`)
 
 ---
 
@@ -27,15 +27,16 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Network Protocol** | libp2p |
 | **Cryptography** | Ed25519 + SHA3-256 |
 | **Gas Fees** | $0 (zero-fee transactions) |
-| **Staking APY** | 13.33% |
+| **Staking APY** | ~13.33% |
 
-| **Binary** | 15MB (stripped, LTO-optimized) |
+| **Binary** | 16MB (stripped, LTO-optimized) |
 | **DEX Swap Fee** | 0.3% total (0.2% to LP, 0.1% to protocol treasury) |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
 **Wallet PWA:** `https://wallet.sltn.io`  
-**P2P Bootstrap:** See [Validator Guide](VALIDATOR_GUIDE.md) for bootstrap peers  
-**Binary:** 14MB (stripped, LTO-optimized)
+**P2P Bootstrap:** `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7`  
+**Telegram:** [t.me/Sultan_L1](https://t.me/Sultan_L1)  
+**Binary:** 16MB (stripped, LTO-optimized)
 
 ---
 
@@ -80,7 +81,7 @@ We made a deliberate architectural decision to build Sultan as a **pure Rust imp
 - **50-105µs block creation** (vs 100-500ms for typical frameworks)
 - **Memory safety** without garbage collection pauses
 - **Deterministic performance** under high load
-- **Smaller binary size** (14MB production binary, stripped with LTO)
+- **Smaller binary size** (16MB production binary, stripped with LTO)
 - **Lower validator requirements** (1GB RAM minimum)
 
 ### 1.3 Core Innovations
@@ -527,10 +528,22 @@ Sultan uses **libp2p**, the battle-tested peer-to-peer networking stack used by 
 New validators connect to the network via bootstrap nodes:
 
 ```
-/dns4/rpc.sltn.io/tcp/26656/p2p/<peer-id>
+/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7
 ```
 
 The bootstrap node maintains persistent connections to all active validators, ensuring network connectivity even during churn.
+
+**Persistent Node Identity (v0.1.4+):**
+- Node keys are stored in `<data-dir>/node_key.bin`
+- PeerId survives node restarts
+- Keys are generated on first run with 0600 permissions
+- Enables stable peer addressing and network topology
+
+**P2P Validator Discovery Protocol:**
+- `ValidatorAnnounce`: Validators broadcast their presence on join and every 60 seconds
+- `ValidatorSetRequest`: Nodes request the full validator set on startup
+- `ValidatorSetResponse`: Nodes share their known validators
+- All messages are cryptographically signed with Ed25519
 
 ### 5.5 P2P Security Layer (Enterprise-Grade)
 

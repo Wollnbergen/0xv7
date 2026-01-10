@@ -66,12 +66,12 @@ Any Linux VPS works. Recommended providers:
 SSH into your server and run:
 
 ```bash
-# Download the latest binary (v0.1.0)
-wget https://github.com/SultanL1/sultan-node/releases/download/v0.1.0/sultan-node-linux-x86_64
+# Download the latest binary (v0.1.4)
+wget https://github.com/SultanL1/sultan-node/releases/download/v0.1.4/sultan-node-linux-x86_64
 chmod +x sultan-node-linux-x86_64
 
 # Verify checksum
-echo "6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51  sultan-node-linux-x86_64" | sha256sum -c
+echo "bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff  sultan-node-linux-x86_64" | sha256sum -c
 
 # Rename for convenience
 mv sultan-node-linux-x86_64 sultan-node
@@ -113,13 +113,14 @@ sudo firewall-cmd --reload
   --validator-secret YOUR_SECRET_KEY_HEX \
   --rpc-port 26657 \
   --p2p-port 26656 \
-  --bootstrap-peers /ip4/206.189.224.142/tcp/26656
+  --bootstrap-peers /ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7
 ```
 
 **Important flags:**
 - `--validator`: Enable validator mode
 - `--validator-secret`: Your Ed25519 secret key (64 hex chars)
-- `--bootstrap-peers`: NYC bootstrap node IP
+- `--bootstrap-peers`: Bootstrap node multiaddr (NYC) with persistent peer ID
+- `--data-dir`: Node keys are stored in `<data-dir>/node_key.bin` (generated on first run)
 
 ### Step 6: Verify Connection
 
@@ -159,7 +160,7 @@ ExecStart=/root/sultan-node \
   --enable-sharding \
   --shard-count 16 \
   --enable-p2p \
-  --bootstrap-peers /ip4/206.189.224.142/tcp/26656 \
+  --bootstrap-peers /ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7 \
   --rpc-addr 0.0.0.0:26657 \
   --p2p-addr /ip4/0.0.0.0/tcp/26656 \
   --data-dir /root/sultan-data
@@ -256,8 +257,9 @@ sudo lsof -i :26657
 
 ### "No peers found"
 - Verify internet connectivity: `ping 206.189.224.142`
-- Check bootstrap peer is correct: `/ip4/206.189.224.142/tcp/26656`
+- Check bootstrap peer is correct: `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7`
 - Ensure port 26656 is not blocked by firewall
+- Your node key is stored in `<data-dir>/node_key.bin` (PeerId persists across restarts)
 
 ### Node crashes on startup
 ```bash
@@ -311,7 +313,8 @@ A: No, APY is variable based on network conditions. 13.33% is an estimate.
 - **Website**: [sltn.io](https://sltn.io)
 - **RPC Endpoint**: `https://rpc.sltn.io`
 - **Explorer**: [x.sltn.io](https://x.sltn.io)
+- **Telegram**: [t.me/Sultan_L1](https://t.me/Sultan_L1)
 
 ---
 
-*Sultan Network - High-performance Layer 1 blockchain with 64K TPS and zero fees*
+*Sultan Network v0.1.4 - High-performance Layer 1 blockchain with 64K TPS and zero fees*

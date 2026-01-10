@@ -27,7 +27,7 @@ Sultan is a **native Rust L1 blockchain** with every component custom-built for 
 | `economics.rs` | 100 | Inflation (fixed 4%), rewards, APY calculations |
 | `transaction_validator.rs` | 782 | Transaction validation (18 tests, typed errors, Ed25519 sig verify) |
 | `blockchain.rs` | 374 | Block/Transaction structures (with memo) |
-| `p2p.rs` | 1,025 | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify, 16 tests) |
+| `p2p.rs` | 1,200+ | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify, persistent node keys, validator discovery, 16 tests) |
 | `block_sync.rs` | 1,174 | Byzantine-tolerant block sync (voter verification, signature validation, 31 tests) |
 | `mev_protection.rs` | ~100 | MEV resistance |
 | `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
@@ -111,8 +111,9 @@ pub async fn swap(
 | Tests | 274 passing (lib tests) |
 | DEX Swap Fee | 0.3% total (0.2% to LP reserves, 0.1% to protocol) |
 | Protocol Fee Address | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (genesis treasury) |
-| Binary Version | v0.1.0 |
-| Binary SHA256 | `6440e837...de51` |
+| Binary Version | v0.1.4 |
+| Binary SHA256 | `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff` |
+| Bootstrap Peer | `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7` |
 
 ---
 
@@ -212,4 +213,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: January 3, 2026 - Phase 6 security audit complete, v0.1.0 binary released, wallet v1.0.0 deployed*
+*Last updated: January 10, 2026 - v0.1.4 with persistent node keys and P2P validator discovery*

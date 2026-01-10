@@ -5,7 +5,7 @@
 **The Native Rust Blockchain**  
 *2-Second Finality | $0 Gas Fees | 64M TPS Scalability*
 
-**Version:** 3.3 | **Updated:** January 3, 2026
+**Version:** 3.4 | **Updated:** January 10, 2026
 
 ---
 
@@ -27,7 +27,7 @@
 | **Finality** | Immediate |
 | **Gas Fees** | $0 |
 | **TPS Capacity** | 64,000 → 64M |
-| **Validator APY** | 13.33% |
+| **Validator APY** | ~13.33% |
 | **Active Validators** | Dynamic (6 at launch) |
 | **Active Shards** | 16 |
 | **Consensus** | Height-based PoS with synchronized leader election |

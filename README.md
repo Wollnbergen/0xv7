@@ -7,7 +7,8 @@
 **Block Time:** ~2 seconds  
 **Validators:** Dynamic (join with 10,000 SLTN stake)  
 **Shards:** 16 active (expandable to 8,000)  
-**Node Binary:** v0.1.0 ([Download](https://github.com/SultanL1/sultan-node/releases))
+**Node Binary:** v0.1.4 ([Download](https://github.com/SultanL1/sultan-node/releases))  
+**Telegram:** [t.me/Sultan_L1](https://t.me/Sultan_L1)
 
 ---
 
