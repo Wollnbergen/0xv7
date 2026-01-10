@@ -267,6 +267,14 @@ export default function Settings() {
               <span className="setting-value">Sultan Mainnet</span>
             </div>
           </div>
+          
+          <div className="setting-item" onClick={() => window.open('https://sltn.io/privacy.html', '_blank')}>
+            <div className="setting-info">
+              <span className="setting-label">Privacy Policy</span>
+              <span className="setting-hint">View our privacy practices</span>
+            </div>
+            <span className="setting-arrow"><ChevronRightIcon /></span>
+          </div>
         </div>
 
         <div className="settings-section danger-section">

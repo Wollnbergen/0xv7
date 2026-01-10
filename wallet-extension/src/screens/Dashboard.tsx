@@ -213,13 +213,18 @@ export default function Dashboard() {
     return SultanWallet.formatSLTN(atomicBalance);
   };
 
-  const totalBalance = Number(formatBalance(balanceData?.available)) + 
-                       Number(formatBalance(stakingData?.staked));
+  // Parse formatted balance string to number (removes commas)
+  const parseFormattedBalance = (formatted: string): number => {
+    return Number(formatted.replace(/,/g, '')) || 0;
+  };
+
+  const totalBalance = parseFormattedBalance(formatBalance(balanceData?.available)) + 
+                       parseFormattedBalance(formatBalance(stakingData?.staked));
   
   // Animated balance display
   const animatedBalance = useAnimatedNumber(totalBalance, 600);
-  const animatedAvailable = useAnimatedNumber(Number(formatBalance(balanceData?.available)), 600);
-  const animatedStaked = useAnimatedNumber(Number(formatBalance(stakingData?.staked)), 600);
+  const animatedAvailable = useAnimatedNumber(parseFormattedBalance(formatBalance(balanceData?.available)), 600);
+  const animatedStaked = useAnimatedNumber(parseFormattedBalance(formatBalance(stakingData?.staked)), 600);
   const isLoading = balanceLoading || stakingLoading;
 
   return (
@@ -306,7 +311,6 @@ export default function Dashboard() {
             <SwapIcon />
             <div className="dex-banner-text">
               <span className="dex-title">Trade on HODL Holdings</span>
-              <span className="dex-subtitle">Zero-fee P2P trading</span>
             </div>
           </div>
           <span className="dex-arrow">→</span>

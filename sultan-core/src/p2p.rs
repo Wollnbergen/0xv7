@@ -19,10 +19,64 @@ use libp2p::{
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::collections::{HashSet, HashMap};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{info, warn, debug};
+
+/// Default filename for persistent node identity key
+pub const NODE_KEY_FILE: &str = "node_key.bin";
+
+/// Load or generate a persistent keypair for stable PeerId
+/// 
+/// This ensures the node's PeerId remains stable across restarts,
+/// which is critical for libp2p multiaddr bootstrap peer configuration.
+pub fn load_or_generate_keypair(data_dir: &Path) -> Result<Keypair> {
+    let key_path = data_dir.join(NODE_KEY_FILE);
+    
+    if key_path.exists() {
+        // Load existing key
+        let key_bytes = std::fs::read(&key_path)
+            .context("Failed to read node key file")?;
+        
+        let keypair = Keypair::ed25519_from_bytes(key_bytes.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to parse node key: {}", e))?;
+        
+        info!("🔑 Loaded persistent node key from {:?}", key_path);
+        Ok(keypair)
+    } else {
+        // Generate new key and save it
+        let keypair = Keypair::generate_ed25519();
+        
+        // Extract the secret key bytes (32 bytes for Ed25519)
+        if let Some(ed25519_keypair) = keypair.clone().try_into_ed25519().ok() {
+            let secret_bytes = ed25519_keypair.secret().as_ref().to_vec();
+            
+            // Ensure data directory exists
+            std::fs::create_dir_all(data_dir)
+                .context("Failed to create data directory")?;
+            
+            std::fs::write(&key_path, &secret_bytes)
+                .context("Failed to write node key file")?;
+            
+            // Set restrictive permissions (Unix only)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = std::fs::metadata(&key_path)?.permissions();
+                perms.set_mode(0o600); // Owner read/write only
+                std::fs::set_permissions(&key_path, perms)?;
+            }
+            
+            info!("🔑 Generated and saved new node key to {:?}", key_path);
+        } else {
+            warn!("⚠️ Could not persist node key - using ephemeral identity");
+        }
+        
+        Ok(keypair)
+    }
+}
 
 /// Topics for gossipsub messaging
 pub const BLOCK_TOPIC: &str = "sultan/blocks/1.0.0";
@@ -74,6 +128,24 @@ pub enum NetworkMessage {
     SyncResponse {
         blocks: Vec<Vec<u8>>,
     },
+    /// Request full validator set from peers (for initial sync)
+    ValidatorSetRequest {
+        /// Our current validator count (so peers know if we're behind)
+        known_count: u32,
+    },
+    /// Response with full validator set
+    ValidatorSetResponse {
+        /// List of all known validators with their registration data
+        validators: Vec<ValidatorInfo>,
+    },
+}
+
+/// Validator information for P2P sync
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorInfo {
+    pub address: String,
+    pub stake: u64,
+    pub pubkey: [u8; 32],
 }
 
 /// Combined network behaviour
@@ -500,6 +572,26 @@ impl P2PNetwork {
         self.broadcast_message(TX_TOPIC, msg).await
     }
 
+    /// Request block sync from peers (for catch-up when behind)
+    pub async fn request_sync(&self, from_height: u64, to_height: u64) -> Result<()> {
+        let msg = NetworkMessage::SyncRequest {
+            from_height,
+            to_height,
+        };
+        info!("📤 Requesting sync for blocks {}-{}", from_height, to_height);
+        self.broadcast_message(CONSENSUS_TOPIC, msg).await
+    }
+
+    /// Send sync response with blocks to requesting peer
+    pub async fn send_sync_response(&self, blocks: Vec<Vec<u8>>) -> Result<()> {
+        let block_count = blocks.len();
+        let msg = NetworkMessage::SyncResponse {
+            blocks,
+        };
+        info!("📤 Sending sync response with {} blocks", block_count);
+        self.broadcast_message(CONSENSUS_TOPIC, msg).await
+    }
+
     /// Announce this validator to the network (with Ed25519 signature)
     pub async fn announce_validator(&self, address: &str, stake: u64, pubkey: [u8; 32], signature: Vec<u8>) -> Result<()> {
         let msg = NetworkMessage::ValidatorAnnounce {
@@ -705,6 +797,37 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
     /// Get count of registered validators
     pub async fn registered_validator_count(&self) -> usize {
         self.validator_pubkeys.read().await.len()
+    }
+    
+    /// Request validator set from peers (for initial sync)
+    pub async fn request_validator_set(&self, known_count: u32) -> Result<()> {
+        let msg = NetworkMessage::ValidatorSetRequest { known_count };
+        info!("📡 Requesting validator set from peers (we know {} validators)", known_count);
+        self.broadcast_message(VALIDATOR_TOPIC, msg).await
+    }
+    
+    /// Send validator set response to peers
+    pub async fn send_validator_set(&self, validators: Vec<ValidatorInfo>) -> Result<()> {
+        let count = validators.len();
+        let msg = NetworkMessage::ValidatorSetResponse { validators };
+        info!("📤 Sending validator set with {} validators", count);
+        self.broadcast_message(VALIDATOR_TOPIC, msg).await
+    }
+    
+    /// Get all registered validator info for sync response
+    pub async fn get_all_validator_info(&self) -> Vec<ValidatorInfo> {
+        let pubkeys = self.validator_pubkeys.read().await;
+        let validators = self.known_validators.read().await;
+        
+        validators.iter()
+            .filter_map(|addr| {
+                pubkeys.get(addr).map(|pk| ValidatorInfo {
+                    address: addr.clone(),
+                    stake: MIN_VALIDATOR_STAKE, // Will be overridden by consensus
+                    pubkey: *pk,
+                })
+            })
+            .collect()
     }
 }
 

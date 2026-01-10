@@ -117,7 +117,7 @@ export default function Governance() {
   const [telegramUrl, setTelegramUrl] = useState('');
 
   const votingPower = SultanWallet.formatSLTN(stakingData?.staked || '0');
-  const availableBalance = Number(SultanWallet.formatSLTN(balanceData?.available || '0'));
+  const availableBalance = Number(SultanWallet.formatSLTN(balanceData?.available || '0').replace(/,/g, '')) || 0;
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
