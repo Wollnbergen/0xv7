@@ -41,7 +41,7 @@ const SULTAN_RPC_URLS = [
   'https://api.sltn.io/rpc',
 ];
 // Development fallback (only used if HTTPS fails)
-const SULTAN_RPC_URL_DEV = 'http://206.189.224.142:8545';
+const SULTAN_RPC_URL_DEV = 'http://206.189.224.142:26657';
 
 /**
  * Get the best available RPC URL
