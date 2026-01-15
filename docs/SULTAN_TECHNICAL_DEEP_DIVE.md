@@ -1,10 +1,10 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.7  
-**Date:** January 10, 2026  
+**Version:** 3.8  
+**Date:** January 15, 2026  
 **Classification:** Public Technical Reference  
-**Binary:** v0.1.4 (SHA256: `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff`)
+**Binary:** v0.1.5
 
 ---
 
@@ -77,9 +77,9 @@ The production codebase (`sultan-core/src/`) contains 22 Rust modules:
 
 ```
 sultan-core/src/
-├── main.rs               (3,395 lines) - Node binary, RPC (30+ endpoints), keygen CLI
+├── main.rs               (4,736 lines) - Node binary, RPC (30+ endpoints), keygen CLI
 ├── blockchain.rs         (374 lines)  - Block/TX structures (with memo field)
-├── consensus.rs          (1,078 lines) - Validator management (17 tests, Ed25519)
+├── consensus.rs          (1,351 lines) - Validator management (26 tests, Ed25519, enterprise failover)
 ├── p2p.rs                (1,200+ lines) - libp2p networking (16 tests, Ed25519 sig verify, persistent keys, validator discovery)
 ├── block_sync.rs         (1,174 lines) - Byzantine-tolerant sync (31 tests, voter verify)
 ├── storage.rs            (1,159 lines) - RocksDB + AES-256-GCM encryption (14 tests)
@@ -98,7 +98,7 @@ sultan-core/src/
 └── [supporting modules]
 ```
 
-**Total: 22,050 lines of production Rust code, 294+ tests passing**
+**Total: 24,000+ lines of production Rust code, 303+ tests passing**
 
 ### 1.3 Key Design Decisions
 
@@ -256,6 +256,46 @@ voting_power = stake^0.9  // Slight sublinear scaling
 **What is a Mempool?**
 
 Short for "memory pool" - a waiting room for unconfirmed transactions. When you submit a transaction, it goes to the mempool. The next block proposer picks transactions from the mempool to include in their block.
+
+### 2.7 Enterprise Proposer Failover (v0.1.5)
+
+**The Problem:** What happens if the selected proposer goes offline?
+
+**The Solution:** Automatic failover to backup proposers based on stake weight.
+
+```
+NORMAL OPERATION:
+┌─────────────────────────────────────────────────────────────────┐
+│  Primary Proposer (NYC) produces blocks every 2 seconds         │
+└─────────────────────────────────────────────────────────────────┘
+
+FAILOVER SCENARIO:
+┌─────────────────────────────────────────────────────────────────┐
+│  Primary Proposer misses 5 consecutive blocks                   │
+│           ↓                                                      │
+│  Fallback #1 (highest remaining stake) takes over               │
+│           ↓ (if also offline)                                   │
+│  Fallback #2 (second highest stake) takes over                  │
+│           ↓ (if also offline)                                   │
+│  Fallback #3 (third highest stake) takes over                   │
+│                                                                  │
+│  Chain continues with NO DOWNTIME                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Enterprise Constants:**
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `FALLBACK_THRESHOLD_MISSED_BLOCKS` | 5 | Blocks before fallback kicks in |
+| `MAX_FALLBACK_POSITIONS` | 3 | Only top 3 validators can be fallbacks |
+| `MAX_MISSED_BLOCKS_BEFORE_SLASH` | 100 | Consecutive misses before slashing |
+| `MISSED_BLOCK_TRACKING_WINDOW` | 1000 | Memory cleanup for old records |
+
+**Height-Based Deduplication:**
+Each missed block is recorded exactly once per (height, validator) pair. This prevents double-counting and ensures fair slashing.
+
+*Why it matters for investors:* No single point of failure. If any validator (including the primary bootstrap) goes offline, the network automatically continues producing blocks. This is enterprise-grade reliability.
 
 ---
 

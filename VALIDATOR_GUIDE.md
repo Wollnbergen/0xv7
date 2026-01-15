@@ -286,7 +286,11 @@ A: Contact the Sultan team for genesis allocation or acquire through the network
 A: Yes, each validator needs a unique name and separate server.
 
 **Q: What happens if my validator goes offline?**  
-A: You stop earning rewards while offline. Currently no slashing penalties.
+A: The network has enterprise-grade failover - other validators take over block production automatically. However:
+- After **5 consecutive missed blocks**, fallback proposers take over
+- After **100 consecutive missed blocks**, your stake may be slashed
+- You stop earning rewards while offline
+- Aim for 99%+ uptime to maximize rewards and avoid penalties
 
 **Q: How do I increase my stake?**  
 A: Use the Sultan Wallet to delegate additional stake to your validator.
@@ -317,4 +321,4 @@ A: No, APY is variable based on network conditions. 13.33% is an estimate.
 
 ---
 
-*Sultan Network v0.1.4 - High-performance Layer 1 blockchain with 64K TPS and zero fees*
+*Sultan Network v0.1.5 - High-performance Layer 1 blockchain with 64K TPS, zero fees, and enterprise failover*

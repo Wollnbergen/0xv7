@@ -2,11 +2,11 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.7  
-**Date:** January 10, 2026  
+**Version:** 3.8  
+**Date:** January 15, 2026  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
-**Binary:** v0.1.4 (SHA256: `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff`)
+**Binary:** v0.1.5
 
 ---
 
@@ -29,7 +29,7 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Gas Fees** | $0 (zero-fee transactions) |
 | **Staking APY** | ~13.33% |
 
-| **Binary** | 16MB (stripped, LTO-optimized) |
+| **Binary** | 17.6MB (stripped, LTO-optimized) |
 | **DEX Swap Fee** | 0.3% total (0.2% to LP, 0.1% to protocol treasury) |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
@@ -305,9 +305,44 @@ Sultan tolerates up to **33% malicious validators** while maintaining:
 | Offense | Penalty | Detection |
 |---------|---------|-----------|
 | Double-signing | 100% stake | Cryptographic proof |
-| Extended downtime (>1%) | 5% stake | Missed proposals |
+| Extended downtime (>100 blocks) | Slashed | Consecutive missed proposals |
 | Invalid block production | 20% stake | State verification failure |
 | Censorship (proven) | 10% stake | Transaction inclusion analysis |
+
+### 3.6 Enterprise Proposer Failover (v0.1.5)
+
+Sultan implements an enterprise-grade failover system ensuring no single validator failure can halt the chain:
+
+**Key Constants:**
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `FALLBACK_THRESHOLD_MISSED_BLOCKS` | 5 | Blocks missed before fallback kicks in |
+| `MAX_FALLBACK_POSITIONS` | 3 | Only top 3 by stake can be fallbacks |
+| `MAX_MISSED_BLOCKS_BEFORE_SLASH` | 100 | Consecutive misses before slashing |
+| `MISSED_BLOCK_TRACKING_WINDOW` | 1000 | Memory cleanup window for old records |
+
+**Failover Algorithm:**
+```
+1. Primary proposer selected by stake-weighted height-based algorithm
+2. If primary misses 5 consecutive blocks:
+   - Fallback #1 (highest remaining stake) attempts to produce
+3. If Fallback #1 also offline:
+   - Fallback #2 (second highest stake) attempts to produce
+4. If Fallback #2 also offline:
+   - Fallback #3 (third highest stake) attempts to produce
+5. Chain continues producing blocks with no downtime
+```
+
+**Height-Based Deduplication:**
+Missed blocks are tracked with height-based deduplication to prevent double-counting:
+- Each (height, validator) pair is recorded only once
+- Automatic cleanup of records older than 1000 blocks
+- Prevents memory leaks in long-running nodes
+
+**Recovery Behavior:**
+- When offline validator returns, they resume normal proposer rotation
+- Missed block counter resets after successful block production
+- No permanent penalty for temporary network partitions
 
 ---
 

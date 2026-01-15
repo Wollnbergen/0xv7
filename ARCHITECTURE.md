@@ -12,9 +12,9 @@ Sultan is a **native Rust L1 blockchain** with every component custom-built for 
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `main.rs` | 2,938 | Node binary, RPC server (30+ endpoints), P2P networking, keygen CLI |
+| `main.rs` | 4,736 | Node binary, RPC server (30+ endpoints), P2P networking, keygen CLI |
 | `lib.rs` | ~100 | Library exports for all modules |
-| `consensus.rs` | 1,078 | Proof of Stake consensus engine (17 tests, Ed25519) |
+| `consensus.rs` | 1,351 | Proof of Stake consensus engine (26 tests, Ed25519, enterprise failover) |
 | `staking.rs` | ~1,540 | Validator registration, delegation, rewards, slashing with auto-persist (21 tests) |
 | `governance.rs` | ~1,900 | On-chain proposals, voting, slashing proposals, encrypted storage (21 tests) |
 | `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
@@ -33,7 +33,7 @@ Sultan is a **native Rust L1 blockchain** with every component custom-built for 
 | `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
 | `sharded_blockchain.rs` | 179 | ⚠️ LEGACY (deprecated, tests only) |
 
-**Total:** ~18,000+ lines of production Rust code (274 tests passing)
+**Total:** ~22,000+ lines of production Rust code (283+ tests passing)
 
 ### Cross-Chain Bridges (bridges/)
 
@@ -108,12 +108,54 @@ pub async fn swap(
 | Max History/Address | 10,000 entries (pruned) |
 | Mempool Ordering | Deterministic (timestamp/from/nonce) |
 | Signature Verification | Ed25519 STRICT mode |
-| Tests | 274 passing (lib tests) |
+| Tests | 283+ passing (lib tests) |
 | DEX Swap Fee | 0.3% total (0.2% to LP reserves, 0.1% to protocol) |
 | Protocol Fee Address | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (genesis treasury) |
 | Binary Version | v0.1.4 |
 | Binary SHA256 | `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff` |
 | Bootstrap Peer | `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7` |
+
+---
+
+## Enterprise Consensus Features
+
+### PoS Proposer Selection with Failover (v0.1.5)
+Sultan uses an enterprise-grade Proof-of-Stake consensus with automatic failover:
+
+| Feature | Implementation |
+|---------|---------------|
+| Proposer Selection | Height-based, stake-weighted deterministic selection |
+| Fallback Threshold | 5 consecutive missed blocks before fallback |
+| Fallback Positions | Top 3 stake-weighted validators can act as fallbacks |
+| Missed Block Tracking | Height-based deduplication prevents double-counting |
+| Slashing | 100 consecutive misses triggers stake slash |
+| Memory Cleanup | Automatic cleanup of old missed block records (1000 block window) |
+
+**Key Constants (consensus.rs):**
+```rust
+pub const MAX_MISSED_BLOCKS_BEFORE_SLASH: u64 = 100;  // Slash threshold
+pub const FALLBACK_THRESHOLD_MISSED_BLOCKS: u64 = 5;  // When fallback kicks in
+pub const MAX_FALLBACK_POSITIONS: usize = 3;          // Only top 3 can fallback
+pub const MISSED_BLOCK_TRACKING_WINDOW: u64 = 1000;   // Memory cleanup window
+```
+
+### Proposer Failover Flow
+```
+Primary proposer offline for 5 consecutive blocks
+    ↓
+Fallback #1 (highest remaining stake) takes over
+    ↓
+If #1 also offline, Fallback #2 tries
+    ↓
+If #2 also offline, Fallback #3 tries
+    ↓
+Chain continues producing blocks (no single point of failure)
+```
+
+### Byzantine Fault Tolerance
+- Tolerates 33% malicious/offline validators
+- Automatic recovery when validators come back online
+- Missed block counts reset after successful block production
 
 ---
 
@@ -213,4 +255,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: January 10, 2026 - v0.1.4 with persistent node keys and P2P validator discovery*
+*Last updated: January 15, 2026 - v0.1.5 with enterprise PoS failover and persistent node keys*
