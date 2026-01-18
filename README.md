@@ -5,9 +5,10 @@
 **Mainnet RPC:** https://rpc.sltn.io  
 **Wallet PWA:** https://wallet.sltn.io  
 **Block Time:** ~2 seconds  
-**Validators:** Dynamic (join with 10,000 SLTN stake)  
+**Validators:** 6 genesis (open to join with 10,000 SLTN stake)  
 **Shards:** 16 active (expandable to 8,000)  
-**Node Binary:** v0.1.4 ([Download](https://github.com/SultanL1/sultan-node/releases))  
+**Node Binary:** v0.2.0 ([Download](https://github.com/SultanL1/sultan-node/releases))  
+**Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`  
 **Telegram:** [t.me/Sultan_L1](https://t.me/Sultan_L1)
 
 ---
@@ -96,12 +97,20 @@ curl https://rpc.sltn.io/status
 | **Decimals** | 9 (nano units) |
 | **Minimum Stake** | 10,000 SLTN |
 | **Unbonding Period** | 21 days |
-| **Validator APY** | ~13.33% |
+| **Validator APY** | ~13.33% (at 30% staked) |
+| **Reward Distribution** | Every block (43,200/day) |
 | **Downtime Slash** | 0.1% (after 100 missed blocks) |
 | **Double-Sign Slash** | 5% (immediate jail) |
 | **Gas Fees** | Zero (subsidized by inflation) |
 | **Shards** | 16 active (max 8,000) |
 | **RPC Rate Limit** | 100 req/10 sec per IP |
+| **Genesis Wallet** | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` |
+
+### Validator Reward System
+- **Rewards accrue every block** (every ~2 seconds)
+- Genesis validators auto-receive rewards to the genesis wallet
+- Validators can set a custom `reward_wallet` via RPC
+- Withdraw anytime via `POST /staking/withdraw_rewards`
 
 ---
 
@@ -147,4 +156,4 @@ The \`_archive/\` folder contains legacy/experimental code including:
 
 *Sultan L1 - The People's Blockchain*
 
-*Last updated: January 3, 2026 - v0.1.0 binary released, wallet v1.0.0 deployed*
+*Last updated: January 17, 2026 - v0.2.0 DeFi Hub release (reward_wallet, fee split, genesis wallet auto-set)*

@@ -15,7 +15,7 @@ Sultan is a **native Rust L1 blockchain** with every component custom-built for 
 | `main.rs` | 4,736 | Node binary, RPC server (30+ endpoints), P2P networking, keygen CLI |
 | `lib.rs` | ~100 | Library exports for all modules |
 | `consensus.rs` | 1,351 | Proof of Stake consensus engine (26 tests, Ed25519, enterprise failover) |
-| `staking.rs` | ~1,540 | Validator registration, delegation, rewards, slashing with auto-persist (21 tests) |
+| `staking.rs` | ~1,640 | Validator registration, delegation, rewards (with reward_wallet), slashing with auto-persist (21 tests) |
 | `governance.rs` | ~1,900 | On-chain proposals, voting, slashing proposals, encrypted storage (21 tests) |
 | `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
 | `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
@@ -111,7 +111,8 @@ pub async fn swap(
 | Tests | 283+ passing (lib tests) |
 | DEX Swap Fee | 0.3% total (0.2% to LP reserves, 0.1% to protocol) |
 | Protocol Fee Address | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (genesis treasury) |
-| Binary Version | v0.1.4 |
+| Genesis Wallet | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (receives validator APY) |
+| Binary Version | v0.2.0 |
 | Binary SHA256 | `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff` |
 | Bootstrap Peer | `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7` |
 
@@ -151,6 +152,34 @@ If #2 also offline, Fallback #3 tries
     ↓
 Chain continues producing blocks (no single point of failure)
 ```
+
+### Validator Registration Architecture (v0.1.6+)
+
+Sultan implements **enterprise-grade separation** between P2P discovery and consensus membership:
+
+| Layer | Purpose | Determines Consensus? |
+|-------|---------|----------------------|
+| **P2P Discovery** | Find validators, exchange pubkeys | ❌ No |
+| **On-Chain Registration** | Stake tokens, join validator set | ✅ Yes |
+
+**Why This Matters:**
+- All nodes derive validator set from **blockchain state** (identical everywhere)
+- P2P announcements only register pubkeys for **signature verification**
+- Prevents divergent validator sets that cause chain stalls
+- Provides audit trail and economic security (stake required)
+
+**Validator Registration Flow:**
+```
+1. New validator sets up node → P2P connects to network
+2. Node discovers other validators via ValidatorAnnounce (pubkey registration only)
+3. Validator submits on-chain registration:
+   POST /staking/create_validator { address, stake_amount, commission_rate }
+4. Blockchain processes registration → validator added to on-chain state
+5. All nodes see new validator in next block → consensus includes them
+```
+
+**Key Principle:**
+> P2P is for discovery. Blockchain is for consensus.
 
 ### Byzantine Fault Tolerance
 - Tolerates 33% malicious/offline validators
@@ -255,4 +284,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: January 15, 2026 - v0.1.5 with enterprise PoS failover and persistent node keys*
+*Last updated: January 17, 2026 - v0.2.0 with DeFi Hub (Token Factory, Native DEX, Fee Split, Validator Reward Wallet)*

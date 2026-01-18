@@ -100,4 +100,32 @@ done
 \`\`\`
 
 ---
+
+## Troubleshooting
+
+### Website Shows "Network Stats Unavailable" (CORS Error)
+
+**Symptoms:**
+- sltn.io shows "—" for all network stats
+- Browser console shows: `Access-Control-Allow-Origin cannot contain more than one origin`
+
+**Root Cause:**
+Both nginx AND sultan-node are adding CORS headers = duplicate headers = browser rejects
+
+**Quick Fix:**
+```bash
+# Run the automated fix script
+./scripts/fix_rpc_cors.sh
+```
+
+**Manual Fix:**
+1. Remove CORS headers from nginx (`/etc/nginx/sites-available/rpc.sltn.io`)
+2. Ensure sultan-node has `--allowed-origins "*"` flag in systemd service
+3. Only ONE of them should handle CORS (we use sultan-node)
+
+**Key Config Files on RPC Server (206.189.224.142):**
+- `/etc/nginx/sites-available/rpc.sltn.io` - nginx proxy (NO CORS headers!)
+- `/etc/systemd/system/sultan-node.service` - must have `--allowed-origins "*"`
+
+---
 **Merry Christmas 2025! 🎄 Sultan L1 Launch Day!**

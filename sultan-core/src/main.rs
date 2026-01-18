@@ -436,6 +436,9 @@ impl NodeState {
         // Create the unified Sultan blockchain
         let blockchain = SultanBlockchain::new(config.clone());
         
+        // Track the first genesis wallet (for validator rewards)
+        let mut genesis_wallet: Option<String> = None;
+        
         // Initialize genesis accounts
         if let Some(genesis_str) = &args.genesis {
             for account in genesis_str.split(',') {
@@ -447,6 +450,12 @@ impl NodeState {
                     blockchain.init_account(address.clone(), balance).await
                         .context("Failed to init genesis account")?;
                     info!("Genesis account: {} = {}", address, balance);
+                    
+                    // First genesis account becomes the default reward wallet for genesis validators
+                    if genesis_wallet.is_none() {
+                        genesis_wallet = Some(address.clone());
+                        info!("🏦 Genesis treasury wallet: {} (will receive genesis validator APY)", address);
+                    }
                 }
             }
         } else {
@@ -578,6 +587,36 @@ impl NodeState {
             info!("📥 Found persisted staking state, restoring...");
             if let Err(e) = staking_manager.restore_from_snapshot(staking_snapshot).await {
                 warn!("⚠️ Failed to restore staking state: {}. Starting fresh.", e);
+            }
+        }
+        
+        // If running as validator, register in staking manager with genesis wallet as reward destination
+        if args.validator {
+            if let Some(validator_addr) = args.validator_address.as_ref() {
+                let stake = args.validator_stake.unwrap_or(10_000_000_000_000); // Default 10M SLTN
+                
+                // Create validator in staking manager (if not already exists from snapshot)
+                if staking_manager.get_validator(validator_addr).await.is_err() {
+                    if let Err(e) = staking_manager.create_validator(
+                        validator_addr.clone(),
+                        stake,
+                        0.05, // 5% commission
+                    ).await {
+                        warn!("⚠️ Failed to register validator in staking: {}", e);
+                    } else {
+                        info!("✅ Validator {} registered in staking system (stake: {} SLTN)", 
+                              validator_addr, stake / 1_000_000_000);
+                    }
+                }
+                
+                // Set genesis wallet as reward destination for this validator
+                if let Some(ref wallet) = genesis_wallet {
+                    if let Err(e) = staking_manager.set_reward_wallet(validator_addr, wallet.clone()).await {
+                        warn!("⚠️ Failed to set reward wallet: {}", e);
+                    } else {
+                        info!("💰 Validator {} APY rewards → {}", validator_addr, wallet);
+                    }
+                }
             }
         }
 
@@ -1030,6 +1069,17 @@ impl NodeState {
         let our_position = proposer_order.iter().position(|a| a == &our_address);
         
         info!("🔨 produce_block: primary proposer: {} (validators: {})", primary_proposer, validator_count);
+
+        // === GENESIS BOOTSTRAP SAFETY NET ===
+        // On a fresh network with only one registered validator (the genesis node),
+        // always allow production. This is NOT Bootstrap Mode workaround - this is
+        // standard behavior for network genesis. With proper on-chain registration,
+        // all validators will have the same view and normal proposer selection works.
+        let is_genesis_only = validator_count == 1;
+        
+        if is_genesis_only && our_position == Some(0) {
+            info!("🌱 Genesis mode: single validator producing block {}", next_height);
+        }
 
         // Determine if we should produce based on our position and timing
         let is_our_turn = match our_position {
@@ -1751,6 +1801,19 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_withdraw_rewards);
 
+        // POST /staking/set_reward_wallet - Set wallet address for validator rewards
+        let set_reward_wallet_route = warp::path!("staking" / "set_reward_wallet")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_set_reward_wallet);
+
+        // GET /staking/reward_wallet/:validator_address - Get reward wallet for a validator
+        let get_reward_wallet_route = warp::path!("staking" / "reward_wallet" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_reward_wallet);
+
         // POST /staking/undelegate (unstake - starts 21-day unbonding period)
         let undelegate_route = warp::path!("staking" / "undelegate")
             .and(warp::post())
@@ -1968,6 +2031,8 @@ mod rpc {
             .or(validators_route)
             .or(delegations_route)
             .or(withdraw_rewards_route)
+            .or(set_reward_wallet_route)
+            .or(get_reward_wallet_route)
             .or(staking_stats_route)
             .boxed();
         
@@ -3004,6 +3069,7 @@ mod rpc {
             validators = consensus_validators.iter().map(|v| {
                 sultan_core::staking::ValidatorStake {
                     validator_address: v.address.clone(),
+                    reward_wallet: None, // Genesis validators have no wallet until set
                     self_stake: v.stake,
                     delegated_stake: 0,
                     total_stake: v.stake,
@@ -3041,23 +3107,126 @@ mod rpc {
         req: WithdrawRewardsRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
-        let amount = if req.is_validator {
-            state.staking_manager.withdraw_validator_rewards(&req.address).await
+        if req.is_validator {
+            match state.staking_manager.withdraw_validator_rewards(&req.address).await {
+                Ok((rewards, wallet)) => {
+                    // Credit the rewards to the reward_wallet (minted via inflation)
+                    let blockchain = state.blockchain.read().await;
+                    if let Err(e) = blockchain.add_balance(&wallet, rewards).await {
+                        warn!("Failed to credit rewards to wallet {}: {}", wallet, e);
+                        return Ok(warp::reply::json(&serde_json::json!({
+                            "error": format!("Failed to credit rewards: {}", e),
+                            "status": "error"
+                        })));
+                    }
+                    info!("Validator {} rewards ({} SLTN) credited to wallet {}", 
+                          req.address, rewards / 1_000_000_000, wallet);
+                    Ok(warp::reply::json(&serde_json::json!({
+                        "validator_address": req.address,
+                        "reward_wallet": wallet,
+                        "rewards_withdrawn": rewards,
+                        "status": "success"
+                    })))
+                }
+                Err(e) => {
+                    warn!("Withdraw validator rewards failed: {}", e);
+                    Ok(warp::reply::json(&serde_json::json!({
+                        "error": e.to_string(),
+                        "status": "error"
+                    })))
+                }
+            }
         } else if let Some(validator) = req.validator_address {
-            state.staking_manager.withdraw_delegator_rewards(&req.address, &validator).await
+            match state.staking_manager.withdraw_delegator_rewards(&req.address, &validator).await {
+                Ok(rewards) => {
+                    // Credit delegator rewards to their address
+                    let blockchain = state.blockchain.read().await;
+                    if let Err(e) = blockchain.add_balance(&req.address, rewards).await {
+                        warn!("Failed to credit delegator rewards: {}", e);
+                        return Ok(warp::reply::json(&serde_json::json!({
+                            "error": format!("Failed to credit rewards: {}", e),
+                            "status": "error"
+                        })));
+                    }
+                    Ok(warp::reply::json(&serde_json::json!({
+                        "address": req.address,
+                        "rewards_withdrawn": rewards,
+                        "status": "success"
+                    })))
+                }
+                Err(e) => {
+                    warn!("Withdraw delegator rewards failed: {}", e);
+                    Ok(warp::reply::json(&serde_json::json!({
+                        "error": e.to_string(),
+                        "status": "error"
+                    })))
+                }
+            }
         } else {
-            return Err(warp::reject());
-        };
+            Ok(warp::reply::json(&serde_json::json!({
+                "error": "validator_address required for delegator withdrawals",
+                "status": "error"
+            })))
+        }
+    }
 
-        match amount {
-            Ok(rewards) => Ok(warp::reply::json(&serde_json::json!({
-                "address": req.address,
-                "rewards_withdrawn": rewards,
-                "status": "success"
-            }))),
+    #[derive(serde::Deserialize)]
+    struct SetRewardWalletRequest {
+        validator_address: String,
+        reward_wallet: String,
+        // TODO: Add signature verification for production
+        // signature: String,
+    }
+
+    /// Handle setting a validator's reward wallet
+    /// 
+    /// This allows genesis validators (without wallets) to designate a wallet
+    /// where their accumulated APY rewards should be sent when withdrawn.
+    async fn handle_set_reward_wallet(
+        req: SetRewardWalletRequest,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        // TODO: In production, verify signature proves ownership of validator
+        // For now, we allow setting for any validator (admin use only)
+        
+        match state.staking_manager.set_reward_wallet(&req.validator_address, req.reward_wallet.clone()).await {
+            Ok(()) => {
+                info!("Validator {} set reward wallet to {}", req.validator_address, req.reward_wallet);
+                Ok(warp::reply::json(&serde_json::json!({
+                    "validator_address": req.validator_address,
+                    "reward_wallet": req.reward_wallet,
+                    "status": "success"
+                })))
+            }
             Err(e) => {
-                warn!("Withdraw rewards failed: {}", e);
-                Err(warp::reject())
+                warn!("Set reward wallet failed: {}", e);
+                Ok(warp::reply::json(&serde_json::json!({
+                    "error": e.to_string(),
+                    "status": "error"
+                })))
+            }
+        }
+    }
+
+    /// Handle getting a validator's reward wallet
+    async fn handle_get_reward_wallet(
+        validator_address: String,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.staking_manager.get_reward_wallet(&validator_address).await {
+            Ok(wallet) => {
+                Ok(warp::reply::json(&serde_json::json!({
+                    "validator_address": validator_address,
+                    "reward_wallet": wallet,
+                    "status": "success"
+                })))
+            }
+            Err(e) => {
+                warn!("Get reward wallet failed: {}", e);
+                Ok(warp::reply::json(&serde_json::json!({
+                    "error": e.to_string(),
+                    "status": "error"
+                })))
             }
         }
     }
@@ -3464,47 +3633,36 @@ async fn main() -> Result<()> {
                     } => {
                         match msg {
                             NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, pubkey, signature: _ } => {
-                                // Check if validator is already registered in consensus
-                                let is_new = {
-                                    let consensus = p2p_state.consensus.read().await;
-                                    !consensus.is_validator(address)
-                                };
+                                // ====================================================================
+                                // ENTERPRISE-GRADE FIX: P2P announcements are for DISCOVERY ONLY
+                                // ====================================================================
+                                // Validators MUST register on-chain via /staking/create_validator
+                                // P2P announcements only register pubkey for signature verification
+                                // This ensures all validators have the SAME view of the validator set
+                                // (derived from blockchain state, not P2P message order)
+                                // ====================================================================
                                 
-                                if is_new {
-                                    // Verify pubkey is not all zeros (placeholder)
-                                    if pubkey == [0u8; 32] {
-                                        warn!("⚠️ Validator {} announcement has placeholder pubkey - skipping", address);
-                                    } else {
-                                        // Add validator to consensus engine
-                                        let mut consensus = p2p_state.consensus.write().await;
-                                        match consensus.add_validator(address.clone(), stake, pubkey) {
-                                            Ok(_) => {
-                                                info!("✅ Validator {} added to consensus from P2P (stake: {}, pubkey: {}...)", 
-                                                      address, stake, hex::encode(&pubkey[..8]));
-                                                
-                                                // Also register pubkey in P2P layer for signature verification
-                                                if let Some(ref p2p) = p2p_state.p2p_network {
-                                                    p2p.read().await.register_validator_pubkey(address.clone(), pubkey).await;
-                                                }
-                                                
-                                                // Also add to staking manager for rewards
-                                                if let Err(e) = p2p_state.staking_manager.create_validator(
-                                                    address.clone(),
-                                                    stake,
-                                                    0.05, // Default 5% commission
-                                                ).await {
-                                                    // Might already exist, that's OK
-                                                    debug!("Staking registration for {}: {:?}", address, e);
-                                                }
-                                            }
-                                            Err(e) => {
-                                                warn!("Failed to add validator {} from P2P: {}", address, e);
-                                            }
-                                        }
+                                // Register pubkey for signature verification (discovery only)
+                                if pubkey != [0u8; 32] {
+                                    if let Some(ref p2p) = p2p_state.p2p_network {
+                                        p2p.read().await.register_validator_pubkey(address.clone(), pubkey).await;
                                     }
                                 }
-                                info!("📡 Received validator announcement: {} (stake: {}, peer: {})", 
-                                      address, stake, peer_id);
+                                
+                                // Check if already in consensus (via on-chain registration)
+                                let is_registered = {
+                                    let consensus = p2p_state.consensus.read().await;
+                                    consensus.is_validator(address)
+                                };
+                                
+                                if is_registered {
+                                    info!("📡 Validator {} online (stake: {}, peer: {}) - already in consensus", 
+                                          address, stake, peer_id);
+                                } else {
+                                    // NOT adding to consensus - validator must register on-chain first
+                                    info!("📡 Validator {} discovered via P2P (stake: {}, peer: {}) - awaiting on-chain registration", 
+                                          address, stake, peer_id);
+                                }
                             }
                             NetworkMessage::ValidatorSetRequest { known_count } => {
                                 // Another node is requesting our validator set
@@ -3532,33 +3690,30 @@ async fn main() -> Result<()> {
                                 }
                             }
                             NetworkMessage::ValidatorSetResponse { validators } => {
-                                // Received a validator set from another node
-                                info!("📥 Received validator set with {} validators", validators.len());
+                                // ====================================================================
+                                // ENTERPRISE-GRADE: Validator set response is for DISCOVERY ONLY
+                                // ====================================================================
+                                // Do NOT add validators to consensus from P2P sync
+                                // Validators must register on-chain for consensus participation
+                                // We only register pubkeys for signature verification
+                                // ====================================================================
+                                info!("📥 Received validator set with {} validators (for discovery)", validators.len());
                                 
-                                let mut added_count = 0;
+                                let mut discovered_count = 0;
                                 for validator in validators {
-                                    // Skip if already registered or placeholder pubkey
                                     if validator.pubkey == [0u8; 32] {
                                         continue;
                                     }
                                     
-                                    let is_new = {
-                                        let consensus = p2p_state.consensus.read().await;
-                                        !consensus.is_validator(&validator.address)
-                                    };
-                                    
-                                    if is_new {
-                                        let mut consensus = p2p_state.consensus.write().await;
-                                        if consensus.add_validator(validator.address.clone(), validator.stake, validator.pubkey).is_ok() {
-                                            added_count += 1;
-                                            info!("✅ Added validator {} from sync (stake: {})", 
-                                                  validator.address, validator.stake);
-                                        }
+                                    // Register pubkey for signature verification only
+                                    if let Some(ref p2p) = p2p_state.p2p_network {
+                                        p2p.read().await.register_validator_pubkey(validator.address.clone(), validator.pubkey).await;
+                                        discovered_count += 1;
                                     }
                                 }
                                 
-                                if added_count > 0 {
-                                    info!("📊 Validator sync complete: added {} new validators", added_count);
+                                if discovered_count > 0 {
+                                    info!("📊 Discovered {} validator pubkeys for signature verification", discovered_count);
                                 }
                             }
                             NetworkMessage::BlockProposal { height, proposer, block_hash, block_data, proposer_signature: _ } => {

@@ -1,10 +1,11 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.8  
-**Date:** January 15, 2026  
+**Version:** 4.0  
+**Date:** January 17, 2026  
 **Classification:** Public Technical Reference  
-**Binary:** v0.1.5
+**Binary:** v0.2.0 (DeFi Hub Release)
+**Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 ---
 
@@ -746,6 +747,40 @@ If 80% staked (400M):
 
 Rewards are distributed **every block** (every 2 seconds):
 
+**Reward Wallet System (v0.2.0)**
+
+Each validator can specify a `reward_wallet` where their APY accumulates:
+
+```rust
+// From staking.rs (v0.2.0)
+pub struct ValidatorStake {
+    pub address: String,
+    pub stake: u64,
+    pub delegations: HashMap<String, u64>,
+    pub accumulated_rewards: u64,
+    pub reward_wallet: Option<String>,  // NEW: Custom destination for rewards
+    // ...
+}
+```
+
+**Genesis Validator Behavior:**
+- Genesis validators (NYC, LON, AMS, SIN, SYD, TOR) auto-receive rewards to the genesis wallet
+- Genesis wallet: `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
+- Rewards accumulate every block, withdrawable anytime
+
+**Setting a Custom Reward Wallet:**
+```bash
+curl -X POST https://rpc.sltn.io/staking/set_reward_wallet \
+  -d '{"validator_address": "sultanval1...", "reward_wallet": "sultan1..."}'
+```
+
+**Withdrawing Rewards:**
+```bash
+curl -X POST https://rpc.sltn.io/staking/withdraw_rewards \
+  -d '{"validator_address": "sultanval1..."}'
+# Returns: {"withdrawn": 12345, "to_wallet": "sultan1..."} 
+```
+
 ```rust
 // From staking.rs
 const BLOCKS_PER_YEAR: u64 = 15_768_000; // (365 * 24 * 60 * 60) / 2
@@ -1129,9 +1164,9 @@ if !verify_vote_signature(&pubkey, block_hash.as_bytes(), &signature) {
 }
 ```
 
-**Validator Pubkey Registry:**
+**Validator Pubkey Registry (Discovery Layer):**
 
-The P2P layer maintains a mapping of validator addresses to Ed25519 public keys, populated from verified `ValidatorAnnounce` messages:
+The P2P layer maintains a mapping of validator addresses to Ed25519 public keys for **signature verification only**. This registry is populated from verified `ValidatorAnnounce` messages but does NOT determine consensus membership:
 
 ```rust
 // Register known validator pubkeys for signature verification
@@ -1139,6 +1174,8 @@ pub fn register_validator_pubkey(&self, address: String, pubkey: [u8; 32]);
 pub fn get_validator_pubkey(&self, address: &str) -> Option<[u8; 32]>;
 pub fn known_validator_count(&self) -> usize;
 ```
+
+**Important (v0.1.6+):** P2P discovery is separate from consensus membership. Validators appearing in `ValidatorAnnounce` messages are registered for signature verification only. To participate in consensus and propose blocks, validators MUST register on-chain via `/staking/create_validator`.
 
 *Why it matters:* Every block proposal, vote, and validator announcement is cryptographically verified. Forged messages are detected and rejected before affecting consensus.
 
@@ -1191,48 +1228,58 @@ pub fn load_or_generate_keypair(data_dir: &Path) -> Result<Keypair> {
 - PeerId survives restarts
 - Enables stable bootstrap peer addressing
 
-### 6.8 P2P Validator Discovery (v0.1.4+)
+### 6.8 P2P Validator Discovery (Enterprise-Grade v0.1.6+)
 
-**The Problem:** New nodes joining the network need to discover all active validators. Previously required manual configuration.
+**The Problem:** New nodes joining the network need to discover validator public keys for signature verification. However, P2P messages cannot be trusted to determine consensus membership.
 
-**The Solution:** Automatic validator discovery via gossipsub.
+**The Solution:** Separate discovery from consensus. P2P handles pubkey exchange; blockchain handles validator set.
 
-**New Message Types:**
+**Discovery Message Types:**
 
 ```rust
-// Request full validator set (on startup or when behind)
+// Request known validator pubkeys (on startup)
 ValidatorSetRequest { 
     known_count: u32  // How many validators the requester knows
 },
 
-// Response with full validator list
+// Response with validator pubkeys for signature verification
 ValidatorSetResponse { 
-    validators: Vec<ValidatorInfo>  // All known validators
+    validators: Vec<ValidatorInfo>  // Pubkeys for verification only
 },
 ```
 
-**Discovery Flow:**
+**Discovery Flow (Enterprise-Grade):**
 
 ```
 New Node Joins:
 1. Connect to bootstrap peer
 2. Send ValidatorSetRequest { known_count: 0 }
-3. Receive ValidatorSetResponse with all validators
-4. Add validators to local consensus engine
-5. Begin participating in consensus
+3. Receive ValidatorSetResponse with validator pubkeys
+4. Register pubkeys for SIGNATURE VERIFICATION only
+5. ⛔ DO NOT add to consensus - read validator set from blockchain
+6. Sync blocks to get current chain state
+7. Derive validator set from on-chain staking records
 
 Periodic Re-announcement (every 60s):
 1. Each validator broadcasts ValidatorAnnounce
-2. All nodes update their validator registry
-3. Ensures network consistency even during churn
+2. All nodes update their pubkey registry (for signature verification)
+3. Consensus membership unchanged (determined by blockchain only)
 ```
+
+**Key Architectural Principle:**
+> **P2P is for discovery. Blockchain is for consensus.**
+>
+> - P2P messages register pubkeys for signature verification
+> - Validators MUST register on-chain via `/staking/create_validator`
+> - All nodes derive validator set from blockchain state (identical everywhere)
+> - Prevents divergent validator sets that cause consensus failures
 
 **Bootstrap Peer (Production):**
 ```
 /ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7
 ```
 
-*Why it matters:* Validators automatically discover each other. No manual configuration required beyond pointing to a bootstrap peer.
+*Why it matters:* Validators automatically discover each other's pubkeys for message verification. Consensus membership is strictly controlled via on-chain registration, ensuring all nodes have an identical view of the validator set.
 
 ---
 

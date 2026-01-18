@@ -855,6 +855,7 @@ mod tests {
             jailed_until: 0,
             created_at: 1700000000,
             last_reward_height: 5000,
+            reward_wallet: None,
         });
         
         let snapshot = StakingStateSnapshot {

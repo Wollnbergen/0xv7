@@ -397,31 +397,33 @@ impl SultanBlockchain {
         self.validate_block(&block).await
             .context("Block validation failed")?;
         
-        let mut blocks = self.blocks.write().await;
-        
-        // Verify this is the next expected block
-        let expected_height = blocks.len() as u64;
-        if block.index != expected_height {
-            anyhow::bail!(
-                "Block height mismatch: expected {}, got {}",
-                expected_height,
-                block.index
-            );
-        }
-        
-        // Verify chain linkage
-        if let Some(last_block) = blocks.last() {
-            if block.prev_hash != last_block.hash {
+        // STEP 1: Validate block linkage with minimal lock hold time
+        {
+            let blocks = self.blocks.read().await;
+            
+            // Verify this is the next expected block
+            let expected_height = blocks.len() as u64;
+            if block.index != expected_height {
                 anyhow::bail!(
-                    "Block prev_hash mismatch: expected {}, got {}",
-                    last_block.hash,
-                    block.prev_hash
+                    "Block height mismatch: expected {}, got {}",
+                    expected_height,
+                    block.index
                 );
             }
-        }
+            
+            // Verify chain linkage
+            if let Some(last_block) = blocks.last() {
+                if block.prev_hash != last_block.hash {
+                    anyhow::bail!(
+                        "Block prev_hash mismatch: expected {}, got {}",
+                        last_block.hash,
+                        block.prev_hash
+                    );
+                }
+            }
+        } // blocks read lock released here
         
-        // CRITICAL: Execute transactions from this block to update our state
-        // This is essential - the proposer applied these, but we need to too
+        // STEP 2: Process transactions WITHOUT holding any blockchain locks
         let tx_count = block.transactions.len();
         if tx_count > 0 {
             info!("🔄 Executing {} transactions from synced block {}", tx_count, block.index);
@@ -433,10 +435,9 @@ impl SultanBlockchain {
                     let tx_key = format!("{}:{}:{}", tx.from, tx.to, tx.nonce);
                     pending.retain(|p| format!("{}:{}:{}", p.from, p.to, p.nonce) != tx_key);
                 }
-            }
+            } // pending lock released here
             
-            // Process transactions through our coordinator
-            // This will classify them and apply state changes
+            // Process transactions through our coordinator (no locks held)
             let transactions = block.transactions.clone();
             
             // Process same-shard transactions
@@ -455,11 +456,24 @@ impl SultanBlockchain {
                   tx_count, block.index, cross_shard_txs.len());
         }
         
-        // Index transactions from synced block for history queries
+        // Index transactions from synced block for history queries (no locks held)
         self.index_transactions(&block.transactions, block.index, block.timestamp).await;
         
-        // Add block to chain
-        blocks.push(block.clone());
+        // STEP 3: Add block to chain with write lock (held briefly)
+        {
+            let mut blocks = self.blocks.write().await;
+            
+            // Double-check we're still at the expected height (race condition protection)
+            let expected_height = blocks.len() as u64;
+            if block.index != expected_height {
+                // Another block was added while we were processing - this is a race
+                // Just log and return Ok since the block was already added
+                warn!("Block {} was already added by another task", block.index);
+                return Ok(());
+            }
+            
+            blocks.push(block.clone());
+        } // blocks write lock released here
         
         info!(
             "📦 Applied block {} from network ({} txs)",
@@ -485,6 +499,18 @@ impl SultanBlockchain {
     pub async fn get_height(&self) -> u64 {
         let blocks = self.blocks.read().await;
         blocks.len() as u64 - 1
+    }
+    
+    /// Get blockchain height with timeout - returns None if lock is busy
+    /// Use this in hot paths to avoid deadlock
+    pub async fn try_get_height(&self) -> Option<u64> {
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            self.blocks.read()
+        ).await {
+            Ok(blocks) => Some(blocks.len() as u64 - 1),
+            Err(_) => None, // Timeout - lock was busy
+        }
     }
 
     /// Get latest block
@@ -650,11 +676,19 @@ impl SultanBlockchain {
             bail!("Invalid block hash: expected {}, got {}", calculated_hash, block.hash);
         }
 
-        // Get shards for signature verification
-        let config = self.coordinator.config.read().await;
-        let shards = self.coordinator.shards.read().await;
+        // Get shard count for routing (brief lock)
+        let shard_count = {
+            let config = self.coordinator.config.read().await;
+            config.shard_count
+        }; // config lock dropped
+        
+        // Clone shards Arc for signature verification (brief lock)
+        let shards: Vec<Arc<Shard>> = {
+            let shards_guard = self.coordinator.shards.read().await;
+            shards_guard.clone()
+        }; // shards lock dropped - we now have owned Arc clones
 
-        // Validate all transactions
+        // Validate all transactions WITHOUT holding coordinator locks
         for tx in &block.transactions {
             // Zero gas fee enforcement
             if tx.gas_fee != 0 {
@@ -663,7 +697,7 @@ impl SultanBlockchain {
             
             // SECURITY: Full Ed25519 signature verification
             // Route to appropriate shard based on sender address
-            let shard_id = Shard::calculate_shard_id(&tx.from, config.shard_count);
+            let shard_id = Shard::calculate_shard_id(&tx.from, shard_count);
             let shard = &shards[shard_id];
             
             if let Err(e) = shard.verify_signature(tx) {

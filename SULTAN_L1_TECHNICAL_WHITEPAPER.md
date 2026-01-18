@@ -2,11 +2,12 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.8  
-**Date:** January 15, 2026  
+**Version:** 4.0  
+**Date:** January 17, 2026  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
-**Binary:** v0.1.5
+**Binary:** v0.2.0 (DeFi Hub Release)
+**Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 ---
 
@@ -574,11 +575,21 @@ The bootstrap node maintains persistent connections to all active validators, en
 - Keys are generated on first run with 0600 permissions
 - Enables stable peer addressing and network topology
 
-**P2P Validator Discovery Protocol:**
-- `ValidatorAnnounce`: Validators broadcast their presence on join and every 60 seconds
-- `ValidatorSetRequest`: Nodes request the full validator set on startup
-- `ValidatorSetResponse`: Nodes share their known validators
-- All messages are cryptographically signed with Ed25519
+**P2P Validator Discovery Protocol (Enterprise-Grade v0.1.6+):**
+
+Sultan implements strict separation between P2P discovery and consensus membership:
+
+| Message | Purpose | Affects Consensus? |
+|---------|---------|-------------------|
+| `ValidatorAnnounce` | Share pubkey for signature verification | ❌ Discovery only |
+| `ValidatorSetRequest` | Request known validators on startup | ❌ Discovery only |
+| `ValidatorSetResponse` | Share known validator pubkeys | ❌ Discovery only |
+
+**Key Principle:** P2P is for discovery. Blockchain is for consensus.
+- P2P messages register public keys for **signature verification only**
+- Validators MUST register on-chain via `/staking/create_validator` to join consensus
+- All nodes derive validator set from **blockchain state** (identical everywhere)
+- Prevents divergent validator sets that cause consensus failures
 
 ### 5.5 P2P Security Layer (Enterprise-Grade)
 
@@ -606,17 +617,16 @@ All network messages are cryptographically signed and verified:
 
 **Validator Registry:**
 
-The P2P layer maintains a registry of validator public keys, populated from verified announcements. This enables:
-- Signature verification for proposals and votes
-- Minimum stake enforcement (10 trillion SULTAN)
-- Known validator tracking for consensus integration
+The P2P layer maintains a registry of validator public keys for **signature verification only**. This registry is populated from verified `ValidatorAnnounce` messages but does NOT determine consensus membership:
 
 ```rust
-// Validator pubkey management
+// Validator pubkey management (for signature verification)
 pub fn register_validator_pubkey(&self, address: String, pubkey: [u8; 32]);
 pub fn get_validator_pubkey(&self, address: &str) -> Option<[u8; 32]>;
 pub fn known_validator_count(&self) -> usize;
 ```
+
+**Important:** Pubkey registration enables signature verification for incoming messages. To participate in consensus, validators MUST register on-chain via `/staking/create_validator`.
 
 ### 5.6 Block Synchronization
 
@@ -1042,8 +1052,29 @@ Validators should monitor:
 |-----------|-------|
 | Base APY | 13.33% (at 30% staking) |
 | Block rewards | Proportional to stake |
+| Reward frequency | Every block (~43,200/day) |
 | Priority fees | 60% to proposer |
 | Slashing protection | Uptime monitoring |
+
+**Reward Wallet System (v0.2.0)**
+
+Validators can specify a custom wallet to receive their APY rewards:
+
+```bash
+# Set reward wallet
+curl -X POST https://rpc.sltn.io/staking/set_reward_wallet \
+  -d '{"validator_address": "sultanval1...", "reward_wallet": "sultan1..."}'
+
+# Check current reward wallet
+curl https://rpc.sltn.io/staking/reward_wallet/sultanval1...
+
+# Withdraw accumulated rewards
+curl -X POST https://rpc.sltn.io/staking/withdraw_rewards \
+  -d '{"validator_address": "sultanval1..."}'
+```
+
+Genesis validators automatically receive rewards to the genesis wallet:
+`sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 **Annual Earnings Example (10,000 SLTN stake):**
 - At $0.20/SLTN: 1,333 SLTN = $267/year (covers ~$100 server + profit)

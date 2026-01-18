@@ -2,15 +2,15 @@
 // This JavaScript properly maps the RPC response to the HTML stat boxes
 
 (function() {
-    // Production RPC endpoint (nginx proxies to port 26657)
+    // Production RPC endpoint (port 8545)
     const RPC_ENDPOINTS = [
         'https://rpc.sltn.io',          // Primary endpoint (NYC)
-        'http://206.189.224.142:26657', // NYC direct
-        'http://134.122.96.36:26657',   // London
-        'http://143.198.205.21:26657',  // Singapore  
-        'http://142.93.238.33:26657',   // Amsterdam
-        'http://46.101.122.13:26657',   // Frankfurt
-        'http://24.144.94.23:26657'     // San Francisco
+        'http://206.189.224.142:8545',  // NYC direct
+        'http://24.144.94.23:8545',     // San Francisco
+        'http://46.101.122.13:8545',    // London
+        'http://142.93.238.33:8545',    // Frankfurt
+        'http://143.198.205.21:8545',   // Amsterdam
+        'http://134.122.96.36:8545'     // Singapore
     ];
     const UPDATE_INTERVAL = 5000; // 5 seconds
     let currentEndpointIndex = 0;
