@@ -2567,6 +2567,10 @@ mod rpc {
         signature: Option<String>,
         #[serde(default)]
         public_key: Option<String>,
+        /// Optional: wallet address for receiving APY rewards
+        /// If not provided, defaults to validator_address
+        #[serde(default)]
+        reward_wallet: Option<String>,
     }
 
     fn default_commission() -> f64 {
@@ -2629,6 +2633,14 @@ mod rpc {
             req.commission_rate,
         ).await {
             Ok(_) => {
+                // Set reward wallet: use provided wallet or default to validator's own address
+                let reward_wallet = req.reward_wallet.clone().unwrap_or_else(|| req.validator_address.clone());
+                if let Err(e) = state.staking_manager.set_reward_wallet(&req.validator_address, reward_wallet.clone()).await {
+                    warn!("Failed to set reward wallet for {}: {}", req.validator_address, e);
+                } else {
+                    info!("💰 New validator {} rewards → {}", req.validator_address, reward_wallet);
+                }
+
                 // Also add to consensus engine for block production
                 // This unifies staking validators with consensus validators
                 // CRITICAL: Drop consensus lock BEFORE acquiring blockchain lock to prevent deadlock
@@ -3174,21 +3186,118 @@ mod rpc {
     struct SetRewardWalletRequest {
         validator_address: String,
         reward_wallet: String,
-        // TODO: Add signature verification for production
-        // signature: String,
+        /// Signature proving ownership of validator (required)
+        /// Signs: "set_reward_wallet:{validator_address}:{reward_wallet}:{timestamp}"
+        signature: String,
+        /// Public key of the validator (hex encoded, 64 chars)
+        public_key: String,
+        /// Timestamp to prevent replay attacks (must be within 5 minutes)
+        timestamp: u64,
     }
 
     /// Handle setting a validator's reward wallet
     /// 
-    /// This allows genesis validators (without wallets) to designate a wallet
-    /// where their accumulated APY rewards should be sent when withdrawn.
+    /// This allows validators to designate a wallet where their accumulated 
+    /// APY rewards should be sent when withdrawn.
+    /// 
+    /// SECURITY: Requires signature verification to prevent unauthorized changes.
     async fn handle_set_reward_wallet(
         req: SetRewardWalletRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
-        // TODO: In production, verify signature proves ownership of validator
-        // For now, we allow setting for any validator (admin use only)
+        // Verify timestamp is within 5 minutes to prevent replay attacks
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         
+        if req.timestamp > now + 300 || req.timestamp < now.saturating_sub(300) {
+            return Ok(warp::reply::json(&serde_json::json!({
+                "error": "Timestamp must be within 5 minutes of current time",
+                "status": "error"
+            })));
+        }
+
+        // Validate and decode public key
+        if req.public_key.len() != 64 {
+            return Ok(warp::reply::json(&serde_json::json!({
+                "error": "public_key must be 64 hex characters",
+                "status": "error"
+            })));
+        }
+        
+        let pubkey_bytes = match hex::decode(&req.public_key) {
+            Ok(b) if b.len() == 32 => {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&b);
+                arr
+            }
+            _ => {
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "error": "Invalid public_key hex",
+                    "status": "error"
+                })));
+            }
+        };
+
+        let verifying_key = match ed25519_dalek::VerifyingKey::from_bytes(&pubkey_bytes) {
+            Ok(k) => k,
+            Err(_) => {
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "error": "Invalid Ed25519 public key",
+                    "status": "error"
+                })));
+            }
+        };
+
+        // Verify the public key matches the validator address (or is registered for this validator)
+        // For genesis validators, we check if the pubkey is registered in consensus
+        let consensus = state.consensus.read().await;
+        let validator_pubkey = consensus.get_validator_pubkey(&req.validator_address);
+        drop(consensus);
+        
+        if let Some(registered_pubkey) = validator_pubkey {
+            if registered_pubkey != pubkey_bytes {
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "error": "Public key does not match registered validator key",
+                    "status": "error"
+                })));
+            }
+        }
+        // Note: For new validators without registered pubkeys, we allow the operation
+        // since they just registered with this pubkey
+
+        // Verify signature
+        let message = format!("set_reward_wallet:{}:{}:{}", 
+            req.validator_address, req.reward_wallet, req.timestamp);
+        
+        use sha2::{Sha256, Digest};
+        let message_hash = Sha256::digest(message.as_bytes());
+        
+        let sig_bytes = match hex::decode(&req.signature) {
+            Ok(b) if b.len() == 64 => {
+                let mut arr = [0u8; 64];
+                arr.copy_from_slice(&b);
+                arr
+            }
+            _ => {
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "error": "Invalid signature hex (must be 128 chars)",
+                    "status": "error"
+                })));
+            }
+        };
+
+        let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+
+        if verifying_key.verify_strict(&message_hash, &signature).is_err() {
+            return Ok(warp::reply::json(&serde_json::json!({
+                "error": "Invalid signature - must sign: set_reward_wallet:{validator}:{wallet}:{timestamp}",
+                "status": "error"
+            })));
+        }
+
+        // Signature verified - update reward wallet
         match state.staking_manager.set_reward_wallet(&req.validator_address, req.reward_wallet.clone()).await {
             Ok(()) => {
                 info!("Validator {} set reward wallet to {}", req.validator_address, req.reward_wallet);

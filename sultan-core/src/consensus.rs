@@ -739,6 +739,11 @@ impl ConsensusEngine {
         self.validators.get(address)
     }
 
+    /// Get validator's public key by address
+    pub fn get_validator_pubkey(&self, address: &str) -> Option<[u8; 32]> {
+        self.validators.get(address).map(|v| v.pubkey)
+    }
+
     /// Get all active validators
     pub fn get_active_validators(&self) -> Vec<&Validator> {
         self.validators
