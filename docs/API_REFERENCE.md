@@ -276,14 +276,25 @@ Register as a validator. Requires minimum 10,000 SLTN stake.
   "pubkey": "base64_encoded_ed25519_pubkey",
   "stake_amount": 10000000000000,
   "commission_rate": 0.05,
+  "reward_wallet": "sultan1...",
   "signature": "base64_encoded_signature"
 }
 ```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `moniker` | Yes | Validator display name |
+| `pubkey` | Yes | Ed25519 public key (base64) |
+| `stake_amount` | Yes | Minimum 10,000 SLTN (in µSLTN) |
+| `commission_rate` | Yes | 0.0 to 1.0 (e.g., 0.05 = 5%) |
+| `reward_wallet` | No | Custom wallet for rewards (defaults to validator address) |
+| `signature` | Yes | Ed25519 signature |
 
 **Response:**
 ```json
 {
   "validator_address": "sultanvaloper1...",
+  "reward_wallet": "sultan1...",
   "status": "active",
   "stake": 10000000000000
 }
@@ -365,6 +376,60 @@ Claim staking rewards.
   "delegator": "sultan15g5e8...",
   "rewards_claimed": 50000000000,
   "status": "success"
+}
+```
+
+---
+
+## POST /staking/set_reward_wallet
+
+**v0.2.0+ BREAKING CHANGE:** Set a custom wallet to receive staking rewards. Requires Ed25519 signature authentication.
+
+**Request Body:**
+```json
+{
+  "validator_address": "sultanvaloper1...",
+  "reward_wallet": "sultan1...",
+  "signature": "hex_encoded_ed25519_signature",
+  "public_key": "hex_encoded_32byte_pubkey",
+  "timestamp": 1737208800
+}
+```
+
+**Signature Message Format:**
+```
+set_reward_wallet:{validator_address}:{reward_wallet}:{timestamp}
+```
+
+**Security Requirements:**
+- `public_key` must match the validator's registered Ed25519 pubkey
+- `timestamp` must be within 5 minutes of current server time (replay protection)
+- `signature` must be valid Ed25519 signature over the message
+
+**Response:**
+```json
+{
+  "validator_address": "sultanvaloper1...",
+  "reward_wallet": "sultan1...",
+  "status": "updated"
+}
+```
+
+**Error Responses:**
+- `401`: Invalid signature or public key mismatch
+- `400`: Timestamp expired (>5 min old) or invalid validator
+
+---
+
+## GET /staking/reward_wallet/{validator_address}
+
+Get the current reward wallet for a validator.
+
+**Response:**
+```json
+{
+  "validator_address": "sultanvaloper1...",
+  "reward_wallet": "sultan1..."
 }
 ```
 

@@ -768,10 +768,23 @@ pub struct ValidatorStake {
 - Genesis wallet: `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 - Rewards accumulate every block, withdrawable anytime
 
-**Setting a Custom Reward Wallet:**
+**Setting a Custom Reward Wallet (v0.2.0+):**
+
+Requires Ed25519 signature authentication to prevent unauthorized reward redirection:
+
 ```bash
+# Generate signature over: set_reward_wallet:{validator}:{wallet}:{timestamp}
+# timestamp must be within 5 minutes of server time
+
 curl -X POST https://rpc.sltn.io/staking/set_reward_wallet \
-  -d '{"validator_address": "sultanval1...", "reward_wallet": "sultan1..."}'
+  -H "Content-Type: application/json" \
+  -d '{
+    "validator_address": "sultanval1...",
+    "reward_wallet": "sultan1...",
+    "signature": "hex_encoded_ed25519_sig",
+    "public_key": "hex_encoded_32byte_pubkey",
+    "timestamp": 1737208800
+  }'
 ```
 
 **Withdrawing Rewards:**

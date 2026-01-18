@@ -1058,14 +1058,24 @@ Validators should monitor:
 
 **Reward Wallet System (v0.2.0)**
 
-Validators can specify a custom wallet to receive their APY rewards:
+Validators can specify a custom wallet to receive their APY rewards. **Changing the reward wallet requires Ed25519 signature authentication** (prevents unauthorized reward redirection attacks).
 
 ```bash
-# Set reward wallet
+# Set reward wallet (requires signature)
 curl -X POST https://rpc.sltn.io/staking/set_reward_wallet \
-  -d '{"validator_address": "sultanval1...", "reward_wallet": "sultan1..."}'
+  -H "Content-Type: application/json" \
+  -d '{
+    "validator_address": "sultanval1...",
+    "reward_wallet": "sultan1...",
+    "signature": "hex_encoded_ed25519_sig",
+    "public_key": "hex_encoded_32byte_pubkey",
+    "timestamp": 1737208800
+  }'
 
-# Check current reward wallet
+# Signature message format: set_reward_wallet:{validator}:{wallet}:{timestamp}
+# Timestamp must be within 5 minutes (replay protection)
+
+# Check current reward wallet (no auth required)
 curl https://rpc.sltn.io/staking/reward_wallet/sultanval1...
 
 # Withdraw accumulated rewards

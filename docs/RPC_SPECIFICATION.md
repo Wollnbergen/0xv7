@@ -1,8 +1,8 @@
 # Sultan L1 RPC Specification
 
-**Version:** 2.0  
-**Updated:** January 1, 2026  
-**Protocol:** HTTP REST API (JSON-RPC planned for v2.1)
+**Version:** 2.1  
+**Updated:** January 18, 2026  
+**Protocol:** HTTP REST API (JSON-RPC planned for v2.2)
 
 ---
 
@@ -24,6 +24,13 @@ Sultan L1 provides a REST API for blockchain interaction. All endpoints accept a
 - **Ed25519 Signatures**: All signed operations use Ed25519
 - **Rate Limiting**: 100 req/10s per IP (bridge: 50 req/min per pubkey)
 
+### Authentication Notes
+
+| Auth Type | Description |
+|-----------|-------------|
+| **Signature** | Standard Ed25519 signature (base64 encoded) |
+| **Ed25519 Sig*** | Enhanced auth: signature + pubkey + timestamp validation (5 min window) |
+
 ---
 
 ## Quick Reference
@@ -44,6 +51,8 @@ Sultan L1 provides a REST API for blockchain interaction. All endpoints accept a
 | **Staking** | POST | `/staking/delegate` | Signature |
 | **Staking** | POST | `/staking/undelegate` | Signature |
 | **Staking** | POST | `/staking/withdraw_rewards` | Signature |
+| **Staking** | POST | `/staking/set_reward_wallet` | Ed25519 Sig* |
+| **Staking** | GET | `/staking/reward_wallet/{address}` | No |
 | **Staking** | GET | `/staking/validators` | No |
 | **Staking** | GET | `/staking/delegations/{address}` | No |
 | **Staking** | GET | `/staking/statistics` | No |
