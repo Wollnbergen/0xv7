@@ -74,6 +74,17 @@ struct Args {
     #[clap(long, env = "SULTAN_VALIDATOR_SECRET")]
     validator_secret: Option<String>,
 
+    /// Reward wallet address (where validator APY rewards are sent)
+    /// Defaults to genesis wallet if not specified
+    #[clap(long)]
+    reward_wallet: Option<String>,
+
+    /// Genesis validators (comma-separated list of validator addresses)
+    /// All specified validators will be pre-registered at startup
+    /// Example: --genesis-validators addr1,addr2,addr3
+    #[clap(long)]
+    genesis_validators: Option<String>,
+
     /// P2P listen address
     #[clap(short, long, default_value = "/ip4/0.0.0.0/tcp/26656")]
     p2p_addr: String,
@@ -530,6 +541,34 @@ impl NodeState {
                 .context("Failed to add validator")?;
         }
 
+        // Add genesis validators to consensus (allows accepting blocks from all genesis validators)
+        if let Some(genesis_vals_str) = &args.genesis_validators {
+            let genesis_validators: Vec<String> = genesis_vals_str.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            
+            let our_addr = args.validator_address.as_ref().map(|s| s.as_str()).unwrap_or("");
+            
+            for gv_addr in &genesis_validators {
+                // Skip if it's our own address (already added above)
+                if gv_addr == our_addr {
+                    continue;
+                }
+                
+                // Add with default stake and zero pubkey (will be updated via sync)
+                let default_stake = 10_000_000_000_000u64; // 10M SLTN
+                let zero_pubkey = [0u8; 32]; // Will be updated when validator syncs
+                
+                if let Err(e) = consensus.add_validator(gv_addr.clone(), default_stake, zero_pubkey) {
+                    debug!("Genesis validator {} already exists or failed: {}", gv_addr, e);
+                } else {
+                    info!("📋 Pre-registered genesis validator: {}", gv_addr);
+                }
+            }
+            info!("🏛️ {} genesis validators pre-registered", genesis_validators.len());
+        }
+
         // Initialize P2P network if enabled
         let p2p_network = if args.enable_p2p {
             // Load or generate persistent keypair for stable PeerId across restarts
@@ -609,13 +648,15 @@ impl NodeState {
                     }
                 }
                 
-                // Set genesis wallet as reward destination for this validator
-                if let Some(ref wallet) = genesis_wallet {
-                    if let Err(e) = staking_manager.set_reward_wallet(validator_addr, wallet.clone()).await {
-                        warn!("⚠️ Failed to set reward wallet: {}", e);
-                    } else {
-                        info!("💰 Validator {} APY rewards → {}", validator_addr, wallet);
-                    }
+                // Set reward wallet for this validator (CLI flag > genesis wallet > validator address)
+                let reward_wallet = args.reward_wallet.clone()
+                    .or_else(|| genesis_wallet.clone())
+                    .unwrap_or_else(|| validator_addr.clone());
+                
+                if let Err(e) = staking_manager.set_reward_wallet(validator_addr, reward_wallet.clone()).await {
+                    warn!("⚠️ Failed to set reward wallet: {}", e);
+                } else {
+                    info!("💰 Validator {} APY rewards → {}", validator_addr, reward_wallet);
                 }
             }
         }
@@ -953,19 +994,92 @@ impl NodeState {
 
     /// Block production loop
     async fn run_block_production(&self) -> Result<()> {
-        let mut ticker = interval(Duration::from_secs(self.block_time));
         info!("🔄 Block production loop started, block_time={}s", self.block_time);
+        
+        // === GOSSIPSUB MESH WARMUP ===
+        // Wait for gossipsub mesh to establish before producing first block.
+        // This is critical for multi-validator networks - messages won't propagate
+        // until the mesh is formed (typically 5-15 seconds after peer connections).
+        // IMPORTANT: Wait BEFORE creating the ticker to avoid accumulated missed ticks.
+        info!("⏳ Waiting 15s for P2P mesh to establish before block production...");
+        tokio::time::sleep(Duration::from_secs(15)).await;
+        info!("✅ P2P mesh warmup complete, starting block production");
+        
+        // Create ticker AFTER the warmup sleep to avoid accumulated ticks
+        let mut ticker = interval(Duration::from_secs(self.block_time));
+        
+        // Track ticks for periodic sync check
+        let mut tick_count: u64 = 0;
+        let sync_check_interval = 5; // Check every 5 ticks (10s with 2s block time)
         
         loop {
             info!("⏳ Block production: waiting for next tick...");
             ticker.tick().await;
+            tick_count += 1;
             info!("⏰ Block production: tick received, starting produce_block()");
+            
+            // === PERIODIC BLOCK SYNC CHECK ===
+            // Every N ticks, check if we're behind and request sync if needed.
+            // This handles cases where gossipsub misses blocks.
+            if tick_count % sync_check_interval == 0 {
+                if let Err(e) = self.check_and_request_sync().await {
+                    debug!("Sync check failed: {}", e);
+                }
+            }
             
             if let Err(e) = self.produce_block().await {
                 error!("Block production failed: {}", e);
                 continue;
             }
         }
+    }
+    
+    /// Check if we're behind and request sync from peers
+    async fn check_and_request_sync(&self) -> Result<()> {
+        // Get our current height
+        let our_height = self.blockchain.read().await.get_height().await;
+        
+        // Check if we need to sync using block_sync_manager
+        if let Some(ref block_sync) = self.block_sync_manager {
+            let sync_manager = block_sync.read().await;
+            
+            if sync_manager.needs_sync().await {
+                let max_peer_height = sync_manager.max_peer_height().await;
+                let behind_by = max_peer_height.saturating_sub(our_height);
+                
+                if behind_by > 0 {
+                    // Request blocks we're missing
+                    let from_height = our_height + 1;
+                    let to_height = std::cmp::min(max_peer_height, from_height + 99); // Max 100 blocks
+                    
+                    drop(sync_manager); // Release lock before P2P operation
+                    
+                    if let Some(ref p2p) = self.p2p_network {
+                        info!("🔄 Behind by {} blocks (ours: {}, peers: {}), requesting sync for blocks {}-{}", 
+                              behind_by, our_height, max_peer_height, from_height, to_height);
+                        if let Err(e) = p2p.read().await.request_sync(from_height, to_height).await {
+                            warn!("Failed to request sync: {}", e);
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+        }
+        
+        // Fallback: if we're at genesis and have peers, try to sync
+        if our_height == 0 {
+            if let Some(ref p2p) = self.p2p_network {
+                let peer_count = p2p.read().await.peer_count().await;
+                if peer_count > 0 {
+                    info!("🔄 Still at genesis height with {} peers, requesting sync for blocks 1-10", peer_count);
+                    if let Err(e) = p2p.read().await.request_sync(1, 10).await {
+                        warn!("Failed to request sync: {}", e);
+                    }
+                }
+            }
+        }
+        
+        Ok(())
     }
 
     /// Produce a single block
@@ -1069,6 +1183,7 @@ impl NodeState {
         let our_position = proposer_order.iter().position(|a| a == &our_address);
         
         info!("🔨 produce_block: primary proposer: {} (validators: {})", primary_proposer, validator_count);
+        info!("🔨 produce_block: our_address: {}, our_position: {:?}", our_address, our_position);
 
         // === GENESIS BOOTSTRAP SAFETY NET ===
         // On a fresh network with only one registered validator (the genesis node),
@@ -1373,10 +1488,10 @@ impl NodeState {
                 let block_hash = format!("{:x}", sha2::Sha256::digest(&block_data));
                 
                 // Sign block hash with validator's key for proposer verification
+                // NOTE: Sign the raw block_hash bytes directly - p2p.rs verify_vote_signature verifies raw bytes
                 let proposer_signature = if let Some(ref signing_key) = self.validator_signing_key {
                     use ed25519_dalek::Signer;
-                    let hash_bytes = sha2::Sha256::digest(block_hash.as_bytes());
-                    let signature = signing_key.sign(&hash_bytes);
+                    let signature = signing_key.sign(block_hash.as_bytes());
                     signature.to_bytes().to_vec()
                 } else {
                     warn!("⚠️  Block {} proposed without signature (no signing key)", block.index);
@@ -3067,6 +3182,27 @@ mod rpc {
         }
     }
 
+    /// Enhanced validator info with computed fields for explorer
+    #[derive(serde::Serialize)]
+    struct ValidatorInfo {
+        validator_address: String,
+        reward_wallet: Option<String>,
+        self_stake: u64,
+        delegated_stake: u64,
+        total_stake: u64,
+        commission_rate: f64,
+        rewards_accumulated: u64,
+        blocks_signed: u64,
+        blocks_missed: u64,
+        jailed: bool,
+        jailed_until: u64,
+        created_at: u64,
+        last_reward_height: u64,
+        // Computed fields for explorer
+        uptime_percent: f64,
+        voting_power_percent: f64,
+    }
+
     async fn handle_get_validators(
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -3097,7 +3233,47 @@ mod rpc {
             }).collect();
         }
         
-        Ok(warp::reply::json(&validators))
+        // Calculate total stake for voting power percentages
+        let total_network_stake: u64 = validators.iter().map(|v| v.total_stake).sum();
+        
+        // Convert to enhanced info with computed fields
+        let enhanced: Vec<ValidatorInfo> = validators.iter().map(|v| {
+            // Uptime: blocks_signed / (blocks_signed + blocks_missed) * 100
+            // If no blocks yet, show 100% (new validator)
+            let total_blocks = v.blocks_signed + v.blocks_missed;
+            let uptime_percent = if total_blocks > 0 {
+                (v.blocks_signed as f64 / total_blocks as f64) * 100.0
+            } else {
+                100.0 // New validator, no blocks yet
+            };
+            
+            // Voting power: this validator's stake / total network stake * 100
+            let voting_power_percent = if total_network_stake > 0 {
+                (v.total_stake as f64 / total_network_stake as f64) * 100.0
+            } else {
+                0.0
+            };
+            
+            ValidatorInfo {
+                validator_address: v.validator_address.clone(),
+                reward_wallet: v.reward_wallet.clone(),
+                self_stake: v.self_stake,
+                delegated_stake: v.delegated_stake,
+                total_stake: v.total_stake,
+                commission_rate: v.commission_rate,
+                rewards_accumulated: v.rewards_accumulated,
+                blocks_signed: v.blocks_signed,
+                blocks_missed: v.blocks_missed,
+                jailed: v.jailed,
+                jailed_until: v.jailed_until,
+                created_at: v.created_at,
+                last_reward_height: v.last_reward_height,
+                uptime_percent,
+                voting_power_percent,
+            }
+        }).collect();
+        
+        Ok(warp::reply::json(&enhanced))
     }
 
     async fn handle_get_delegations(
@@ -3653,20 +3829,19 @@ async fn main() -> Result<()> {
                     let peer_count = p2p.read().await.peer_count().await;
                     info!("📢 Announcing validator {} to P2P network ({} peers connected)", addr, peer_count);
                     
-                    // Get actual validator pubkey from consensus engine
-                    let pubkey = {
-                        let consensus = p2p_state.consensus.read().await;
-                        if let Some(validator) = consensus.get_validator(addr) {
-                            validator.pubkey
-                        } else {
-                            warn!("⚠️ Validator {} not found in consensus, using placeholder pubkey", addr);
-                            [0u8; 32]
-                        }
+                    // Get pubkey from our actual signing key (NOT from consensus, which may have placeholder)
+                    // This ensures the pubkey matches the signature we create
+                    let (pubkey, signature) = if let Some(ref signing_key) = p2p_state.validator_signing_key {
+                        use ed25519_dalek::Signer;
+                        let peer_id = p2p.read().await.peer_id().to_string();
+                        let message = format!("{}{}{}", addr, stake, peer_id);
+                        let sig = signing_key.sign(message.as_bytes());
+                        let pk = signing_key.verifying_key().to_bytes();
+                        (pk, sig.to_bytes().to_vec())
+                    } else {
+                        warn!("⚠️ No signing key available for validator announcement");
+                        ([0u8; 32], Vec::new())
                     };
-                    
-                    // Sign the announcement with validator's private key for authenticity
-                    let peer_id = p2p.read().await.peer_id().to_string();
-                    let signature = p2p_state.sign_validator_announcement(addr, stake, &peer_id);
                     
                     if pubkey == [0u8; 32] {
                         warn!("⚠️ Skipping validator announcement - no valid pubkey");
@@ -3708,25 +3883,18 @@ async fn main() -> Result<()> {
                         if let (Some(ref addr), Some(stake)) = (&validator_addr, validator_stake) {
                             if let Some(ref p2p) = p2p_state.p2p_network {
                                 // Get actual validator pubkey from consensus engine
-                                let pubkey = {
-                                    let consensus = p2p_state.consensus.read().await;
-                                    if let Some(validator) = consensus.get_validator(addr) {
-                                        validator.pubkey
-                                    } else {
-                                        [0u8; 32]
-                                    }
-                                };
-                                
-                                if pubkey != [0u8; 32] {
-                                    // Sign the re-announcement
+                                // Get pubkey and signature from actual signing key
+                                if let Some(ref signing_key) = p2p_state.validator_signing_key {
+                                    use ed25519_dalek::Signer;
                                     let peer_id = p2p.read().await.peer_id().to_string();
-                                    let signature = p2p_state.sign_validator_announcement(addr, stake, &peer_id);
-                                    if !signature.is_empty() {
-                                        if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
-                                            warn!("Failed to re-announce validator: {}", e);
-                                        } else {
-                                            debug!("🔄 Re-announced validator {} to P2P network", addr);
-                                        }
+                                    let message = format!("{}{}{}", addr, stake, peer_id);
+                                    let signature = signing_key.sign(message.as_bytes()).to_bytes().to_vec();
+                                    let pubkey = signing_key.verifying_key().to_bytes();
+                                    
+                                    if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
+                                        warn!("Failed to re-announce validator: {}", e);
+                                    } else {
+                                        debug!("🔄 Re-announced validator {} to P2P network", addr);
                                     }
                                 }
                             }
@@ -3828,7 +3996,7 @@ async fn main() -> Result<()> {
                             NetworkMessage::BlockProposal { height, proposer, block_hash, block_data, proposer_signature: _ } => {
                                 // === PRODUCTION BLOCK SYNC ===
                                 // Process incoming block from another validator
-                                debug!("📥 Received block proposal: height={}, proposer={}, hash={}", 
+                                info!("📥 HANDLER: BlockProposal received - height={}, proposer={}, hash={}", 
                                        height, proposer, &block_hash[..16.min(block_hash.len())]);
                                 
                                 // Validate proposer is a registered validator FIRST
@@ -3920,7 +4088,7 @@ async fn main() -> Result<()> {
                                 
                                 // Only accept blocks that are ahead of us
                                 if height <= our_height {
-                                    debug!("Block {} already processed (our height: {})", height, our_height);
+                                    info!("⏭️ Block {} already processed (our height: {})", height, our_height);
                                     continue;
                                 }
                                 
@@ -3942,7 +4110,7 @@ async fn main() -> Result<()> {
                                 
                                 // Accept block if it's the next one we need
                                 if height == our_height + 1 {
-                                    info!("📦 Applying block {} from {}", height, proposer);
+                                    info!("📦 Applying block {} from {} (our height was {})", height, proposer, our_height);
                                     
                                     // Apply block - DEADLOCK PREVENTION: use try_read to avoid blocking
                                     let apply_result = match p2p_state.blockchain.try_read() {
@@ -3994,6 +4162,10 @@ async fn main() -> Result<()> {
                                             }
                                         }
                                     }
+                                } else {
+                                    // Block is ahead but not the immediate next one - gap in sequence
+                                    info!("⏳ Block {} received but we need {} first (gap of {} blocks)", 
+                                          height, our_height + 1, height - our_height - 1);
                                 }
                             }
                             NetworkMessage::Transaction { tx_hash, tx_data } => {
@@ -4160,23 +4332,18 @@ async fn main() -> Result<()> {
                                     let peer_count = p2p.read().await.peer_count().await;
                                     if peer_count > 0 {
                                         // Get actual pubkey from consensus
-                                        let pubkey = {
-                                            let consensus = p2p_state.consensus.read().await;
-                                            if let Some(validator) = consensus.get_validator(addr) {
-                                                validator.pubkey
-                                            } else {
-                                                [0u8; 32]
-                                            }
-                                        };
-                                        if pubkey != [0u8; 32] {
+                                        // Get pubkey and signature from actual signing key
+                                        if let Some(ref signing_key) = p2p_state.validator_signing_key {
+                                            use ed25519_dalek::Signer;
                                             let peer_id = p2p.read().await.peer_id().to_string();
-                                            let signature = p2p_state.sign_validator_announcement(addr, stake, &peer_id);
-                                            if !signature.is_empty() {
-                                                if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
-                                                    debug!("Failed to re-announce validator: {}", e);
-                                                } else {
-                                                    info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
-                                                }
+                                            let message = format!("{}{}{}", addr, stake, peer_id);
+                                            let signature = signing_key.sign(message.as_bytes()).to_bytes().to_vec();
+                                            let pubkey = signing_key.verifying_key().to_bytes();
+                                            
+                                            if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
+                                                debug!("Failed to re-announce validator: {}", e);
+                                            } else {
+                                                info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
                                             }
                                         }
                                     }

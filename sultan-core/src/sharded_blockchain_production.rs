@@ -117,12 +117,15 @@ impl SultanBlockchain {
     }
 
     fn create_genesis_block() -> Vec<Block> {
+        // CRITICAL: Use a fixed deterministic timestamp for genesis block
+        // This ensures all nodes have identical genesis blocks, enabling block sync
+        // Without this, each node would have a different genesis timestamp,
+        // causing block validation failures during sync
+        const GENESIS_TIMESTAMP: u64 = 1768867200; // Fixed: Jan 20, 2026 00:00:00 UTC
+        
         let genesis = Block {
             index: 0,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            timestamp: GENESIS_TIMESTAMP,
             transactions: vec![],
             prev_hash: String::from("0"),
             hash: String::from("genesis"),
@@ -201,6 +204,7 @@ impl SultanBlockchain {
             .ok_or_else(|| anyhow::anyhow!("No blocks in chain - genesis block missing"))?;
         let index = prev_block.index + 1;
         let prev_hash = prev_block.hash.clone();
+        let prev_timestamp = prev_block.timestamp;
         drop(blocks);
 
         // Aggregate state root from ALL shards (Merkle of shard roots)
@@ -218,10 +222,15 @@ impl SultanBlockchain {
         };
         drop(shards);
 
-        let timestamp = std::time::SystemTime::now()
+        // Get current time in seconds
+        let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
+        
+        // CRITICAL: Ensure timestamp is strictly greater than previous block
+        // This prevents timestamp collision when blocks are produced rapidly
+        let timestamp = std::cmp::max(current_time, prev_timestamp + 1);
 
         // Build block with ALL transactions (same-shard + cross-shard)
         let mut block = Block {
@@ -392,10 +401,17 @@ impl SultanBlockchain {
     /// Used for block sync - when we're not the proposer
     /// CRITICAL: We must execute transactions to update our local state
     pub async fn apply_block(&self, block: Block) -> Result<()> {
+        info!("📥 apply_block ENTRY: block.index={}, block.prev_hash='{}', block.hash='{}'", 
+              block.index, &block.prev_hash, &block.hash[..32.min(block.hash.len())]);
+        
         // SECURITY: Validate block before applying
         // This prevents malicious blocks from corrupting state
-        self.validate_block(&block).await
-            .context("Block validation failed")?;
+        info!("📥 apply_block: calling validate_block for block {}", block.index);
+        if let Err(e) = self.validate_block(&block).await {
+            warn!("❌ Block {} validation failed: {}", block.index, e);
+            return Err(e).context("Block validation failed");
+        }
+        info!("📥 apply_block: validate_block PASSED for block {}", block.index);
         
         // STEP 1: Validate block linkage with minimal lock hold time
         {
@@ -648,33 +664,97 @@ impl SultanBlockchain {
     /// - Zero gas fee enforcement
     /// - Full Ed25519 signature verification for all transactions
     pub async fn validate_block(&self, block: &Block) -> Result<bool> {
+        info!("🔍 validate_block ENTRY: block.index={}", block.index);
         let blocks = self.blocks.read().await;
+        let chain_len = blocks.len();
+        info!("🔍 validate_block: chain_len={}, block.index={}", chain_len, block.index);
+        
+        // Handle the case where we have NO blocks (not even genesis)
+        // This happens when syncing from scratch - we need to apply genesis first
+        if chain_len == 0 {
+            info!("🔍 validate_block: chain is empty, checking if this is genesis block");
+            // If chain is empty, we can only accept block 0 (genesis)
+            if block.index == 0 {
+                info!("✓ Accepting genesis block (index 0) into empty chain");
+                drop(blocks);
+                // For genesis, just verify hash if it's the special "genesis" value
+                if block.hash == "genesis" {
+                    info!("✓ Genesis block has special 'genesis' hash - accepted");
+                    return Ok(true);
+                }
+                // Otherwise verify computed hash
+                let calculated_hash = Self::calculate_block_hash(block);
+                if block.hash != calculated_hash {
+                    bail!("Genesis block hash mismatch: calculated='{}', block claims='{}'", calculated_hash, block.hash);
+                }
+                return Ok(true);
+            } else {
+                bail!("Cannot validate block {} - chain is empty (need genesis first)", block.index);
+            }
+        }
+        
         let prev_block = blocks.last()
             .ok_or_else(|| anyhow::anyhow!("No blocks in chain - cannot validate"))?;
 
+        info!(
+            "🔍🔍🔍 VALIDATE v3 block {}: prev_hash='{}', our_last.hash='{}', block.hash='{}', ts={}, prev_ts={}, validator={}",
+            block.index,
+            block.prev_hash,
+            prev_block.hash,
+            &block.hash[..64.min(block.hash.len())],
+            block.timestamp,
+            prev_block.timestamp,
+            &block.validator
+        );
+
         // Check index
         if block.index != prev_block.index + 1 {
-            bail!("Invalid block index: expected {}, got {}", prev_block.index + 1, block.index);
+            let msg = format!("Invalid block index: expected {}, got {}", prev_block.index + 1, block.index);
+            warn!("❌ {}", msg);
+            bail!("{}", msg);
         }
+        info!("✓ Index check passed: {} == {} + 1", block.index, prev_block.index);
 
         // Check previous hash
         if block.prev_hash != prev_block.hash {
-            bail!("Invalid previous hash");
+            let msg = format!(
+                "Invalid previous hash: block says prev_hash='{}', but our last block hash='{}'",
+                block.prev_hash,
+                prev_block.hash
+            );
+            warn!("❌ {}", msg);
+            bail!("{}", msg);
         }
+        info!("✓ Prev hash check passed");
 
         // Check timestamp
         if block.timestamp <= prev_block.timestamp {
-            bail!("Block timestamp must be greater than previous block");
+            let msg = format!(
+                "Block timestamp must be greater than previous block: block={}, prev={}",
+                block.timestamp,
+                prev_block.timestamp
+            );
+            warn!("❌ {}", msg);
+            bail!("{}", msg);
         }
+        info!("✓ Timestamp check passed: {} > {}", block.timestamp, prev_block.timestamp);
         drop(blocks);
 
         // Verify block hash (strict SHA256 - no legacy formats)
         let calculated_hash = Self::calculate_block_hash(block);
         // Allow genesis block only (index 0 with "genesis" hash)
         let is_genesis = block.index == 0 && block.hash == "genesis";
+        info!("🔍 Hash check: is_genesis={}, block.hash='{}', calculated='{}'", is_genesis, &block.hash[..32.min(block.hash.len())], &calculated_hash[..32.min(calculated_hash.len())]);
         if !is_genesis && block.hash != calculated_hash {
-            bail!("Invalid block hash: expected {}, got {}", calculated_hash, block.hash);
+            let msg = format!(
+                "Invalid block hash: calculated='{}', block claims='{}'",
+                calculated_hash,
+                block.hash
+            );
+            warn!("❌ {}", msg);
+            bail!("{}", msg);
         }
+        info!("✓ Hash check passed");
 
         // Get shard count for routing (brief lock)
         let shard_count = {

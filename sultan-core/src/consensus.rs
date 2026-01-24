@@ -632,13 +632,16 @@ impl ConsensusEngine {
     }
 
     /// Calculate deterministic seed based on block height (for synchronized proposer selection)
-    /// Includes previous block hash for unpredictability
+    /// CRITICAL: Must be deterministic across ALL nodes at the same height
+    /// Does NOT include prev_block_hash because that varies across nodes during sync
     fn calculate_height_seed(&self, height: u64) -> u64 {
         let mut hasher = Sha256::new();
-        hasher.update(b"sultan_proposer_");
+        hasher.update(b"sultan_proposer_v2_");
         hasher.update(&height.to_le_bytes());
-        hasher.update(&self.total_stake.to_le_bytes());
-        hasher.update(&self.prev_block_hash);
+        // Use genesis_total_stake constant for determinism (all nodes have same genesis)
+        // total_stake can vary if validators register/unregister at different times
+        let genesis_stake: u64 = 60_000_000_000_000; // 6 validators × 10T each
+        hasher.update(&genesis_stake.to_le_bytes());
         let result = hasher.finalize();
         
         u64::from_le_bytes([

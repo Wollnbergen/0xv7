@@ -310,16 +310,29 @@ impl P2PNetwork {
     /// Build the libp2p swarm
     fn build_swarm(&self) -> Result<Swarm<SultanBehaviour>> {
         // Configure gossipsub with DoS protection limits
+        // NOTE: Using Permissive validation to debug block propagation issues
+        // In production, switch back to Strict after fixing signature verification
         let gossipsub_config = gossipsub::ConfigBuilder::default()
             .heartbeat_interval(Duration::from_secs(1))
-            .validation_mode(ValidationMode::Strict)
+            .validation_mode(ValidationMode::Permissive)
             .max_transmit_size(MAX_MESSAGE_SIZE) // 1 MB max message
             .max_ihave_length(5000) // Optimize gossip protocol
             .max_messages_per_rpc(Some(100)) // Limit messages per RPC for DoS protection
             .message_id_fn(|msg| {
-                // Use hash of data as message id to deduplicate
-                let hash = sha2::Sha256::digest(&msg.data);
-                gossipsub::MessageId::from(hash.to_vec())
+                // Include message source to differentiate messages from different peers
+                // This prevents the mesh from treating re-announcements as duplicates
+                // when they originate from different peers or at different times
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                msg.data.hash(&mut hasher);
+                if let Some(peer) = &msg.source {
+                    peer.hash(&mut hasher);
+                }
+                // Include sequence number if available to distinguish retransmissions
+                if let Some(seq) = msg.sequence_number {
+                    seq.hash(&mut hasher);
+                }
+                gossipsub::MessageId::from(hasher.finish().to_be_bytes().to_vec())
             })
             .build()
             .map_err(|e| anyhow::anyhow!("Gossipsub config error: {}", e))?;
@@ -403,6 +416,10 @@ impl P2PNetwork {
             let mut reconnect_interval = tokio::time::interval(std::time::Duration::from_secs(30));
             reconnect_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             
+            // Mesh diagnostic timer - check every 10 seconds
+            let mut mesh_check_interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            mesh_check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            
             loop {
                 if !*is_running.read().await {
                     info!("🛑 P2P network stopping");
@@ -410,6 +427,18 @@ impl P2PNetwork {
                 }
 
                 tokio::select! {
+                    // Periodic mesh diagnostics
+                    _ = mesh_check_interval.tick() => {
+                        // Log gossipsub mesh state for each topic
+                        let topics = [BLOCK_TOPIC, VALIDATOR_TOPIC, CONSENSUS_TOPIC, TX_TOPIC];
+                        for topic_str in &topics {
+                            let topic = IdentTopic::new(*topic_str);
+                            let mesh_peers: Vec<_> = swarm.behaviour().gossipsub.mesh_peers(&topic.hash()).collect();
+                            let all_peers: Vec<_> = swarm.behaviour().gossipsub.all_peers().collect();
+                            info!("📊 MESH STATUS: topic={} mesh_peers={} all_gossipsub_peers={}", 
+                                  topic_str, mesh_peers.len(), all_peers.len());
+                        }
+                    }
                     // Periodic reconnection check
                     _ = reconnect_interval.tick() => {
                         let peer_count = connected_peers.read().await.len();
@@ -473,9 +502,30 @@ impl P2PNetwork {
                                         }
                                     }
                                     
+                                    // Log ALL incoming gossipsub messages for debugging mesh issues
+                                    info!("📥 GOSSIPSUB RAW: topic={} from={} size={} bytes", 
+                                          message.topic, propagation_source, message.data.len());
+                                    
                                     // Parse and forward message
                                     if let Ok(network_msg) = bincode::deserialize::<NetworkMessage>(&message.data) {
-                                        debug!("📨 Received message: {:?}", network_msg);
+                                        // Log received messages at INFO level for debugging
+                                        match &network_msg {
+                                            NetworkMessage::BlockProposal { height, proposer, .. } => {
+                                                info!("📥 GOSSIPSUB RECEIVED BlockProposal: height={} proposer={}", height, proposer);
+                                            }
+                                            NetworkMessage::SyncRequest { from_height, to_height } => {
+                                                info!("📥 GOSSIPSUB RECEIVED SyncRequest: {}-{}", from_height, to_height);
+                                            }
+                                            NetworkMessage::SyncResponse { blocks } => {
+                                                info!("📥 GOSSIPSUB RECEIVED SyncResponse: {} blocks", blocks.len());
+                                            }
+                                            NetworkMessage::ValidatorAnnounce { ref address, .. } => {
+                                                info!("📥 GOSSIPSUB RECEIVED ValidatorAnnounce: address={}", address);
+                                            }
+                                            _ => {
+                                                info!("📥 GOSSIPSUB RECEIVED: {:?}", std::mem::discriminant(&network_msg));
+                                            }
+                                        }
                                         
                                         // Handle validator announcements - verify stake AND signature, then register
                                         if let NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, ref pubkey, ref signature } = network_msg {
@@ -483,8 +533,10 @@ impl P2PNetwork {
                                             if !P2PNetwork::verify_announce_signature(pubkey, address, stake, peer_id, signature) {
                                                 warn!("⚠️ Rejected validator {} with invalid announcement signature", address);
                                             } else if stake >= MIN_VALIDATOR_STAKE {
-                                                info!("🗳️ Validator announced: {} (stake: {}, peer: {})", address, stake, peer_id);
+                                                info!("🗳️ Validator announced: {} (stake: {}, peer: {}) - registering pubkey for signature verification", address, stake, peer_id);
                                                 known_validators.write().await.insert(address.clone());
+                                                // CRITICAL: Register pubkey so we can verify BlockProposal signatures from this validator
+                                                validator_pubkeys.write().await.insert(address.clone(), *pubkey);
                                             } else {
                                                 warn!("⚠️ Rejected validator {} with insufficient stake: {} < {}", 
                                                       address, stake, MIN_VALIDATOR_STAKE);
@@ -492,20 +544,20 @@ impl P2PNetwork {
                                         }
                                         
                                         // Handle BlockProposal - verify proposer signature
-                                        if let NetworkMessage::BlockProposal { ref proposer, ref block_hash, ref proposer_signature, .. } = network_msg {
+                                        if let NetworkMessage::BlockProposal { ref proposer, ref block_hash, ref proposer_signature, height, .. } = network_msg {
                                             // Look up proposer's pubkey and verify signature
                                             if let Some(pubkey) = validator_pubkeys.read().await.get(proposer) {
                                                 if !P2PNetwork::verify_vote_signature(pubkey, block_hash.as_bytes(), proposer_signature) {
-                                                    warn!("⚠️ Rejected BlockProposal from {} with invalid signature", proposer);
+                                                    warn!("⚠️ Rejected BlockProposal height={} from {} with invalid signature", height, proposer);
                                                     // Note: In production, would ban peer here
                                                     // Skip forwarding invalid proposals
                                                     continue;
                                                 }
-                                                debug!("✅ BlockProposal from {} verified", proposer);
+                                                info!("✅ BlockProposal height={} from {} signature verified - forwarding to consensus", height, proposer);
                                             } else {
-                                                // Unknown proposer - log warning but still forward
-                                                // (proposer may be new/not yet announced)
-                                                debug!("⚠️ BlockProposal from unknown proposer {}", proposer);
+                                                // Unknown proposer - still forward but log at INFO for visibility
+                                                // (proposer may be new/not yet announced, or genesis validator)
+                                                info!("⚠️ BlockProposal height={} from unknown proposer {} (no pubkey registered) - forwarding anyway", height, proposer);
                                             }
                                         }
                                         

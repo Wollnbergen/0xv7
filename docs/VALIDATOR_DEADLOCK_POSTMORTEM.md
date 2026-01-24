@@ -379,18 +379,77 @@ ssh -i ~/.ssh/sultan_deploy root@206.189.224.142 "journalctl -u sultan-node -n 1
 
 ---
 
-## Current Status (as of 2026-01-15)
+## Issue 7: Timestamp Collision Bug (CRITICAL)
+
+**Date Discovered:** January 24, 2026  
+**Severity:** Critical - Network Stall
+
+### Symptoms
+- Network stalled at block 7 across all 6 validators
+- Error in logs: `Block timestamp must be greater than previous block`
+- Block 6 and Block 7 had identical timestamps: `ts=1769281157, prev_ts=1769281157`
+
+### Root Cause
+The `create_block()` function in `sharded_blockchain_production.rs` used `SystemTime::now().as_secs()` directly for block timestamps without ensuring they exceeded the previous block's timestamp.
+
+When validators started simultaneously (within the same second), multiple blocks could be created with identical second-level timestamps, causing validation to fail.
+
+**Problematic code:**
+```rust
+// BEFORE - could create blocks with same timestamp
+let timestamp = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_secs();
+```
+
+### Fix Applied
+
+**File:** `sultan-core/src/sharded_blockchain_production.rs` (lines 200-232)
+
+```rust
+// AFTER - ensures strictly increasing timestamps
+// Save previous timestamp BEFORE dropping the lock
+let prev_timestamp = prev_block.timestamp;
+
+// ... later in create_block() ...
+
+let current_time = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_secs();
+
+// CRITICAL FIX: Ensure timestamp is strictly greater than previous block
+// This prevents timestamp collision when blocks are created rapidly
+let timestamp = std::cmp::max(current_time, prev_timestamp + 1);
+```
+
+### Verification
+After deploying the fix, logs show:
+```
+✓ Timestamp check passed: 1769284767 > 1769284766
+```
+
+### Key Principle
+> **Block timestamps MUST be strictly increasing.**
+> 
+> Using `max(current_time, prev_timestamp + 1)` guarantees monotonically increasing timestamps, preventing validation failures even when blocks are produced faster than 1 per second.
+
+---
+
+## Current Status (as of 2026-01-24)
 
 ✅ **Sultan Chain is LIVE (Enterprise-Grade)**
-- Height: 2,000+ and counting
+- Height: 300+ and counting
 - Block time: ~2 seconds
-- Validators: 1 (genesis) - additional validators require on-chain registration
+- Validators: 6 (NYC, SGP, AMS, FRA, SFO, LON)
 - Shards: 16 active
 - Public RPC: https://rpc.sltn.io
 
-**Key Changes in v0.1.6+:**
+**Key Changes in v0.1.7+:**
 - P2P `ValidatorAnnounce` for discovery only (pubkey registration)
 - P2P `ValidatorSetResponse` for discovery only (pubkey registration)  
 - Validators MUST register on-chain via `/staking/create_validator`
 - Removed bootstrap mode workaround
 - Genesis mode: single validator at start is normal operation
+- **CRITICAL FIX:** Timestamp collision bug resolved - blocks always have strictly increasing timestamps

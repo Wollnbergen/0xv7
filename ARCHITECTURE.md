@@ -186,6 +186,26 @@ Sultan implements **enterprise-grade separation** between P2P discovery and cons
 - Automatic recovery when validators come back online
 - Missed block counts reset after successful block production
 
+### Block Timestamp Guarantee (v0.1.7+)
+Sultan enforces **strictly increasing block timestamps** to prevent consensus failures:
+
+| Feature | Implementation |
+|---------|---------------|
+| Timestamp Source | `SystemTime::now()` with monotonic guarantee |
+| Minimum Increment | `max(current_time, prev_timestamp + 1)` |
+| Validation | Reject blocks where `timestamp <= prev_timestamp` |
+
+**Why This Matters:**
+When multiple validators operate in rapid succession (e.g., at genesis or recovery), blocks could be created within the same second. Without this protection, identical timestamps cause block validation to fail with "Block timestamp must be greater than previous block."
+
+**Implementation (sharded_blockchain_production.rs):**
+```rust
+let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+let timestamp = std::cmp::max(current_time, prev_timestamp + 1);
+```
+
+See [Validator Deadlock Postmortem](docs/VALIDATOR_DEADLOCK_POSTMORTEM.md) Issue #7 for details.
+
 ---
 
 ## Security Features
@@ -284,4 +304,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: January 17, 2026 - v0.2.0 with DeFi Hub (Token Factory, Native DEX, Fee Split, Validator Reward Wallet)*
+*Last updated: January 24, 2026 - v0.1.7 with timestamp collision fix, 6 validators live (NYC, SGP, AMS, FRA, SFO, LON)*
