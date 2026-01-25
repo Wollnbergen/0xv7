@@ -3829,6 +3829,9 @@ async fn main() -> Result<()> {
                     let peer_count = p2p.read().await.peer_count().await;
                     info!("📢 Announcing validator {} to P2P network ({} peers connected)", addr, peer_count);
                     
+                    // Get our current height for sync detection
+                    let current_height = p2p_state.blockchain.read().await.get_height().await;
+                    
                     // Get pubkey from our actual signing key (NOT from consensus, which may have placeholder)
                     // This ensures the pubkey matches the signature we create
                     let (pubkey, signature) = if let Some(ref signing_key) = p2p_state.validator_signing_key {
@@ -3848,11 +3851,11 @@ async fn main() -> Result<()> {
                     } else if signature.is_empty() {
                         warn!("⚠️ Skipping validator announcement - no signing key");
                     } else {
-                        info!("📢 Announcing with pubkey: {}...", hex::encode(&pubkey[..8]));
-                        if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
+                        info!("📢 Announcing with pubkey: {}... height: {}", hex::encode(&pubkey[..8]), current_height);
+                        if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature, current_height).await {
                             warn!("Failed to announce validator: {}", e);
                         } else {
-                            info!("✅ Announced validator {} to P2P network", addr);
+                            info!("✅ Announced validator {} to P2P network (height: {})", addr, current_height);
                         }
                     }
                 }
@@ -3891,10 +3894,14 @@ async fn main() -> Result<()> {
                                     let signature = signing_key.sign(message.as_bytes()).to_bytes().to_vec();
                                     let pubkey = signing_key.verifying_key().to_bytes();
                                     
-                                    if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
+                                    // Get current height for sync detection
+                                    let current_height = p2p_state.blockchain.read().await.get_height().await;
+                                    let peer_count = p2p.read().await.peer_count().await;
+                                    
+                                    if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature, current_height).await {
                                         warn!("Failed to re-announce validator: {}", e);
                                     } else {
-                                        debug!("🔄 Re-announced validator {} to P2P network", addr);
+                                        info!("📢 Re-announced validator {} (height: {}, {} peers)", addr, current_height, peer_count);
                                     }
                                 }
                             }
@@ -3909,7 +3916,7 @@ async fn main() -> Result<()> {
                         } 
                     } => {
                         match msg {
-                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, pubkey, signature: _ } => {
+                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, pubkey, signature: _, current_height } => {
                                 // ====================================================================
                                 // ENTERPRISE-GRADE FIX: P2P announcements are for DISCOVERY ONLY
                                 // ====================================================================
@@ -3926,6 +3933,14 @@ async fn main() -> Result<()> {
                                     }
                                 }
                                 
+                                // CRITICAL: Update peer height for sync detection
+                                // This allows us to know when peers are ahead and request sync
+                                if current_height > 0 {
+                                    if let Some(ref block_sync) = p2p_state.block_sync_manager {
+                                        block_sync.write().await.update_peer_height(address.clone(), current_height).await;
+                                    }
+                                }
+                                
                                 // Check if already in consensus (via on-chain registration)
                                 let is_registered = {
                                     let consensus = p2p_state.consensus.read().await;
@@ -3933,12 +3948,12 @@ async fn main() -> Result<()> {
                                 };
                                 
                                 if is_registered {
-                                    info!("📡 Validator {} online (stake: {}, peer: {}) - already in consensus", 
-                                          address, stake, peer_id);
+                                    info!("📡 Validator {} online (stake: {}, peer: {}, height: {}) - already in consensus", 
+                                          address, stake, peer_id, current_height);
                                 } else {
                                     // NOT adding to consensus - validator must register on-chain first
-                                    info!("📡 Validator {} discovered via P2P (stake: {}, peer: {}) - awaiting on-chain registration", 
-                                          address, stake, peer_id);
+                                    info!("📡 Validator {} discovered via P2P (stake: {}, peer: {}, height: {}) - awaiting on-chain registration", 
+                                          address, stake, peer_id, current_height);
                                 }
                             }
                             NetworkMessage::ValidatorSetRequest { known_count } => {
@@ -4340,10 +4355,13 @@ async fn main() -> Result<()> {
                                             let signature = signing_key.sign(message.as_bytes()).to_bytes().to_vec();
                                             let pubkey = signing_key.verifying_key().to_bytes();
                                             
-                                            if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
+                                            // Get current height for sync detection
+                                            let current_height = p2p_state.blockchain.read().await.get_height().await;
+                                            
+                                            if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature, current_height).await {
                                                 debug!("Failed to re-announce validator: {}", e);
                                             } else {
-                                                info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
+                                                info!("📢 Re-announced validator {} (height: {}, {} peers)", addr, current_height, peer_count);
                                             }
                                         }
                                     }

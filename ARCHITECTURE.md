@@ -27,7 +27,7 @@ Sultan is a **native Rust L1 blockchain** with every component custom-built for 
 | `economics.rs` | 100 | Inflation (fixed 4%), rewards, APY calculations |
 | `transaction_validator.rs` | 782 | Transaction validation (18 tests, typed errors, Ed25519 sig verify) |
 | `blockchain.rs` | 374 | Block/Transaction structures (with memo) |
-| `p2p.rs` | 1,200+ | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify, persistent node keys, validator discovery, 16 tests) |
+| `p2p.rs` | 1,200+ | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify, persistent node keys, validator discovery, height-based sync, 16 tests) |
 | `block_sync.rs` | 1,174 | Byzantine-tolerant block sync (voter verification, signature validation, 31 tests) |
 | `mev_protection.rs` | ~100 | MEV resistance |
 | `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
@@ -171,7 +171,7 @@ Sultan implements **enterprise-grade separation** between P2P discovery and cons
 **Validator Registration Flow:**
 ```
 1. New validator sets up node → P2P connects to network
-2. Node discovers other validators via ValidatorAnnounce (pubkey registration only)
+2. Node discovers other validators via ValidatorAnnounce (pubkey + current height)
 3. Validator submits on-chain registration:
    POST /staking/create_validator { address, stake_amount, commission_rate }
 4. Blockchain processes registration → validator added to on-chain state
@@ -205,6 +205,31 @@ let timestamp = std::cmp::max(current_time, prev_timestamp + 1);
 ```
 
 See [Validator Deadlock Postmortem](docs/VALIDATOR_DEADLOCK_POSTMORTEM.md) Issue #7 for details.
+
+### Height-Based Validator Sync (v0.1.8+)
+Sultan validators broadcast their current chain height in `ValidatorAnnounce` messages, enabling automatic sync detection:
+
+| Feature | Implementation |
+|---------|---------------|
+| Height Broadcast | `ValidatorAnnounce` includes `current_height: u64` field |
+| Peer Height Tracking | `update_peer_height()` called on announce receive |
+| Sync Detection | Validators detect peers ahead and request sync |
+| Auto-Recovery | Validators automatically catch up after downtime |
+
+**Why This Matters:**
+When a validator restarts or experiences network partition, it can immediately detect if other validators are ahead by examining incoming `ValidatorAnnounce` messages. This eliminates the previous failure mode where validators at different heights couldn't detect desync.
+
+**Implementation (p2p.rs + main.rs):**
+```rust
+pub struct ValidatorAnnounce {
+    pub address: String,
+    pub stake: u64,
+    pub peer_id: String,
+    pub pubkey: [u8; 32],
+    pub signature: Vec<u8>,
+    pub current_height: u64,  // NEW: Chain height for sync detection
+}
+```
 
 ---
 
@@ -304,4 +329,4 @@ cargo test --workspace
 
 ---
 
-*Last updated: January 24, 2026 - v0.1.7 with timestamp collision fix, 6 validators live (NYC, SGP, AMS, FRA, SFO, LON)*
+*Last updated: January 25, 2026 - v0.1.8 with height-based sync, 6 validators live (NYC, SGP, AMS, FRA, SFO, LON)*

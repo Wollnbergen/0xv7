@@ -118,6 +118,8 @@ pub enum NetworkMessage {
         pubkey: [u8; 32],
         /// Ed25519 signature over (address || stake || peer_id)
         signature: Vec<u8>,
+        /// Current block height of the announcing validator (for sync detection)
+        current_height: u64,
     },
     /// Request block sync
     SyncRequest {
@@ -519,8 +521,8 @@ impl P2PNetwork {
                                             NetworkMessage::SyncResponse { blocks } => {
                                                 info!("📥 GOSSIPSUB RECEIVED SyncResponse: {} blocks", blocks.len());
                                             }
-                                            NetworkMessage::ValidatorAnnounce { ref address, .. } => {
-                                                info!("📥 GOSSIPSUB RECEIVED ValidatorAnnounce: address={}", address);
+                                            NetworkMessage::ValidatorAnnounce { ref address, current_height, .. } => {
+                                                info!("📥 GOSSIPSUB RECEIVED ValidatorAnnounce: address={} height={}", address, current_height);
                                             }
                                             _ => {
                                                 info!("📥 GOSSIPSUB RECEIVED: {:?}", std::mem::discriminant(&network_msg));
@@ -528,7 +530,7 @@ impl P2PNetwork {
                                         }
                                         
                                         // Handle validator announcements - verify stake AND signature, then register
-                                        if let NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, ref pubkey, ref signature } = network_msg {
+                                        if let NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, ref pubkey, ref signature, current_height } = network_msg {
                                             // First verify signature over the announcement data
                                             if !P2PNetwork::verify_announce_signature(pubkey, address, stake, peer_id, signature) {
                                                 warn!("⚠️ Rejected validator {} with invalid announcement signature", address);
@@ -645,13 +647,14 @@ impl P2PNetwork {
     }
 
     /// Announce this validator to the network (with Ed25519 signature)
-    pub async fn announce_validator(&self, address: &str, stake: u64, pubkey: [u8; 32], signature: Vec<u8>) -> Result<()> {
+    pub async fn announce_validator(&self, address: &str, stake: u64, pubkey: [u8; 32], signature: Vec<u8>, current_height: u64) -> Result<()> {
         let msg = NetworkMessage::ValidatorAnnounce {
             address: address.to_string(),
             stake,
             peer_id: self.peer_id.to_string(),
             pubkey,
             signature,
+            current_height,
         };
         
         self.broadcast_message(VALIDATOR_TOPIC, msg).await

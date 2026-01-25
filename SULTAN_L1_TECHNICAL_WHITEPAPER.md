@@ -2,11 +2,11 @@
 
 ## Technical Whitepaper
 
-**Version:** 4.0  
-**Date:** January 17, 2026  
+**Version:** 4.1  
+**Date:** January 25, 2026  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
-**Binary:** v0.2.0 (DeFi Hub Release)
+**Binary:** v0.2.1 (Height Sync Release)
 **Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 ---
@@ -581,7 +581,7 @@ Sultan implements strict separation between P2P discovery and consensus membersh
 
 | Message | Purpose | Affects Consensus? |
 |---------|---------|-------------------|
-| `ValidatorAnnounce` | Share pubkey for signature verification | ❌ Discovery only |
+| `ValidatorAnnounce` | Share pubkey + height for sync | ❌ Discovery only |
 | `ValidatorSetRequest` | Request known validators on startup | ❌ Discovery only |
 | `ValidatorSetResponse` | Share known validator pubkeys | ❌ Discovery only |
 
@@ -653,6 +653,37 @@ pub enum VoteRejection {
     Expired,            // Block too old
     InvalidSignature,   // Ed25519 verification failed
 }
+```
+
+### 5.7 Height-Based Validator Sync (v0.1.8+)
+
+Sultan validators broadcast their current chain height in `ValidatorAnnounce` messages:
+
+```rust
+pub struct ValidatorAnnounce {
+    pub address: String,
+    pub stake: u64,
+    pub peer_id: String,
+    pub pubkey: [u8; 32],
+    pub signature: Vec<u8>,
+    pub current_height: u64,  // Current chain height
+}
+```
+
+**Benefits:**
+- Validators detect when peers are ahead and request sync automatically
+- Eliminates desync scenarios where validators at different heights couldn't detect divergence
+- Enables rapid catch-up after network partitions or restarts
+- All validators maintain synchronized chain state
+
+**Sync Flow:**
+```
+1. Validator receives ValidatorAnnounce with current_height=5000
+2. Local chain is at height 4900
+3. Validator detects it's behind by 100 blocks
+4. Validator requests SyncRequest { from_height: 4900, to_height: 5000 }
+5. Peer responds with missing blocks
+6. Validator applies blocks and catches up
 ```
 
 ---

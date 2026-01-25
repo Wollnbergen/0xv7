@@ -286,11 +286,15 @@ A: Contact the Sultan team for genesis allocation or acquire through the network
 A: Yes, each validator needs a unique name and separate server.
 
 **Q: What happens if my validator goes offline?**  
-A: The network has enterprise-grade failover - other validators take over block production automatically. However:
-- After **5 consecutive missed blocks**, fallback proposers take over
-- After **100 consecutive missed blocks**, your stake may be slashed
-- You stop earning rewards while offline
-- Aim for 99%+ uptime to maximize rewards and avoid penalties
+A: The network has enterprise-grade failover - other validators take over block production automatically. When you come back online:
+- Your validator receives `ValidatorAnnounce` messages with current heights from peers
+- It automatically detects it's behind and requests missing blocks
+- Rapid sync catches you up to the network within seconds
+- However, note:
+  - After **5 consecutive missed blocks**, fallback proposers take over
+  - After **100 consecutive missed blocks**, your stake may be slashed
+  - You stop earning rewards while offline
+  - Aim for 99%+ uptime to maximize rewards and avoid penalties
 
 **Q: How do I increase my stake?**  
 A: Use the Sultan Wallet to delegate additional stake to your validator.
@@ -321,4 +325,4 @@ A: No, APY is variable based on network conditions. 13.33% is an estimate.
 
 ---
 
-*Sultan Network v0.1.5 - High-performance Layer 1 blockchain with 64K TPS, zero fees, and enterprise failover*
+*Sultan Network v0.1.8 - High-performance Layer 1 blockchain with 64K TPS, zero fees, enterprise failover, and automatic height sync*

@@ -1,10 +1,10 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 4.0  
-**Date:** January 17, 2026  
+**Version:** 4.1  
+**Date:** January 25, 2026  
 **Classification:** Public Technical Reference  
-**Binary:** v0.2.0 (DeFi Hub Release)
+**Binary:** v0.2.1 (Height Sync Release)
 **Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 ---
@@ -81,7 +81,7 @@ sultan-core/src/
 ├── main.rs               (4,736 lines) - Node binary, RPC (30+ endpoints), keygen CLI
 ├── blockchain.rs         (374 lines)  - Block/TX structures (with memo field)
 ├── consensus.rs          (1,351 lines) - Validator management (26 tests, Ed25519, enterprise failover)
-├── p2p.rs                (1,200+ lines) - libp2p networking (16 tests, Ed25519 sig verify, persistent keys, validator discovery)
+├── p2p.rs                (1,200+ lines) - libp2p networking (16 tests, Ed25519 sig verify, persistent keys, validator discovery, height sync)
 ├── block_sync.rs         (1,174 lines) - Byzantine-tolerant sync (31 tests, voter verify)
 ├── storage.rs            (1,159 lines) - RocksDB + AES-256-GCM encryption (14 tests)
 ├── economics.rs          (100 lines)  - Inflation/APY model
@@ -1124,6 +1124,7 @@ pub enum NetworkMessage {
         peer_id: String,
         pubkey: [u8; 32],     // Ed25519 public key
         signature: Vec<u8>,   // Ed25519 signature over address||stake||peer_id
+        current_height: u64,  // Current chain height for sync detection (v0.1.8+)
     },
     
     // Node requests: "Send me blocks 1000-2000"
