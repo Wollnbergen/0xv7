@@ -2,11 +2,11 @@
 
 ## Technical Whitepaper
 
-**Version:** 4.1  
-**Date:** January 25, 2026  
+**Version:** 4.2  
+**Date:** January 27, 2026  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
-**Binary:** v0.2.1 (Height Sync Release)
+**Binary:** v0.2.2 (Staking System Release)
 **Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 ---
@@ -1086,6 +1086,9 @@ Validators should monitor:
 | Reward frequency | Every block (~43,200/day) |
 | Priority fees | 60% to proposer |
 | Slashing protection | Uptime monitoring |
+| Blocks signed | Real-time tracking |
+| Blocks missed | Real-time tracking |
+| Uptime percent | Calculated from signed/total |
 
 **Reward Wallet System (v0.2.0)**
 
@@ -1120,6 +1123,67 @@ Genesis validators automatically receive rewards to the genesis wallet:
 **Annual Earnings Example (10,000 SLTN stake):**
 - At $0.20/SLTN: 1,333 SLTN = $267/year (covers ~$100 server + profit)
 - At $1.00/SLTN: 1,333 SLTN = $1,333/year
+
+### 10.5 Validator Uptime Tracking (v0.2.2)
+
+Sultan tracks validator performance in real-time with comprehensive metrics:
+
+**Tracked Metrics:**
+
+| Metric | Description | API Field |
+|--------|-------------|-----------|
+| Blocks Signed | Blocks this validator has signed | `blocks_signed` |
+| Blocks Missed | Blocks this validator should have signed but didn't | `blocks_missed` |
+| Total Blocks Missed | Lifetime counter of all missed blocks | `total_blocks_missed` |
+| Uptime Percent | Calculated as `signed / (signed + missed) * 100` | `uptime_percent` |
+| Voting Power | Share of total network stake | `voting_power_percent` |
+
+**Check Validator Status:**
+```bash
+# Get all validators with uptime stats
+curl https://rpc.sltn.io/staking/validators | jq '[.[] | {
+  address: .validator_address,
+  signed: .blocks_signed,
+  missed: .blocks_missed,
+  uptime: .uptime_percent,
+  voting_power: .voting_power_percent
+}]'
+```
+
+**Genesis Validator Registration:**
+
+Genesis validators are automatically registered at node startup via the `--genesis-validators` CLI flag:
+
+```bash
+./sultan-node \
+  --genesis-validators addr1,addr2,addr3,addr4,addr5,addr6 \
+  --validator \
+  --validator-address addr1
+```
+
+**Staking State Recovery:**
+
+If staking state becomes corrupted, use the `--reset-staking` flag to rebuild from genesis validators:
+
+```bash
+# One-time reset (remove flag after restart)
+./sultan-node --reset-staking --genesis-validators addr1,addr2,...
+```
+
+This deletes the `staking:state` key from RocksDB and re-registers all genesis validators fresh.
+
+### 10.6 Production Validator Set
+
+Sultan mainnet operates with 6 globally distributed validators:
+
+| Validator | Region | Address | Voting Power |
+|-----------|--------|---------|--------------|
+| NYC | USA East | `sultan1valnyc...vnyc01` | 16.67% |
+| SFO | USA West | `sultan1valsfo...vsfo02` | 16.67% |
+| FRA | EU Central | `sultan1valfra...vfra03` | 16.67% |
+| AMS | EU West | `sultan1valams...vams04` | 16.67% |
+| SGP | Asia Pacific | `sultan1valsgp...vsgp05` | 16.67% |
+| LON | EU West | `sultan1vallon...vlon06` | 16.67% |
 
 ---
 

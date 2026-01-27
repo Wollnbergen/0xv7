@@ -85,6 +85,11 @@ struct Args {
     #[clap(long)]
     genesis_validators: Option<String>,
 
+    /// Reset staking state on startup (deletes all validators from staking system)
+    /// Use when staking state is corrupted or needs to be rebuilt from genesis validators
+    #[clap(long)]
+    reset_staking: bool,
+
     /// P2P listen address
     #[clap(short, long, default_value = "/ip4/0.0.0.0/tcp/26656")]
     p2p_addr: String,
@@ -432,6 +437,16 @@ impl NodeState {
         let storage = PersistentStorage::new(storage_path.to_str().unwrap())
             .context("Failed to initialize storage")?;
 
+        // Reset staking state if requested (deletes staking:state key from RocksDB)
+        if args.reset_staking {
+            warn!("🔥🔥🔥 RESET STAKING: Deleting all staking state from storage!");
+            if let Err(e) = storage.delete_staking_state() {
+                warn!("⚠️ Failed to delete staking state: {} (may not exist)", e);
+            } else {
+                warn!("✅ Staking state deleted - will rebuild from genesis validators");
+            }
+        }
+
         // Configure sharding (always enabled, but shard count is configurable)
         let shard_count = if args.enable_sharding { args.shard_count } else { 16 };
         let config = ShardConfig {
@@ -479,16 +494,20 @@ impl NodeState {
         
         // Load existing blocks from storage if available
         if let Some(latest_block) = storage.get_latest_block()? {
-            info!("Loading existing blockchain from height {}", latest_block.index);
+            warn!("🔄🔄🔄 BLOCKCHAIN RESTORE: Loading {} blocks from storage", latest_block.index);
             for i in 1..=latest_block.index {
                 if let Some(block) = storage.get_block_by_height(i)? {
-                    // Apply block to restore state
-                    if let Err(e) = blockchain.apply_block(block.clone()).await {
+                    // Apply block to restore state (silently to avoid journald rate limiting)
+                    if let Err(e) = blockchain.apply_block_silent(block.clone()).await {
                         warn!("Failed to apply stored block {}: {}", i, e);
+                    }
+                    // Log progress every 10,000 blocks
+                    if i % 10000 == 0 {
+                        warn!("🔄 Restored {} / {} blocks...", i, latest_block.index);
                     }
                 }
             }
-            info!("Loaded {} blocks", latest_block.index);
+            warn!("✅✅✅ BLOCKCHAIN RESTORE COMPLETE: Loaded {} blocks", latest_block.index);
         }
 
         let tps_capacity = blockchain.get_tps_capacity().await;
@@ -619,14 +638,50 @@ impl NodeState {
         };
 
         // Initialize staking manager and restore persisted state if available
+        warn!("💎💎💎 STAKING INIT: Creating staking manager");
         let staking_manager = Arc::new(StakingManager::new(0.04)); // 4% inflation (zero gas model)
         
         // Restore staking state from persistent storage
         if let Ok(Some(staking_snapshot)) = storage.load_staking_state() {
-            info!("📥 Found persisted staking state, restoring...");
+            warn!("📥📥📥 STAKING RESTORE: Found {} validators in snapshot", staking_snapshot.validators.len());
             if let Err(e) = staking_manager.restore_from_snapshot(staking_snapshot).await {
                 warn!("⚠️ Failed to restore staking state: {}. Starting fresh.", e);
             }
+        } else {
+            warn!("📭📭📭 STAKING INIT: No persisted staking state found - starting fresh");
+        }
+        
+        // Register ALL genesis validators in staking system (ensures block counts are tracked)
+        if let Some(genesis_vals_str) = &args.genesis_validators {
+            let genesis_validators: Vec<String> = genesis_vals_str.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            
+            warn!("👥👥👥 GENESIS VALIDATORS: Processing {} validators from CLI", genesis_validators.len());
+            
+            let default_stake = 10_000_000_000_000u64; // 10,000 SLTN (10M in base units)
+            let default_commission = 0.05; // 5%
+            
+            for gv_addr in &genesis_validators {
+                // Only create if not already in staking (from snapshot or previous registration)
+                let exists = staking_manager.get_validator(gv_addr).await.is_ok();
+                if !exists {
+                    if let Err(e) = staking_manager.create_validator(
+                        gv_addr.clone(),
+                        default_stake,
+                        default_commission,
+                    ).await {
+                        warn!("⚠️⚠️⚠️ Genesis validator {} NOT added to staking: {}", gv_addr, e);
+                    } else {
+                        warn!("📋📋📋 Genesis validator {} REGISTERED in staking system", gv_addr);
+                    }
+                } else {
+                    warn!("✓✓✓ Genesis validator {} already exists in staking", gv_addr);
+                }
+            }
+        } else {
+            warn!("⚠️⚠️⚠️ GENESIS VALIDATORS: No --genesis-validators CLI arg provided!");
         }
         
         // If running as validator, register in staking manager with genesis wallet as reward destination
@@ -643,7 +698,7 @@ impl NodeState {
                     ).await {
                         warn!("⚠️ Failed to register validator in staking: {}", e);
                     } else {
-                        info!("✅ Validator {} registered in staking system (stake: {} SLTN)", 
+                        warn!("✅✅✅ Validator {} registered in staking system (stake: {} SLTN)", 
                               validator_addr, stake / 1_000_000_000);
                     }
                 }
@@ -1469,6 +1524,16 @@ impl NodeState {
                 if let Err(e) = self.staking_manager.persist_to_storage(&storage).await {
                     warn!("⚠️ Failed to persist staking state after unbonding: {}", e);
                 }
+            }
+        }
+
+        // Periodic staking state persistence (every 100 blocks) to save block counts
+        if next_height % 100 == 0 {
+            let storage = self.storage.read().await;
+            if let Err(e) = self.staking_manager.persist_to_storage(&storage).await {
+                warn!("⚠️ Failed to persist staking state at height {}: {}", next_height, e);
+            } else {
+                debug!("💾 Staking state persisted at height {}", next_height);
             }
         }
 
@@ -3224,7 +3289,8 @@ mod rpc {
                     commission_rate: 0.05, // Default 5%
                     rewards_accumulated: 0,
                     blocks_signed: v.blocks_signed,
-                    blocks_missed: 0,
+                    blocks_missed: v.missed_blocks,
+                    total_blocks_missed: v.missed_blocks, // Consensus doesn't track total separately
                     jailed: !v.is_active,
                     jailed_until: 0,
                     created_at: 0,
@@ -3238,9 +3304,10 @@ mod rpc {
         
         // Convert to enhanced info with computed fields
         let enhanced: Vec<ValidatorInfo> = validators.iter().map(|v| {
-            // Uptime: blocks_signed / (blocks_signed + blocks_missed) * 100
+            // Uptime: blocks_signed / (blocks_signed + total_blocks_missed) * 100
+            // Uses total_blocks_missed (cumulative) not blocks_missed (consecutive)
             // If no blocks yet, show 100% (new validator)
-            let total_blocks = v.blocks_signed + v.blocks_missed;
+            let total_blocks = v.blocks_signed + v.total_blocks_missed;
             let uptime_percent = if total_blocks > 0 {
                 (v.blocks_signed as f64 / total_blocks as f64) * 100.0
             } else {

@@ -1,10 +1,10 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 4.1  
-**Date:** January 25, 2026  
+**Version:** 4.2  
+**Date:** January 27, 2026  
 **Classification:** Public Technical Reference  
-**Binary:** v0.2.1 (Height Sync Release)
+**Binary:** v0.2.2 (Staking System Release)
 **Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 ---
@@ -1659,6 +1659,11 @@ pub struct ValidatorStake {
     pub total_stake: u64,            // self + delegated
     pub commission_rate: f64,        // e.g., 0.10 = 10%
     pub rewards_accumulated: u64,    // Pending rewards
+    pub blocks_signed: u64,          // Blocks this validator signed
+    pub blocks_missed: u64,          // Blocks this validator missed
+    pub total_blocks_missed: u64,    // Lifetime missed blocks counter
+    pub uptime_percent: f64,         // Calculated uptime (signed / total)
+    pub voting_power_percent: f64,   // Share of total network stake
     pub jailed: bool,                // Currently penalized?
 }
 
@@ -1696,7 +1701,83 @@ Validator commission (10%): 1,333 × 0.10 = 133 SLTN
 You receive: 1,333 - 133 = 1,200 SLTN (12% effective APY)
 ```
 
-### 8.6 Slashing Conditions
+### 8.6 Validator Uptime Tracking (v0.2.2)
+
+**What is Uptime?**
+
+The percentage of blocks a validator has signed vs blocks they should have signed.
+
+**How it's calculated:**
+```
+uptime_percent = blocks_signed / (blocks_signed + blocks_missed) * 100
+```
+
+**Real-time Tracking:**
+
+Sultan tracks validator performance continuously:
+
+| Metric | Description |
+|--------|-------------|
+| `blocks_signed` | Number of blocks this validator has signed |
+| `blocks_missed` | Number of blocks this validator missed |
+| `total_blocks_missed` | Lifetime counter (never resets) |
+| `uptime_percent` | Calculated uptime as percentage |
+| `voting_power_percent` | Share of total network stake |
+
+**Why it matters:** Uptime directly affects validator reputation and future selection for block production. Validators with poor uptime may be slashed.
+
+**Query Validator Uptime:**
+```bash
+curl https://rpc.sltn.io/staking/validators | jq '[.[] | {
+  validator: .validator_address,
+  signed: .blocks_signed,
+  missed: .blocks_missed,
+  uptime: .uptime_percent
+}]'
+```
+
+**Example Output:**
+```json
+[
+  {
+    "validator": "sultan1valnyc...vnyc01",
+    "signed": 25000,
+    "missed": 50,
+    "uptime": 99.8
+  }
+]
+```
+
+### 8.7 Genesis Validator Management
+
+**What are Genesis Validators?**
+
+Validators that are pre-registered at blockchain launch. They form the initial validator set.
+
+**How Genesis Registration Works:**
+```bash
+# Pass all genesis validators via CLI flag
+./sultan-node \
+  --genesis-validators addr1,addr2,addr3,addr4,addr5,addr6 \
+  --validator \
+  --validator-address addr1
+```
+
+On startup, the node:
+1. Loads persisted staking state from RocksDB
+2. Checks each genesis validator
+3. Registers any missing validators with default stake (10,000 SLTN)
+
+**Staking State Recovery:**
+
+If staking state becomes corrupted, use `--reset-staking`:
+```bash
+./sultan-node --reset-staking --genesis-validators addr1,addr2,...
+```
+
+This deletes `staking:state` from RocksDB and rebuilds from genesis validators.
+
+### 8.8 Slashing Conditions
 
 **What is Slashing?**
 

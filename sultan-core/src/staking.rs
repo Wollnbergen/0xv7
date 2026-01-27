@@ -53,18 +53,15 @@ fn validate_address(address: &str) -> Result<()> {
               MIN_ADDRESS_LENGTH, MAX_ADDRESS_LENGTH);
     }
     
-    // Check that remaining characters are valid bech32 (alphanumeric, lowercase, no 1,b,i,o)
+    // Check that remaining characters are valid (alphanumeric, lowercase)
+    // Note: Our validator addresses use a simple format, not strict bech32
     let suffix = &address[SULTAN_ADDRESS_PREFIX.len()..];
     for c in suffix.chars() {
         if !c.is_ascii_alphanumeric() {
             bail!("Invalid address: contains non-alphanumeric character");
         }
         if c.is_uppercase() {
-            bail!("Invalid address: bech32 addresses must be lowercase");
-        }
-        // bech32 doesn't use 1, b, i, o in the data part
-        if matches!(c, '1' | 'b' | 'i' | 'o') {
-            bail!("Invalid address: contains invalid bech32 character '{}'", c);
+            bail!("Invalid address: addresses must be lowercase");
         }
     }
     
@@ -97,7 +94,11 @@ pub struct ValidatorStake {
     pub commission_rate: f64, // 0.0 to 1.0 (0% to 100%)
     pub rewards_accumulated: u64,
     pub blocks_signed: u64,
+    /// Consecutive missed blocks (resets on successful sign, used for slashing)
     pub blocks_missed: u64,
+    /// Total historical missed blocks (never resets, used for uptime calculation)
+    #[serde(default)]
+    pub total_blocks_missed: u64,
     pub jailed: bool,
     pub jailed_until: u64,
     pub created_at: u64,
@@ -214,6 +215,7 @@ impl StakingManager {
             rewards_accumulated: 0,
             blocks_signed: 0,
             blocks_missed: 0,
+            total_blocks_missed: 0,
             jailed: false,
             jailed_until: 0,
             created_at: now,
@@ -919,6 +921,7 @@ impl StakingManager {
                     return Ok(false);
                 }
                 validator.blocks_missed += 1;
+                validator.total_blocks_missed += 1; // Track total for uptime calc
                 validator.blocks_missed >= DOWNTIME_MISS_THRESHOLD
             } else {
                 return Ok(false);

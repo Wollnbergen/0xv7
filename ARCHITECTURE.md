@@ -15,7 +15,7 @@ Sultan is a **native Rust L1 blockchain** with every component custom-built for 
 | `main.rs` | 4,736 | Node binary, RPC server (30+ endpoints), P2P networking, keygen CLI |
 | `lib.rs` | ~100 | Library exports for all modules |
 | `consensus.rs` | 1,351 | Proof of Stake consensus engine (26 tests, Ed25519, enterprise failover) |
-| `staking.rs` | ~1,640 | Validator registration, delegation, rewards (with reward_wallet), slashing with auto-persist (21 tests) |
+| `staking.rs` | ~1,640 | Validator registration, delegation, rewards (with reward_wallet), uptime tracking (blocks_signed/blocks_missed), slashing with auto-persist (21 tests) |
 | `governance.rs` | ~1,900 | On-chain proposals, voting, slashing proposals, encrypted storage (21 tests) |
 | `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
 | `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
@@ -299,10 +299,33 @@ The `_archive/` folder contains legacy/experimental code:
 
 ## Deployment
 
-### Production
-- **RPC:** https://rpc.sltn.io
-- **Wallet:** https://wallet.sltn.io
-- **Validators:** Dynamic (anyone can join with 10,000 SLTN)
+### Production Infrastructure
+| Service | URL | Hosting |
+|---------|-----|---------|
+| **RPC** | https://rpc.sltn.io | NYC Validator (DigitalOcean) |
+| **Wallet** | https://wallet.sltn.io | Replit (Wollnbergen/PWA repo) |
+| **Backup Wallet** | https://rpc.sltn.io/wallet/ | NYC Validator |
+
+### Wallet Deployment Workflow
+The Sultan Wallet PWA is developed in `wallet-extension/` but deployed via a separate repo:
+
+```
+wallet-extension/ (0xv7)  →  Wollnbergen/PWA repo  →  Replit  →  wallet.sltn.io
+```
+
+**To deploy wallet changes:**
+```bash
+# 1. Sync changes to PWA repo and push
+./scripts/deploy_wallet.sh --push
+
+# 2. On Replit (wallet.sltn.io project):
+git pull origin main
+npm install
+npm run build
+```
+
+### Validators
+Dynamic validator set - anyone can join with 10,000 SLTN stake.
 
 ### Development
 ```bash
@@ -329,4 +352,26 @@ cargo test --workspace
 
 ---
 
-*Last updated: January 25, 2026 - v0.1.8 with height-based sync, 6 validators live (NYC, SGP, AMS, FRA, SFO, LON)*
+## Production Validator Set (v0.2.2)
+
+Sultan mainnet operates with **6 globally distributed validators**, each with equal voting power:
+
+| Validator | Address | Location | Voting Power |
+|-----------|---------|----------|-------------|
+| NYC | `sultan1valnyc...vnyc01` | New York, USA | 16.67% |
+| SFO | `sultan1valsfo...vsfo02` | San Francisco, USA | 16.67% |
+| FRA | `sultan1valfra...vfra03` | Frankfurt, EU | 16.67% |
+| AMS | `sultan1valams...vams04` | Amsterdam, EU | 16.67% |
+| SGP | `sultan1valsgp...vsgp05` | Singapore, APAC | 16.67% |
+| LON | `sultan1vallon...vlon06` | London, EU | 16.67% |
+
+**Staking System Features:**
+- Genesis validator auto-registration via `--genesis-validators` CLI flag
+- Real-time uptime tracking (`blocks_signed`, `blocks_missed`, `uptime_percent`)
+- Persistent staking state in RocksDB (`staking:state` key)
+- `--reset-staking` flag for state recovery/rebuild
+- `total_blocks_missed` lifetime counter for validator performance history
+
+---
+
+*Last updated: January 27, 2026 - v0.2.2 with staking system improvements, 6 validators live with equal voting power*

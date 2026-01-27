@@ -97,3 +97,4 @@ ANALYZE_*.sh.log
 # Generated files
 *.generated.*
 proto/generated/
+replit-wallet-sync/

@@ -199,6 +199,24 @@ sudo journalctl -u sultan -f  # Live logs
 | `--shard-count` | 8 | Initial shard count (mainnet: 16) |
 | `--enable-p2p` | false | Enable P2P networking |
 | `--bootstrap-peers` | - | Bootstrap peer multiaddr |
+| `--genesis-validators` | - | Comma-separated list of genesis validator addresses |
+| `--reset-staking` | false | Reset staking state on startup (one-time recovery) |
+
+## Validator Uptime Tracking (v0.2.2)
+
+Sultan tracks validator performance in real-time:
+
+| Metric | Description |
+|--------|-------------|
+| `blocks_signed` | Number of blocks you've signed |
+| `blocks_missed` | Number of blocks you missed |
+| `uptime_percent` | Your uptime percentage |
+| `voting_power_percent` | Your share of network stake |
+
+**Check your validator status:**
+```bash
+curl https://rpc.sltn.io/staking/validators | jq '.[] | select(.validator_address | contains("YOUR_ADDRESS"))'
+```
 
 ## Validator Earnings
 

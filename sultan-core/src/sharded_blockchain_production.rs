@@ -397,21 +397,40 @@ impl SultanBlockchain {
         by_hash.get(hash).cloned()
     }
 
+    /// Apply a block silently (no logging) - used during blockchain restore to avoid journald rate limiting
+    pub async fn apply_block_silent(&self, block: Block) -> Result<()> {
+        self.apply_block_internal(block, false).await
+    }
+
     /// Apply a block received from another validator
     /// Used for block sync - when we're not the proposer
     /// CRITICAL: We must execute transactions to update our local state
     pub async fn apply_block(&self, block: Block) -> Result<()> {
-        info!("📥 apply_block ENTRY: block.index={}, block.prev_hash='{}', block.hash='{}'", 
+        self.apply_block_internal(block, true).await
+    }
+
+    /// Internal apply_block implementation with optional logging
+    async fn apply_block_internal(&self, block: Block, verbose: bool) -> Result<()> {
+        if verbose {
+            info!("📥 apply_block ENTRY: block.index={}, block.prev_hash='{}', block.hash='{}'", 
               block.index, &block.prev_hash, &block.hash[..32.min(block.hash.len())]);
+        }
         
         // SECURITY: Validate block before applying
         // This prevents malicious blocks from corrupting state
-        info!("📥 apply_block: calling validate_block for block {}", block.index);
-        if let Err(e) = self.validate_block(&block).await {
-            warn!("❌ Block {} validation failed: {}", block.index, e);
-            return Err(e).context("Block validation failed");
+        if verbose {
+            info!("📥 apply_block: calling validate_block for block {}", block.index);
+            if let Err(e) = self.validate_block(&block).await {
+                warn!("❌ Block {} validation failed: {}", block.index, e);
+                return Err(e).context("Block validation failed");
+            }
+            info!("📥 apply_block: validate_block PASSED for block {}", block.index);
+        } else {
+            // Silent validation for restore
+            if let Err(e) = self.validate_block_silent(&block).await {
+                return Err(e).context("Block validation failed");
+            }
         }
-        info!("📥 apply_block: validate_block PASSED for block {}", block.index);
         
         // STEP 1: Validate block linkage with minimal lock hold time
         {
@@ -442,7 +461,9 @@ impl SultanBlockchain {
         // STEP 2: Process transactions WITHOUT holding any blockchain locks
         let tx_count = block.transactions.len();
         if tx_count > 0 {
-            info!("🔄 Executing {} transactions from synced block {}", tx_count, block.index);
+            if verbose {
+                info!("🔄 Executing {} transactions from synced block {}", tx_count, block.index);
+            }
             
             // Remove these transactions from our mempool if we have them
             {
@@ -468,8 +489,10 @@ impl SultanBlockchain {
                 .await
                 .context("Failed to process cross-shard queue from synced block")?;
             
-            info!("✅ Executed {} txs from synced block {} ({} cross-shard)", 
-                  tx_count, block.index, cross_shard_txs.len());
+            if verbose {
+                info!("✅ Executed {} txs from synced block {} ({} cross-shard)", 
+                      tx_count, block.index, cross_shard_txs.len());
+            }
         }
         
         // Index transactions from synced block for history queries (no locks held)
@@ -491,11 +514,13 @@ impl SultanBlockchain {
             blocks.push(block.clone());
         } // blocks write lock released here
         
-        info!(
-            "📦 Applied block {} from network ({} txs)",
-            block.index,
-            tx_count
-        );
+        if verbose {
+            info!(
+                "📦 Applied block {} from network ({} txs)",
+                block.index,
+                tx_count
+            );
+        }
         
         Ok(())
     }
@@ -663,23 +688,44 @@ impl SultanBlockchain {
     /// - Block hash integrity (SHA256)
     /// - Zero gas fee enforcement
     /// - Full Ed25519 signature verification for all transactions
+    /// Validate a block (verbose logging)
     pub async fn validate_block(&self, block: &Block) -> Result<bool> {
-        info!("🔍 validate_block ENTRY: block.index={}", block.index);
+        self.validate_block_internal(block, true).await
+    }
+
+    /// Validate a block silently (minimal logging for restore)
+    pub async fn validate_block_silent(&self, block: &Block) -> Result<bool> {
+        self.validate_block_internal(block, false).await
+    }
+
+    /// Internal validate_block implementation with optional logging
+    async fn validate_block_internal(&self, block: &Block, verbose: bool) -> Result<bool> {
+        if verbose {
+            info!("🔍 validate_block ENTRY: block.index={}", block.index);
+        }
         let blocks = self.blocks.read().await;
         let chain_len = blocks.len();
-        info!("🔍 validate_block: chain_len={}, block.index={}", chain_len, block.index);
+        if verbose {
+            info!("🔍 validate_block: chain_len={}, block.index={}", chain_len, block.index);
+        }
         
         // Handle the case where we have NO blocks (not even genesis)
         // This happens when syncing from scratch - we need to apply genesis first
         if chain_len == 0 {
-            info!("🔍 validate_block: chain is empty, checking if this is genesis block");
+            if verbose {
+                info!("🔍 validate_block: chain is empty, checking if this is genesis block");
+            }
             // If chain is empty, we can only accept block 0 (genesis)
             if block.index == 0 {
-                info!("✓ Accepting genesis block (index 0) into empty chain");
+                if verbose {
+                    info!("✓ Accepting genesis block (index 0) into empty chain");
+                }
                 drop(blocks);
                 // For genesis, just verify hash if it's the special "genesis" value
                 if block.hash == "genesis" {
-                    info!("✓ Genesis block has special 'genesis' hash - accepted");
+                    if verbose {
+                        info!("✓ Genesis block has special 'genesis' hash - accepted");
+                    }
                     return Ok(true);
                 }
                 // Otherwise verify computed hash
@@ -696,16 +742,18 @@ impl SultanBlockchain {
         let prev_block = blocks.last()
             .ok_or_else(|| anyhow::anyhow!("No blocks in chain - cannot validate"))?;
 
-        info!(
-            "🔍🔍🔍 VALIDATE v3 block {}: prev_hash='{}', our_last.hash='{}', block.hash='{}', ts={}, prev_ts={}, validator={}",
-            block.index,
-            block.prev_hash,
-            prev_block.hash,
-            &block.hash[..64.min(block.hash.len())],
-            block.timestamp,
-            prev_block.timestamp,
-            &block.validator
-        );
+        if verbose {
+            info!(
+                "🔍🔍🔍 VALIDATE v3 block {}: prev_hash='{}', our_last.hash='{}', block.hash='{}', ts={}, prev_ts={}, validator={}",
+                block.index,
+                block.prev_hash,
+                prev_block.hash,
+                &block.hash[..64.min(block.hash.len())],
+                block.timestamp,
+                prev_block.timestamp,
+                &block.validator
+            );
+        }
 
         // Check index
         if block.index != prev_block.index + 1 {
@@ -713,7 +761,9 @@ impl SultanBlockchain {
             warn!("❌ {}", msg);
             bail!("{}", msg);
         }
-        info!("✓ Index check passed: {} == {} + 1", block.index, prev_block.index);
+        if verbose {
+            info!("✓ Index check passed: {} == {} + 1", block.index, prev_block.index);
+        }
 
         // Check previous hash
         if block.prev_hash != prev_block.hash {
@@ -725,7 +775,9 @@ impl SultanBlockchain {
             warn!("❌ {}", msg);
             bail!("{}", msg);
         }
-        info!("✓ Prev hash check passed");
+        if verbose {
+            info!("✓ Prev hash check passed");
+        }
 
         // Check timestamp
         if block.timestamp <= prev_block.timestamp {
@@ -737,14 +789,18 @@ impl SultanBlockchain {
             warn!("❌ {}", msg);
             bail!("{}", msg);
         }
-        info!("✓ Timestamp check passed: {} > {}", block.timestamp, prev_block.timestamp);
+        if verbose {
+            info!("✓ Timestamp check passed: {} > {}", block.timestamp, prev_block.timestamp);
+        }
         drop(blocks);
 
         // Verify block hash (strict SHA256 - no legacy formats)
         let calculated_hash = Self::calculate_block_hash(block);
         // Allow genesis block only (index 0 with "genesis" hash)
         let is_genesis = block.index == 0 && block.hash == "genesis";
-        info!("🔍 Hash check: is_genesis={}, block.hash='{}', calculated='{}'", is_genesis, &block.hash[..32.min(block.hash.len())], &calculated_hash[..32.min(calculated_hash.len())]);
+        if verbose {
+            info!("🔍 Hash check: is_genesis={}, block.hash='{}', calculated='{}'", is_genesis, &block.hash[..32.min(block.hash.len())], &calculated_hash[..32.min(calculated_hash.len())]);
+        }
         if !is_genesis && block.hash != calculated_hash {
             let msg = format!(
                 "Invalid block hash: calculated='{}', block claims='{}'",
@@ -754,7 +810,9 @@ impl SultanBlockchain {
             warn!("❌ {}", msg);
             bail!("{}", msg);
         }
-        info!("✓ Hash check passed");
+        if verbose {
+            info!("✓ Hash check passed");
+        }
 
         // Get shard count for routing (brief lock)
         let shard_count = {
