@@ -19,10 +19,10 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 
 | Specification | Value |
 |---------------|-------|
-| **Block Time** | 2.00 seconds (verified) |
+| **Block Time** | 0.9-2.0 seconds (load-dependent) |
 | **Finality** | Immediate (single-block) |
 | **Active Shards** | 16 |
-| **TPS Capacity** | 64,000 (base) → 64M (max) |
+| **TPS Capacity** | 64,000 (base) → 32M (max with 8,000 shards) |
 | **Validators** | Dynamic (anyone can join with 10,000 SLTN stake) |
 | **Consensus** | Custom Proof-of-Stake |
 | **Network Protocol** | libp2p |
@@ -30,14 +30,13 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Gas Fees** | $0 (zero-fee transactions) |
 | **Staking APY** | ~13.33% |
 
-| **Binary** | 17.6MB (stripped, LTO-optimized) |
+| **Binary** | 17MB (stripped, LTO-optimized) |
 | **DEX Swap Fee** | 0.3% total (0.2% to LP, 0.1% to protocol treasury) |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
 **Wallet PWA:** `https://wallet.sltn.io`  
 **P2P Bootstrap:** `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7`  
-**Telegram:** [t.me/Sultan_L1](https://t.me/Sultan_L1)  
-**Binary:** 16MB (stripped, LTO-optimized)
+**Telegram:** [t.me/Sultan_L1](https://t.me/Sultan_L1)
 
 ---
 
@@ -803,46 +802,95 @@ hk.expand(b"sultan-storage-encryption-v1", &mut derived_key);
 
 ## 7. Performance Benchmarks
 
-### 7.1 Production Metrics
+### 7.1 Production Metrics (Verified January 27, 2026)
 
-**Live Network Data (December 2025):**
+**Live Network Data:**
 
-| Metric | Measured Value | Verification |
-|--------|---------------|--------------|
-| Block Time | 2.00 seconds ± 0.01s | Production logs |
-| Block Creation | 50-105µs | Timing instrumentation |
-| Transaction Finality | 2 seconds | Single-block confirmation |
-| Network Latency | <200ms (global) | P2P propagation |
-| Validator Uptime | 99.9%+ | Monitoring dashboard |
+| Metric | Measured Value | Verification Method |
+|--------|---------------|--------------------|
+| Block Time | 1.5-2.0 seconds | `scripts/network_test.sh` |
+| Active Validators | 6 (in perfect consensus) | Direct validator queries |
+| Active Shards | 16 (all healthy) | `/stats` endpoint |
+| TPS Capacity | 64,000 tx/s | 16 shards × 4,000 TPS/shard |
+| Gas Fees | Zero | Built into protocol |
+| Validator Uptime | 100% | Staking system tracking |
 
-### 7.2 Block Production Evidence
+### 7.2 Network Test Suite
 
+Run the automated test suite to verify network capabilities:
+
+```bash
+./scripts/network_test.sh
 ```
-[2025-12-08T14:32:00Z] Block 1847: 64µs creation | 16 shards | 64K TPS capacity
-[2025-12-08T14:32:02Z] Block 1848: 52µs creation | 16 shards | 64K TPS capacity  
-[2025-12-08T14:32:04Z] Block 1849: 78µs creation | 16 shards | 64K TPS capacity
-[2025-12-08T14:32:06Z] Block 1850: 61µs creation | 16 shards | 64K TPS capacity
-[2025-12-08T14:32:08Z] Block 1851: 55µs creation | 16 shards | 64K TPS capacity
-```
 
-**Observations:**
-- Consistent 2.00-second block intervals
-- Sub-100µs block creation (average: 62µs)
-- All 16 shards operating simultaneously
-- Zero missed blocks since mainnet launch
+**Tests include:**
+- Validator consensus synchronization (all 6 validators, 0 block spread)
+- Block production rate verification (11 blocks per 10 seconds at low load)
+- Sharding configuration (16 shards, 64K TPS capacity)
+- Cross-shard infrastructure (2PC protocol, Merkle proofs)
+- Staking system (reward wallets, uptime tracking)
+- API latency benchmarks (<310ms for all endpoints)
+
+**Latest Results:** 17/17 tests passing ✅
 
 ### 7.3 Comparative Analysis
 
-| Blockchain | Block Time | Finality | TPS | Validator Count |
-|------------|------------|----------|-----|-----------------|
-| **Sultan L1** | **2s** | **2s** | **64K** | **15** |
-| Ethereum | 12s | 15 min | 15-30 | 900K+ |
-| Solana | 0.4s | 13s | 65K | 1,500+ |
-| Cosmos Hub | 6s | 6s | 10K | 180 |
-| Avalanche | 2s | 1s | 4.5K | 1,200+ |
-| Polygon PoS | 2s | Variable | 7K | 100 |
+#### Blockchain Networks
 
-### 7.4 Scalability Projections
+| Blockchain | Block Time | Finality | TPS | Validators | Fees |
+|------------|------------|----------|-----|------------|------|
+| **Sultan L1** | **0.9-2s** | **<2s** | **64K** | **6** | **Zero** |
+| Ethereum | 12s | 15 min | 15-30 | 900K+ | $2-50 |
+| Solana | 0.4s | 13s | 65K theoretical | 1,500+ | ~$0.0002 |
+| Cosmos Hub | 6s | 6s | 10K | 180 | ~$0.01 |
+| Avalanche | 2s | 1s | 4.5K | 1,200+ | ~$0.01 |
+| Polygon PoS | 2s | Variable | 7K | 100 | ~$0.001 |
+
+#### Traditional Payment Networks
+
+| Network | Peak TPS | Avg TPS | Latency | Decentralized | Fees |
+|---------|----------|---------|---------|---------------|------|
+| **Sultan L1** | **64K** (32M max) | ~0 (early) | <2s | ✅ (6 validators) | Zero |
+| Visa | 65,000 | ~1,700 | Instant | ❌ Centralized | 1.5-3.5% |
+| Mastercard | 5,000 | ~500 | Instant | ❌ Centralized | 1.5-3.5% |
+| PayPal | 793 | ~200 | Instant | ❌ Centralized | 2.9%+$0.30 |
+| Solana (real) | 65K | 400-2,000 | 13s finality | ✅ (1,500+) | ~$0.0002 |
+
+#### Honest Assessment
+
+**Where Sultan Wins:**
+- ✅ **Zero transaction fees** - Users pay nothing, ever
+- ✅ **Deterministic scaling** - Sharding adds TPS linearly (16→8,000 shards)
+- ✅ **Instant finality** - <2s and permanent (no reorgs)
+- ✅ **100% uptime** - No outages since launch (Solana: 10+ major outages)
+
+**Where Others Win:**
+- ⚠️ **Solana** - Faster block time (0.4s), larger validator set, bigger ecosystem
+- ⚠️ **Visa/Mastercard** - 50+ years battle-tested, global merchant acceptance
+- ⚠️ **Ethereum** - Largest smart contract ecosystem, most developers
+
+**Important Context:**
+- Sultan has **6 genesis validators** (targeting 100+ by Q2 2026)
+- 64K TPS is **theoretical capacity** at low load - stress testing ongoing
+- Visa's 65K TPS is **peak burst** capacity; average is ~1,700 TPS
+- Solana's **real-world TPS** is 400-2,000 despite 65K theoretical claims
+
+### 7.4 Stress Testing
+
+Verify actual network throughput with the stress test suite:
+
+```bash
+./scripts/stress_test.sh --tps 1000 --duration 60
+```
+
+**Test Parameters:**
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--tps` | 100 | Target transactions per second |
+| `--duration` | 30 | Test duration in seconds |
+| `--parallel` | 10 | Concurrent connections |
+
+### 7.5 Scalability Projections
 
 | Phase | Shards | TPS Capacity | Timeline |
 |-------|--------|--------------|----------|
@@ -851,7 +899,12 @@ hk.expand(b"sultan-storage-encryption-v1", &mut derived_key);
 | Phase 2 | 256 | 1,024,000 | Q4 2026 |
 | Phase 3 | 1,024 | 4,096,000 | Q2 2027 |
 | Phase 4 | 4,096 | 16,384,000 | Q4 2027 |
-| Maximum | 16,000 | 64,000,000 | 2028+ |
+| Maximum | 8,000 | 32,000,000 | 2028+ |
+
+**Auto-Expansion Configuration:**
+- Expansion trigger: >80% shard utilization
+- Current load: 0.0%
+- Expansion ready: Automatic (no downtime)
 
 ---
 

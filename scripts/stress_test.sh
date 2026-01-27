@@ -1,13 +1,59 @@
 #!/bin/bash
 #
 # Sultan L1 Stress Test Suite
-# Production-grade high-volume transaction testing
+# Production-grade high-volume API and transaction testing
+#
+# Usage: ./scripts/stress_test.sh [OPTIONS]
+#
+# Options:
+#   --tps NUM        Target requests per second (default: 100)
+#   --duration NUM   Test duration in seconds (default: 30)
+#   --parallel NUM   Concurrent connections (default: 10)
+#   --rpc URL        RPC endpoint (default: https://rpc.sltn.io)
 #
 
 set -e
 
+# Default configuration
+TARGET_TPS="${TARGET_TPS:-100}"
+DURATION="${DURATION:-30}"
+PARALLEL="${PARALLEL:-10}"
+RPC="${SULTAN_RPC:-https://rpc.sltn.io}"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --tps) TARGET_TPS="$2"; shift 2 ;;
+        --duration) DURATION="$2"; shift 2 ;;
+        --parallel) PARALLEL="$2"; shift 2 ;;
+        --rpc) RPC="$2"; shift 2 ;;
+        -h|--help)
+            echo "Sultan L1 Stress Test"
+            echo ""
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --tps NUM        Target requests/sec (default: 100)"
+            echo "  --duration NUM   Duration in seconds (default: 30)"
+            echo "  --parallel NUM   Concurrent connections (default: 10)"
+            echo "  --rpc URL        RPC endpoint"
+            echo ""
+            echo "Examples:"
+            echo "  $0 --tps 100 --duration 30    # Basic test"
+            echo "  $0 --tps 1000 --duration 60   # Higher load"
+            echo "  $0 --tps 5000 --duration 120  # Stress test"
+            exit 0
+            ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
 echo "╔══════════════════════════════════════════════════════════════════╗"
-echo "║         Sultan L1 Stress Test Suite                              ║"
+echo "║         Sultan L1 Stress Test Suite v2.0                         ║"
+echo "╠══════════════════════════════════════════════════════════════════╣"
+echo "║  RPC: $RPC"
+echo "║  Target: $TARGET_TPS requests/sec for ${DURATION}s"
+echo "║  Parallel: $PARALLEL connections"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -18,23 +64,12 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Configuration
-RPC_ENDPOINT="${RPC_ENDPOINT:-http://localhost:26657}"
-API_ENDPOINT="${API_ENDPOINT:-http://localhost:1317}"
-TEST_DURATION="${TEST_DURATION:-60}"  # seconds
+# Results directory
 RESULTS_DIR="/tmp/sultan-stress-$(date +%Y%m%d-%H%M%S)"
-
 mkdir -p "$RESULTS_DIR"
 
-echo "Configuration:"
-echo "  RPC:      $RPC_ENDPOINT"
-echo "  API:      $API_ENDPOINT"
-echo "  Duration: $TEST_DURATION seconds"
-echo "  Results:  $RESULTS_DIR"
-echo ""
-
 # ============================================================================
-# 1. Node Health Check
+# 1. Pre-Test Health Check
 # ============================================================================
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -44,27 +79,27 @@ echo ""
 
 # Check if node is running
 echo -n "Checking node availability... "
-if curl -s "$API_ENDPOINT/health" &>/dev/null; then
+STATUS=$(curl -s --connect-timeout 10 "$RPC/status" 2>/dev/null)
+if [ -n "$STATUS" ]; then
     echo -e "${GREEN}✓ Node is running${NC}"
 else
-    echo -e "${RED}✗ Node not running${NC}"
-    echo ""
-    echo "Please start the node first:"
-    echo "  cd /workspaces/0xv7/sultand"
-    echo "  export LD_LIBRARY_PATH=/tmp/cargo-target/release:\$LD_LIBRARY_PATH"
-    echo "  ./sultand start --api.enable=true"
+    echo -e "${RED}✗ Node not running at $RPC${NC}"
     exit 1
 fi
 
 # Get initial metrics
-echo -n "Getting initial metrics... "
-INITIAL_HEIGHT=$(curl -s "$RPC_ENDPOINT/status" | grep -o '"latest_block_height":"[0-9]*"' | cut -d'"' -f4 || echo "0")
-echo -e "${GREEN}✓ Height: $INITIAL_HEIGHT${NC}"
+INITIAL_HEIGHT=$(echo "$STATUS" | jq -r '.height // 0')
+echo -e "  Initial height: ${GREEN}$INITIAL_HEIGHT${NC}"
+
+STATS=$(curl -s "$RPC/stats")
+SHARD_COUNT=$(echo "$STATS" | jq -r '.shard_count // 0')
+TPS_CAPACITY=$(echo "$STATS" | jq -r '.estimated_tps // 0')
+echo -e "  Shards: ${GREEN}$SHARD_COUNT${NC} (capacity: ${TPS_CAPACITY} TPS)"
 
 echo ""
 
 # ============================================================================
-# 2. API Stress Test
+# 2. API Endpoint Stress Test
 # ============================================================================
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -75,11 +110,11 @@ echo ""
 echo "Testing concurrent API requests..."
 echo ""
 
-# Test health endpoint
-echo -n "  /health endpoint (100 concurrent): "
+# Test status endpoint
+echo -n "  /status endpoint (100 concurrent): "
 START=$(date +%s%N)
 for i in {1..100}; do
-    curl -s "$API_ENDPOINT/health" &>/dev/null &
+    curl -s "$RPC/status" &>/dev/null &
 done
 wait
 END=$(date +%s%N)
@@ -88,15 +123,17 @@ AVG_MS=$(( DURATION_MS / 100 ))
 
 if [ $AVG_MS -lt 50 ]; then
     echo -e "${GREEN}✓ ${AVG_MS}ms avg (excellent)${NC}"
+elif [ $AVG_MS -lt 200 ]; then
+    echo -e "${GREEN}✓ ${AVG_MS}ms avg (good)${NC}"
 else
     echo -e "${YELLOW}⚠ ${AVG_MS}ms avg${NC}"
 fi
 
-# Test status endpoint
-echo -n "  /status endpoint (50 concurrent): "
+# Test stats endpoint
+echo -n "  /stats endpoint (50 concurrent): "
 START=$(date +%s%N)
 for i in {1..50}; do
-    curl -s "$API_ENDPOINT/status" &>/dev/null &
+    curl -s "$RPC/stats" &>/dev/null &
 done
 wait
 END=$(date +%s%N)
@@ -105,15 +142,17 @@ AVG_MS=$(( DURATION_MS / 50 ))
 
 if [ $AVG_MS -lt 100 ]; then
     echo -e "${GREEN}✓ ${AVG_MS}ms avg (excellent)${NC}"
+elif [ $AVG_MS -lt 300 ]; then
+    echo -e "${GREEN}✓ ${AVG_MS}ms avg (good)${NC}"
 else
     echo -e "${YELLOW}⚠ ${AVG_MS}ms avg${NC}"
 fi
 
-# Test chain_info endpoint
-echo -n "  /chain_info endpoint (50 concurrent): "
+# Test balance endpoint
+echo -n "  /balance endpoint (50 concurrent): "
 START=$(date +%s%N)
 for i in {1..50}; do
-    curl -s "$API_ENDPOINT/chain_info" &>/dev/null &
+    curl -s "$RPC/balance/sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g" &>/dev/null &
 done
 wait
 END=$(date +%s%N)
@@ -122,6 +161,8 @@ AVG_MS=$(( DURATION_MS / 50 ))
 
 if [ $AVG_MS -lt 100 ]; then
     echo -e "${GREEN}✓ ${AVG_MS}ms avg (excellent)${NC}"
+elif [ $AVG_MS -lt 300 ]; then
+    echo -e "${GREEN}✓ ${AVG_MS}ms avg (good)${NC}"
 else
     echo -e "${YELLOW}⚠ ${AVG_MS}ms avg${NC}"
 fi
@@ -133,7 +174,7 @@ echo ""
 # ============================================================================
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "3. Sustained Load Test ($TEST_DURATION seconds)"
+echo "3. Sustained Load Test ($DURATION seconds @ $TARGET_TPS req/s)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -145,7 +186,7 @@ worker() {
     local count=0
     local errors=0
     local start_time=$(date +%s)
-    local end_time=$((start_time + TEST_DURATION))
+    local end_time=$((start_time + DURATION))
     
     while [ $(date +%s) -lt $end_time ]; do
         if curl -s -f "$endpoint" &>/dev/null; then

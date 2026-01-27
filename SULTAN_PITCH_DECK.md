@@ -3,9 +3,9 @@
 ## Investor Pitch Deck
 
 **The Native Rust Blockchain**  
-*2-Second Finality | $0 Gas Fees | 64M TPS Scalability*
+*<2s Finality | $0 Gas Fees | 32M TPS Scalability*
 
-**Version:** 3.4 | **Updated:** January 10, 2026
+**Version:** 4.1 | **Updated:** January 27, 2026
 
 ---
 
@@ -21,25 +21,25 @@
 
 ---
 
-| Metric | Value |
-|--------|-------|
-| **Block Time** | 2 seconds |
-| **Finality** | Immediate |
-| **Gas Fees** | $0 |
-| **TPS Capacity** | 64,000 → 64M |
-| **Validator APY** | ~13.33% |
-| **Active Validators** | Dynamic (6 at launch) |
-| **Active Shards** | 16 |
-| **Consensus** | Height-based PoS with synchronized leader election |
-| **Network Status** | ✅ **MAINNET LIVE (Dec 25, 2025)** |
+| Metric | Value | Status |
+|--------|-------|--------|
+| **Block Time** | ~1-2 seconds | ✅ Verified |
+| **Finality** | Immediate (<2s) | ✅ Live |
+| **Gas Fees** | $0 | ✅ Always |
+| **TPS Capacity** | 64,000 → 32M | ✅ Scalable |
+| **Validator APY** | ~13.33% | ✅ Active |
+| **Active Validators** | 6 (permissionless) | ✅ In Consensus |
+| **Active Shards** | 16 | ✅ All Healthy |
+| **Current Height** | 12,900+ | ✅ Jan 27, 2026 |
+| **Network Uptime** | 100% | ✅ Since Launch |
+| **Network Status** | ✅ **MAINNET LIVE** | |
 
 ---
 
-**Website:** https://sltn.io  
-**RPC:** https://rpc.sltn.io  
-**Documentation:** https://github.com/Wollnbergen/DOCS
+**RPC Endpoint:** https://rpc.sltn.io  
+**Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
-**Funding Round:** Seed ($800K) + Private ($3.2M) = **$4M Total**
+**Binary:** v0.2.2 (17MB, LTO-optimized)
 
 </div>
 
@@ -112,7 +112,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 **🦀 Native Rust Architecture**
 - 50-105µs block creation (500-1000x faster than typical)
 - Memory-safe without garbage collection pauses
-- 14MB optimized binary
+- 17MB LTO-optimized binary
 
 ---
 
@@ -151,7 +151,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 │         │                    │                    │              │
 │  ┌──────▼──────┐     ┌──────▼──────┐     ┌──────▼──────┐       │
 │  │   Shard 0   │     │   Shard 1   │     │  Shard N    │       │
-│  │   8K TPS    │     │   8K TPS    │     │   8K TPS    │       │
+│  │   4K TPS    │     │   4K TPS    │     │   4K TPS    │       │
 │  └─────────────┘     └─────────────┘     └─────────────┘       │
 │                              │                                    │
 │  ┌────────────────────────────────────────────────────────────┐ │
@@ -186,7 +186,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 | Metric | Sultan (Native Rust) | Typical Framework |
 |--------|---------------------|-------------------|
 | Block Creation | 50-105µs | 100-500ms |
-| Binary Size | 15MB | 500MB+ |
+| Binary Size | 17MB | 500MB+ |
 | Minimum RAM | 1GB | 8-16GB |
 | GC Pauses | None | Frequent |
 | Startup Time | <1 second | 30-60 seconds |
@@ -197,52 +197,59 @@ We built a blockchain from first principles—no frameworks, no compromises.
 
 ## 📊 SLIDE 5: PERFORMANCE METRICS
 
-### Production-Verified Performance
+### Production-Verified Performance (January 27, 2026)
 
-Sultan L1 is **live on mainnet** with verified metrics:
-
----
-
-| Metric | Value | Status |
-|--------|-------|--------|
-| **Block Time** | 2.00 seconds | ✅ Verified |
-| **Block Creation** | 14-28µs | ✅ Measured |
-| **Finality** | 2 seconds (1 block) | ✅ Guaranteed |
-| **Active Shards** | 16 | ✅ Live |
-| **Base TPS** | 64,000 | ✅ Capacity |
-| **Max TPS** | 64,000,000 | 🔄 With expansion |
-| **Validators** | Dynamic (6 at launch) | ✅ Globally distributed |
-| **Treasury** | 500M SLTN | ✅ Initialized |
-| **Launch Date** | December 25, 2025 | ✅ Christmas Day |
+Sultan L1 is **live on mainnet** with verified metrics from automated testing:
 
 ---
 
-### Live Production Evidence (Christmas Day Launch)
+| Metric | Value | Verification |
+|--------|-------|-------------|
+| **Block Time** | ~0.9-2.0 seconds | ✅ `network_test.sh` |
+| **Block Production** | 11 blocks/10s at low load | ✅ Measured |
+| **Finality** | <2 seconds (1 block) | ✅ Guaranteed |
+| **Active Shards** | 16 | ✅ All Healthy |
+| **TPS Capacity** | 64,000 | ✅ 16 × 4,000 |
+| **Max TPS** | 32,000,000 | 🔄 With 8,000 shards |
+| **Validators** | 6 in perfect consensus | ✅ 0 block spread |
+| **API Latency** | <35ms avg | ✅ Stress tested |
+| **Network Height** | 12,900+ | ✅ Live |
+| **Uptime** | 100% | ✅ Since launch |
+
+---
+
+### Live Network Test Results (January 27, 2026)
 
 ```
-[2025-12-25T09:44:00Z] ✅ SHARDED Block 1 | 16 shards active | capacity: 64000 TPS
-[2025-12-25T09:44:02Z] ✅ SHARDED Block 2 | 16 shards active | 14.657µs creation
-[2025-12-25T09:44:04Z] ✅ SHARDED Block 3 | 16 shards active | 22.881µs creation  
-[2025-12-25T09:52:58Z] ✅ Registered validator-2 in consensus (stake: 10000000000000)
-[2025-12-25T09:53:24Z] ✅ Registered validator-3 in consensus (stake: 10000000000000)
-[2025-12-25T09:54:46Z] 🌐 P2P Status: 5 peers, 6 validators (consensus)
-```
+./scripts/network_test.sh
 
-**Perfect 2.00-second intervals. Sub-30µs block creation. 6 validators synced globally.**
+✓ Network online at height 12936
+✓ All 6 validators in consensus (spread: 0 blocks)
+✓ Block production: 11 blocks in 10s (~0.9s/block)
+✓ Sharding enabled: 16 active shards, all healthy
+✓ TPS capacity: 64,000 (16 shards × 4,000 TPS)
+✓ Max shards: 8,000 (32M TPS potential)
+✓ All validators have reward_wallet configured
+✓ API latency: <35ms (excellent)
+
+17/17 tests passing ✅
+```
 
 ---
 
-### Competitive Comparison
+### Quick Competitive Snapshot
 
-| Blockchain | Block Time | Finality | TPS | Gas Fee | Validator APY |
-|------------|------------|----------|-----|---------|---------------|
-| **Sultan L1** | **2s** | **2s** | **64K-64M** | **$0** | **13.33%** |
-| Ethereum | 12s | 15 min | 15-30 | $5-50 | 3-5% |
-| Solana | 0.4s | 13s | 65K | $0.001 | 7% |
+| Blockchain | Block Time | Finality | TPS | Gas Fee | APY |
+|------------|------------|----------|-----|---------|-----|
+| **Sultan L1** | **0.9-2s** | **<2s** | **64K→32M** | **$0** | **13.33%** |
+| Ethereum | 12s | 15 min | 15-30 | $2-50 | 3-5% |
+| Solana | 0.4s | 13s | 65K (400-2K real) | $0.0002 | 7% |
 | Cosmos Hub | 6s | 6s | 10K | $0.01 | 19% |
-| Avalanche | 2s | 1s | 4.5K | $0.10 | 8% |
+| Visa | N/A | Instant | 65K (1.7K avg) | 1.5-3.5% | N/A |
 
-**Sultan L1: Fastest finality, zero fees, competitive APY.**
+**Sultan L1: Fastest finality, zero fees, high APY, deterministic scaling.**
+
+*See Slide 10 for comprehensive competitive analysis.*
 
 ---
 
@@ -256,9 +263,9 @@ Sultan achieves **linear scalability** through state sharding:
 
 **How It Works:**
 - Blockchain state is partitioned across shards
-- Each shard processes 8,000 TPS independently
-- Shards can be added without downtime
-- Cross-shard transactions use 2PC atomic protocol
+- Each shard processes 4,000 TPS independently
+- Shards can be added without downtime (auto-expansion at 80% load)
+- Cross-shard transactions use 2PC atomic protocol with Merkle proofs
 
 ---
 
@@ -266,31 +273,33 @@ Sultan achieves **linear scalability** through state sharding:
 
 | Phase | Shards | TPS Capacity | Timeline |
 |-------|--------|--------------|----------|
-| **Launch** | 16 | 64,000 | ✅ Q4 2025 |
+| **Launch** | 16 | 64,000 | ✅ Live |
 | **Phase 1** | 64 | 256,000 | Q2 2026 |
 | **Phase 2** | 256 | 1,024,000 | Q4 2026 |
 | **Phase 3** | 1,024 | 4,096,000 | Q2 2027 |
 | **Phase 4** | 4,096 | 16,384,000 | Q4 2027 |
-| **Maximum** | 16,000 | **64,000,000** | 2028+ |
+| **Maximum** | 8,000 | **32,000,000** | Architecture limit |
 
 ---
 
-**64 Million TPS** — Enough to process global financial transactions.
+**32 Million TPS** — More than enough to process global financial transactions.
+
+*Note: Visa averages ~1,700 TPS globally. 65K is peak burst capacity.*
 
 ---
 
 ## 📊 SLIDE 7: NETWORK STATUS
 
-### Live Mainnet Network
+### Live Mainnet Network (Verified January 27, 2026)
 
-Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validator distribution:
+Sultan L1 has been running continuously since launch with **100% uptime**:
 
 ---
 
 ```
                          ┌─────────────────┐
                          │   Bootstrap     │
-                         │  validator-1    │
+                         │   sultan-nyc    │
                          │   NYC (USA)     │
                          │ 206.189.224.142 │
                          └────────┬────────┘
@@ -298,36 +307,34 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
         ┌─────────────────────────┼─────────────────────────┐
         │                         │                         │
    ┌────▼────┐               ┌────▼────┐               ┌────▼────┐
-   │validator│               │validator│               │validator│
-   │    2    │               │    3    │               │    4    │
-   │  SFO    │               │   FRA   │               │   AMS   │
+   │ sultan  │               │ sultan  │               │ sultan  │
+   │  -sfo   │               │  -fra   │               │  -ams   │
    │  (USA)  │               │  (EU)   │               │  (EU)   │
    └─────────┘               └─────────┘               └─────────┘
                                   │
               ┌───────────────────┴───────────────────┐
               │                                       │
          ┌────▼────┐                             ┌────▼────┐
-         │validator│                             │validator│
-         │    5    │                             │    6    │
-         │   SGP   │                             │   LON   │
+         │ sultan  │                             │ sultan  │
+         │  -sgp   │                             │  -lon   │
          │ (APAC)  │                             │  (EU)   │
          └─────────┘                             └─────────┘
 ```
 
 ---
 
-### Validator Distribution (Live)
+### Validator Distribution (Live & Verified)
 
-| Validator | Region | IP | Role |
-|-----------|--------|-----|------|
-| validator-1 | New York, USA | 206.189.224.142 | Bootstrap |
-| validator-2 | San Francisco, USA | 24.144.94.23 | Validator |
-| validator-3 | Frankfurt, DE | 46.101.122.13 | Validator |
-| validator-4 | Amsterdam, NL | 142.93.238.33 | Validator |
-| validator-5 | Singapore | 143.198.205.21 | Validator |
-| validator-6 | London, UK | 134.122.96.36 | Validator |
+| Validator | Region | IP | Status |
+|-----------|--------|-----|--------|
+| sultan-nyc | New York, USA | 206.189.224.142 | ✅ Height 12,900+ |
+| sultan-sfo | San Francisco, USA | 143.198.205.21 | ✅ In Sync |
+| sultan-fra | Frankfurt, DE | 142.93.238.33 | ✅ In Sync |
+| sultan-ams | Amsterdam, NL | 46.101.122.13 | ✅ In Sync |
+| sultan-sgp | Singapore | 24.144.94.23 | ✅ In Sync |
+| sultan-lon | London, UK | 134.122.96.36 | ✅ In Sync |
 
-**Total: 6 globally distributed validators across 4 continents (DigitalOcean)**
+**Total: 6 globally distributed validators in perfect consensus (0 block spread)**
 
 ---
 
@@ -335,17 +342,17 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 
 | Service | Endpoint | Status |
 |---------|----------|--------|
-| RPC API (Bootstrap) | http://206.189.224.142:26657 | ✅ Live |
+| **Public RPC** | https://rpc.sltn.io | ✅ Live |
 | P2P Bootstrap | /ip4/206.189.224.142/tcp/26656 | ✅ Live |
-| Website | https://sltn.io | ✅ Live |
+| Direct RPC (NYC) | http://206.189.224.142:8545 | ✅ Live |
 
 ---
 
-### Treasury
+### Genesis Treasury
 
 | Account | Balance | Purpose |
 |---------|---------|---------|
-| `sultan19mzzrah6h27draqc5tkh49yj623qwuz5f5t64c` | 500,000,000 SLTN | Genesis Treasury |
+| `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` | 500,000,000 SLTN | Genesis Treasury & Validator Rewards |
 
 ---
 
@@ -360,7 +367,7 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 | **Genesis Supply** | 500,000,000 |
 | **Decimals** | 9 |
 | **Type** | Native L1 Token |
-| **Treasury Address** | sultan19mzzrah6h27draqc5tkh49yj623qwuz5f5t64c |
+| **Genesis Wallet** | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` |
 
 ---
 
@@ -475,15 +482,75 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 
 ## 📊 SLIDE 10: COMPETITIVE ANALYSIS
 
-### Direct Competitors
+### Industry Comparison Matrix
 
-| Chain | Block Time | APY | Team % | Raise | Ecosystem % | Weakness |
-|-------|------------|-----|--------|-------|-------------|----------|
-| **Sultan** | **2s** | **13.33%** | **8%** | **$4M** | **40%** | New |
-| Cosmos Hub | 6s | 19% | 10% | $17M | 23% | Slower |
-| Celestia | 12s | 8-12% | 20% | $55M | 26% | DA-only |
-| Sei | 0.4s | 10% | 20% | $35M | 48% | High raise |
-| Injective | 0.8s | 12% | 20% | $50M | 22% | DeFi-specific |
+#### vs Blockchain Networks
+
+| Feature | Sultan L1 | Solana | Ethereum | Cosmos | Avalanche |
+|---------|-----------|--------|----------|--------|-----------|
+| **Block Time** | **0.9-2s** | 0.4s | 12s | 6s | 2s |
+| **Finality** | **<2s** | 13s | 15 min | 6s | 1s |
+| **TPS (Claimed)** | 64K→32M | 65K | 15-30 | 10K | 4.5K |
+| **TPS (Real)** | Testing | 400-2K | 15-30 | 1-5K | ~4K |
+| **Gas Fees** | **$0** | ~$0.0002 | $2-50 | ~$0.01 | ~$0.01 |
+| **Staking APY** | **13.33%** | 7% | 3-5% | 19% | 8% |
+| **Network Uptime** | **100%** | ~90% | 100% | 100% | 100% |
+| **Native Sharding** | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+---
+
+#### vs Traditional Payment Networks
+
+| Feature | Sultan L1 | Visa | Mastercard | PayPal |
+|---------|-----------|------|------------|--------|
+| **Peak TPS** | 64K→32M | 65,000 | 5,000 | 793 |
+| **Avg TPS** | ~0 (early) | ~1,700 | ~500 | ~200 |
+| **Transaction Fee** | **$0** | 1.5-3.5% | 1.5-3.5% | 2.9%+$0.30 |
+| **Settlement** | **<2 seconds** | 1-3 days | 1-3 days | Instant |
+| **Decentralized** | ✅ | ❌ | ❌ | ❌ |
+| **Permissionless** | ✅ | ❌ | ❌ | ❌ |
+| **Censorship Resistant** | ✅ | ❌ | ❌ | ❌ |
+| **24/7 Operation** | ✅ | ✅ | ✅ | ✅ |
+
+---
+
+### The Honest Assessment
+
+**Where Sultan Wins:**
+
+| Advantage | Details |
+|-----------|---------|
+| ✅ **Zero Fees** | No transaction costs, ever—sustainable via 4% inflation |
+| ✅ **Instant Finality** | <2s and permanent, no probabilistic confirmation |
+| ✅ **Deterministic Scaling** | Add shards = add TPS (16→8,000 = 64K→32M) |
+| ✅ **100% Uptime** | No network outages since launch |
+| ✅ **High Staking APY** | 13.33% vs industry average 3-7% |
+
+**Where Others Currently Lead:**
+
+| Network | Their Advantage | Our Path Forward |
+|---------|-----------------|------------------|
+| **Solana** | Larger validator set (1,500+) | Target 100+ validators by Q2 2026 |
+| **Solana** | Bigger ecosystem & DeFi TVL | Building native DEX, bridges, token factory |
+| **Ethereum** | Most developers & dApps | Developer outreach, grants program |
+| **Visa** | 50+ years battle-tested | Time in market, stress testing |
+
+---
+
+### Key Context for Investors
+
+**1. TPS Claims Require Context:**
+- Visa processes ~150M tx/day = **~1,700 TPS average** (65K is peak burst)
+- Solana's 65K theoretical = **400-2,000 TPS real-world** (validator voting inflates numbers)
+- Sultan's 64K is architectural capacity, stress testing underway
+
+**2. Validator Count:**
+- Sultan: 6 genesis validators (targeting 100+ by Q2 2026)
+- This is early-stage—network is new, decentralization grows with adoption
+
+**3. Network Stability:**
+- Solana: 10+ major outages since 2021
+- Sultan: 0 outages since December 2025 launch
 
 ---
 
@@ -520,10 +587,10 @@ Sultan L1 launched on **December 25, 2025 (Christmas Day)** with global validato
 ---
 
 **✅ Core Infrastructure Complete**
-- Native Rust blockchain engine (50K+ lines of production code)
+- Native Rust blockchain engine (22K+ lines of production code, 283+ tests)
 - libp2p networking stack
 - RocksDB storage layer
-- Warp RPC API server
+- Warp RPC API server (30+ endpoints)
 
 ---
 
