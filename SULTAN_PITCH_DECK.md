@@ -5,7 +5,7 @@
 **The Native Rust Blockchain**  
 *<2s Finality | $0 Gas Fees | 32M TPS Scalability*
 
-**Version:** 4.0 | **Updated:** January 27, 2026
+**Version:** 4.1 | **Updated:** January 27, 2026
 
 ---
 
@@ -112,7 +112,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 **🦀 Native Rust Architecture**
 - 50-105µs block creation (500-1000x faster than typical)
 - Memory-safe without garbage collection pauses
-- 14MB optimized binary
+- 17MB LTO-optimized binary
 
 ---
 
@@ -151,7 +151,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 │         │                    │                    │              │
 │  ┌──────▼──────┐     ┌──────▼──────┐     ┌──────▼──────┐       │
 │  │   Shard 0   │     │   Shard 1   │     │  Shard N    │       │
-│  │   8K TPS    │     │   8K TPS    │     │   8K TPS    │       │
+│  │   4K TPS    │     │   4K TPS    │     │   4K TPS    │       │
 │  └─────────────┘     └─────────────┘     └─────────────┘       │
 │                              │                                    │
 │  ┌────────────────────────────────────────────────────────────┐ │
@@ -186,7 +186,7 @@ We built a blockchain from first principles—no frameworks, no compromises.
 | Metric | Sultan (Native Rust) | Typical Framework |
 |--------|---------------------|-------------------|
 | Block Creation | 50-105µs | 100-500ms |
-| Binary Size | 15MB | 500MB+ |
+| Binary Size | 17MB | 500MB+ |
 | Minimum RAM | 1GB | 8-16GB |
 | GC Pauses | None | Frequent |
 | Startup Time | <1 second | 30-60 seconds |
@@ -587,10 +587,10 @@ Sultan L1 has been running continuously since launch with **100% uptime**:
 ---
 
 **✅ Core Infrastructure Complete**
-- Native Rust blockchain engine (50K+ lines of production code)
+- Native Rust blockchain engine (22K+ lines of production code, 283+ tests)
 - libp2p networking stack
 - RocksDB storage layer
-- Warp RPC API server
+- Warp RPC API server (30+ endpoints)
 
 ---
 
