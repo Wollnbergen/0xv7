@@ -675,6 +675,17 @@ impl NodeState {
                         warn!("⚠️⚠️⚠️ Genesis validator {} NOT added to staking: {}", gv_addr, e);
                     } else {
                         warn!("📋📋📋 Genesis validator {} REGISTERED in staking system", gv_addr);
+                        
+                        // Set reward wallet for genesis validators: CLI flag > genesis wallet > validator addr
+                        let reward_dest = args.reward_wallet.clone()
+                            .or_else(|| genesis_wallet.clone())
+                            .unwrap_or_else(|| gv_addr.clone());
+                        
+                        if let Err(e) = staking_manager.set_reward_wallet(gv_addr, reward_dest.clone()).await {
+                            warn!("⚠️ Failed to set reward wallet for {}: {}", gv_addr, e);
+                        } else {
+                            warn!("💰💰💰 Genesis validator {} rewards → {}", gv_addr, reward_dest);
+                        }
                     }
                 } else {
                     warn!("✓✓✓ Genesis validator {} already exists in staking", gv_addr);
