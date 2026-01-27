@@ -1,10 +1,11 @@
 # Sultan L1 - Technical Deep Dive
 ## Comprehensive Technical Specification for Investors & Partners
 
-**Version:** 3.6  
-**Date:** January 3, 2026  
+**Version:** 4.2  
+**Date:** January 27, 2026  
 **Classification:** Public Technical Reference  
-**Binary:** v0.1.0 (SHA256: `6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51`)
+**Binary:** v0.2.2 (Staking System Release)
+**Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 ---
 
@@ -35,7 +36,7 @@ Rust is a systems programming language known for:
 | Active Validators | Dynamic | Anyone can join with 10,000 SLTN stake |
 | Active Shards | 16 | Horizontal scaling for throughput |
 | Transaction Fees | Zero (0) | Users never pay gas fees |
-| Validator APY | 13.33% | Annual return for staking |
+| Validator APY | ~13.33% | Annual return for staking (variable) |
 
 ---
 
@@ -53,7 +54,7 @@ Rust is a systems programming language known for:
 10. [Governance](#10-governance)
 11. [Security Architecture](#11-security-architecture)
 12. [Production File Reference](#12-production-file-reference)
-13. [Sultan Wallet (PWA)](#13-sultan-wallet-pwa)
+13. [Sultan Wallet](#13-sultan-wallet)
 
 ---
 
@@ -77,10 +78,10 @@ The production codebase (`sultan-core/src/`) contains 22 Rust modules:
 
 ```
 sultan-core/src/
-├── main.rs               (3,395 lines) - Node binary, RPC (30+ endpoints), keygen CLI
+├── main.rs               (4,736 lines) - Node binary, RPC (30+ endpoints), keygen CLI
 ├── blockchain.rs         (374 lines)  - Block/TX structures (with memo field)
-├── consensus.rs          (1,078 lines) - Validator management (17 tests, Ed25519)
-├── p2p.rs                (1,025 lines) - libp2p networking (16 tests, Ed25519 sig verify)
+├── consensus.rs          (1,351 lines) - Validator management (26 tests, Ed25519, enterprise failover)
+├── p2p.rs                (1,200+ lines) - libp2p networking (16 tests, Ed25519 sig verify, persistent keys, validator discovery, height sync)
 ├── block_sync.rs         (1,174 lines) - Byzantine-tolerant sync (31 tests, voter verify)
 ├── storage.rs            (1,159 lines) - RocksDB + AES-256-GCM encryption (14 tests)
 ├── economics.rs          (100 lines)  - Inflation/APY model
@@ -98,7 +99,7 @@ sultan-core/src/
 └── [supporting modules]
 ```
 
-**Total: 22,050 lines of production Rust code, 294+ tests passing**
+**Total: 24,000+ lines of production Rust code, 303+ tests passing**
 
 ### 1.3 Key Design Decisions
 
@@ -256,6 +257,46 @@ voting_power = stake^0.9  // Slight sublinear scaling
 **What is a Mempool?**
 
 Short for "memory pool" - a waiting room for unconfirmed transactions. When you submit a transaction, it goes to the mempool. The next block proposer picks transactions from the mempool to include in their block.
+
+### 2.7 Enterprise Proposer Failover (v0.1.5)
+
+**The Problem:** What happens if the selected proposer goes offline?
+
+**The Solution:** Automatic failover to backup proposers based on stake weight.
+
+```
+NORMAL OPERATION:
+┌─────────────────────────────────────────────────────────────────┐
+│  Primary Proposer (NYC) produces blocks every 2 seconds         │
+└─────────────────────────────────────────────────────────────────┘
+
+FAILOVER SCENARIO:
+┌─────────────────────────────────────────────────────────────────┐
+│  Primary Proposer misses 5 consecutive blocks                   │
+│           ↓                                                      │
+│  Fallback #1 (highest remaining stake) takes over               │
+│           ↓ (if also offline)                                   │
+│  Fallback #2 (second highest stake) takes over                  │
+│           ↓ (if also offline)                                   │
+│  Fallback #3 (third highest stake) takes over                   │
+│                                                                  │
+│  Chain continues with NO DOWNTIME                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Enterprise Constants:**
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `FALLBACK_THRESHOLD_MISSED_BLOCKS` | 5 | Blocks before fallback kicks in |
+| `MAX_FALLBACK_POSITIONS` | 3 | Only top 3 validators can be fallbacks |
+| `MAX_MISSED_BLOCKS_BEFORE_SLASH` | 100 | Consecutive misses before slashing |
+| `MISSED_BLOCK_TRACKING_WINDOW` | 1000 | Memory cleanup for old records |
+
+**Height-Based Deduplication:**
+Each missed block is recorded exactly once per (height, validator) pair. This prevents double-counting and ensures fair slashing.
+
+*Why it matters for investors:* No single point of failure. If any validator (including the primary bootstrap) goes offline, the network automatically continues producing blocks. This is enterprise-grade reliability.
 
 ---
 
@@ -706,6 +747,53 @@ If 80% staked (400M):
 
 Rewards are distributed **every block** (every 2 seconds):
 
+**Reward Wallet System (v0.2.0)**
+
+Each validator can specify a `reward_wallet` where their APY accumulates:
+
+```rust
+// From staking.rs (v0.2.0)
+pub struct ValidatorStake {
+    pub address: String,
+    pub stake: u64,
+    pub delegations: HashMap<String, u64>,
+    pub accumulated_rewards: u64,
+    pub reward_wallet: Option<String>,  // NEW: Custom destination for rewards
+    // ...
+}
+```
+
+**Genesis Validator Behavior:**
+- Genesis validators (NYC, LON, AMS, SIN, SYD, TOR) auto-receive rewards to the genesis wallet
+- Genesis wallet: `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
+- Rewards accumulate every block, withdrawable anytime
+
+**Setting a Custom Reward Wallet (v0.2.0+):**
+
+Requires Ed25519 signature authentication to prevent unauthorized reward redirection:
+
+```bash
+# Generate signature over: set_reward_wallet:{validator}:{wallet}:{timestamp}
+# timestamp must be within 5 minutes of server time
+
+curl -X POST https://rpc.sltn.io/staking/set_reward_wallet \
+  -H "Content-Type: application/json" \
+  -d '{
+    "validator_address": "sultanval1...",
+    "reward_wallet": "sultan1...",
+    "signature": "hex_encoded_ed25519_sig",
+    "public_key": "hex_encoded_32byte_pubkey",
+    "timestamp": 1737208800
+  }'
+```
+
+**Withdrawing Rewards:**
+```bash
+curl -X POST https://rpc.sltn.io/staking/withdraw_rewards \
+  -d '{"validator_address": "sultanval1..."}'
+# Returns: {"withdrawn": 12345, "to_wallet": "sultan1..."} 
+```
+
 ```rust
 // From staking.rs
 const BLOCKS_PER_YEAR: u64 = 15_768_000; // (365 * 24 * 60 * 60) / 2
@@ -1036,6 +1124,7 @@ pub enum NetworkMessage {
         peer_id: String,
         pubkey: [u8; 32],     // Ed25519 public key
         signature: Vec<u8>,   // Ed25519 signature over address||stake||peer_id
+        current_height: u64,  // Current chain height for sync detection (v0.1.8+)
     },
     
     // Node requests: "Send me blocks 1000-2000"
@@ -1089,9 +1178,9 @@ if !verify_vote_signature(&pubkey, block_hash.as_bytes(), &signature) {
 }
 ```
 
-**Validator Pubkey Registry:**
+**Validator Pubkey Registry (Discovery Layer):**
 
-The P2P layer maintains a mapping of validator addresses to Ed25519 public keys, populated from verified `ValidatorAnnounce` messages:
+The P2P layer maintains a mapping of validator addresses to Ed25519 public keys for **signature verification only**. This registry is populated from verified `ValidatorAnnounce` messages but does NOT determine consensus membership:
 
 ```rust
 // Register known validator pubkeys for signature verification
@@ -1099,6 +1188,8 @@ pub fn register_validator_pubkey(&self, address: String, pubkey: [u8; 32]);
 pub fn get_validator_pubkey(&self, address: &str) -> Option<[u8; 32]>;
 pub fn known_validator_count(&self) -> usize;
 ```
+
+**Important (v0.1.6+):** P2P discovery is separate from consensus membership. Validators appearing in `ValidatorAnnounce` messages are registered for signature verification only. To participate in consensus and propose blocks, validators MUST register on-chain via `/staking/create_validator`.
 
 *Why it matters:* Every block proposal, vote, and validator announcement is cryptographically verified. Forged messages are detected and rejected before affecting consensus.
 
@@ -1118,6 +1209,91 @@ A framework for building secure channels. Used by WhatsApp, WireGuard, and Light
 "Yet Another Multiplexer" - allows multiple logical streams over a single TCP connection. Instead of opening 10 connections to a peer, open 1 connection with 10 streams. More efficient.
 
 *Why it matters:* Every connection is encrypted and authenticated. You can't eavesdrop on node traffic or inject fake messages.
+
+### 6.7 Persistent Node Identity (v0.1.4+)
+
+**The Problem:** If node keys are generated fresh on each restart, the PeerId changes. Other nodes' bootstrap peer configurations become stale.
+
+**The Solution:** Persist Ed25519 keypairs to disk.
+
+```rust
+// From p2p.rs - load_or_generate_keypair()
+const NODE_KEY_FILE: &str = "node_key.bin";
+
+pub fn load_or_generate_keypair(data_dir: &Path) -> Result<Keypair> {
+    let key_path = data_dir.join(NODE_KEY_FILE);
+    
+    if key_path.exists() {
+        // Load existing key
+        let bytes = std::fs::read(&key_path)?;
+        Ok(Keypair::ed25519_from_bytes(bytes)?)
+    } else {
+        // Generate and save new key with secure permissions (0600)
+        let keypair = Keypair::generate_ed25519();
+        std::fs::write(&key_path, keypair.to_bytes())?;
+        Ok(keypair)
+    }
+}
+```
+
+**Key Features:**
+- Keys stored in `<data-dir>/node_key.bin`
+- File permissions: 0600 (owner read/write only)
+- PeerId survives restarts
+- Enables stable bootstrap peer addressing
+
+### 6.8 P2P Validator Discovery (Enterprise-Grade v0.1.6+)
+
+**The Problem:** New nodes joining the network need to discover validator public keys for signature verification. However, P2P messages cannot be trusted to determine consensus membership.
+
+**The Solution:** Separate discovery from consensus. P2P handles pubkey exchange; blockchain handles validator set.
+
+**Discovery Message Types:**
+
+```rust
+// Request known validator pubkeys (on startup)
+ValidatorSetRequest { 
+    known_count: u32  // How many validators the requester knows
+},
+
+// Response with validator pubkeys for signature verification
+ValidatorSetResponse { 
+    validators: Vec<ValidatorInfo>  // Pubkeys for verification only
+},
+```
+
+**Discovery Flow (Enterprise-Grade):**
+
+```
+New Node Joins:
+1. Connect to bootstrap peer
+2. Send ValidatorSetRequest { known_count: 0 }
+3. Receive ValidatorSetResponse with validator pubkeys
+4. Register pubkeys for SIGNATURE VERIFICATION only
+5. ⛔ DO NOT add to consensus - read validator set from blockchain
+6. Sync blocks to get current chain state
+7. Derive validator set from on-chain staking records
+
+Periodic Re-announcement (every 60s):
+1. Each validator broadcasts ValidatorAnnounce
+2. All nodes update their pubkey registry (for signature verification)
+3. Consensus membership unchanged (determined by blockchain only)
+```
+
+**Key Architectural Principle:**
+> **P2P is for discovery. Blockchain is for consensus.**
+>
+> - P2P messages register pubkeys for signature verification
+> - Validators MUST register on-chain via `/staking/create_validator`
+> - All nodes derive validator set from blockchain state (identical everywhere)
+> - Prevents divergent validator sets that cause consensus failures
+
+**Bootstrap Peer (Production):**
+```
+/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7
+```
+
+*Why it matters:* Validators automatically discover each other's pubkeys for message verification. Consensus membership is strictly controlled via on-chain registration, ensuring all nodes have an identical view of the validator set.
 
 ---
 
@@ -1483,6 +1659,11 @@ pub struct ValidatorStake {
     pub total_stake: u64,            // self + delegated
     pub commission_rate: f64,        // e.g., 0.10 = 10%
     pub rewards_accumulated: u64,    // Pending rewards
+    pub blocks_signed: u64,          // Blocks this validator signed
+    pub blocks_missed: u64,          // Blocks this validator missed
+    pub total_blocks_missed: u64,    // Lifetime missed blocks counter
+    pub uptime_percent: f64,         // Calculated uptime (signed / total)
+    pub voting_power_percent: f64,   // Share of total network stake
     pub jailed: bool,                // Currently penalized?
 }
 
@@ -1520,7 +1701,83 @@ Validator commission (10%): 1,333 × 0.10 = 133 SLTN
 You receive: 1,333 - 133 = 1,200 SLTN (12% effective APY)
 ```
 
-### 8.6 Slashing Conditions
+### 8.6 Validator Uptime Tracking (v0.2.2)
+
+**What is Uptime?**
+
+The percentage of blocks a validator has signed vs blocks they should have signed.
+
+**How it's calculated:**
+```
+uptime_percent = blocks_signed / (blocks_signed + blocks_missed) * 100
+```
+
+**Real-time Tracking:**
+
+Sultan tracks validator performance continuously:
+
+| Metric | Description |
+|--------|-------------|
+| `blocks_signed` | Number of blocks this validator has signed |
+| `blocks_missed` | Number of blocks this validator missed |
+| `total_blocks_missed` | Lifetime counter (never resets) |
+| `uptime_percent` | Calculated uptime as percentage |
+| `voting_power_percent` | Share of total network stake |
+
+**Why it matters:** Uptime directly affects validator reputation and future selection for block production. Validators with poor uptime may be slashed.
+
+**Query Validator Uptime:**
+```bash
+curl https://rpc.sltn.io/staking/validators | jq '[.[] | {
+  validator: .validator_address,
+  signed: .blocks_signed,
+  missed: .blocks_missed,
+  uptime: .uptime_percent
+}]'
+```
+
+**Example Output:**
+```json
+[
+  {
+    "validator": "sultan1valnyc...vnyc01",
+    "signed": 25000,
+    "missed": 50,
+    "uptime": 99.8
+  }
+]
+```
+
+### 8.7 Genesis Validator Management
+
+**What are Genesis Validators?**
+
+Validators that are pre-registered at blockchain launch. They form the initial validator set.
+
+**How Genesis Registration Works:**
+```bash
+# Pass all genesis validators via CLI flag
+./sultan-node \
+  --genesis-validators addr1,addr2,addr3,addr4,addr5,addr6 \
+  --validator \
+  --validator-address addr1
+```
+
+On startup, the node:
+1. Loads persisted staking state from RocksDB
+2. Checks each genesis validator
+3. Registers any missing validators with default stake (10,000 SLTN)
+
+**Staking State Recovery:**
+
+If staking state becomes corrupted, use `--reset-staking`:
+```bash
+./sultan-node --reset-staking --genesis-validators addr1,addr2,...
+```
+
+This deletes `staking:state` from RocksDB and rebuilds from genesis validators.
+
+### 8.8 Slashing Conditions
 
 **What is Slashing?**
 
@@ -2133,7 +2390,7 @@ Professional code review by specialized security firms. They look for:
 | `native_dex.rs` | 976 | Built-in AMM with Ed25519 signatures (13 tests) |
 | `bridge_integration.rs` | 1,987 | Cross-chain bridge with real SPV/ZK/gRPC/BOC proof verification, TokenFactory mint (39 tests) |
 | `bridge_fees.rs` | 1,009 | Zero-fee bridge with async oracle support (30 tests) |
-| `p2p.rs` | 1,025 | **P2P networking** (16 tests, GossipSub, Kademlia, DoS, Ed25519 sig verify) |
+| `p2p.rs` | 1,200+ | **P2P networking** (16 tests, GossipSub, Kademlia, DoS, Ed25519 sig verify, persistent node keys, validator discovery) |
 | `block_sync.rs` | 1,174 | **Byzantine-tolerant sync** (31 tests, voter verify, sig validation) |
 
 **Total: 22,050 lines, 294+ tests passing**
@@ -2202,11 +2459,22 @@ Base URL: `https://rpc.sltn.io`
 
 ---
 
-## 13. Sultan Wallet (PWA)
+## 13. Sultan Wallet
 
-### 13.1 Overview
+The Sultan Wallet is available in two formats: a **Progressive Web App (PWA)** for browser-based access and a **Chrome Browser Extension** for dApp integration. Both share the same security-first architecture with enterprise-grade cryptography.
 
-The Sultan Wallet is a **non-custodial Progressive Web App (PWA)** that allows users to interact with the Sultan blockchain directly from any browser. It is designed with security as the primary concern - private keys never leave the user's device.
+| Format | URL/Distribution | Primary Use Case |
+|--------|------------------|------------------|
+| **PWA** | [wallet.sltn.io](https://wallet.sltn.io) | Standalone wallet, mobile-friendly |
+| **Chrome Extension** | Chrome Web Store | dApp integration via `window.sultan` |
+
+---
+
+### 13.1 PWA Wallet
+
+#### 13.1.1 Overview
+
+The Sultan Wallet PWA is a **non-custodial Progressive Web App** that allows users to interact with the Sultan blockchain directly from any browser. It is designed with security as the primary concern - private keys never leave the user's device.
 
 **What is a PWA?**
 
@@ -2646,6 +2914,255 @@ npm run build        # Outputs to dist/
 - HTTPS (required for service worker)
 - `manifest.json` in public folder
 - Service worker for offline caching
+
+---
+
+### 13.2 Browser Extension
+
+#### 13.2.1 Overview
+
+The Sultan Wallet Browser Extension is a **Chrome extension (Manifest V3)** that enables seamless dApp integration with Sultan blockchain directly from the browser. It provides the same security-first architecture as the PWA while exposing a JavaScript API for decentralized applications.
+
+**Why a Browser Extension?**
+
+| Feature | PWA | Extension |
+|---------|-----|-----------|
+| **dApp Integration** | ❌ No | ✅ `window.sultan` API |
+| **Automatic Injection** | ❌ No | ✅ Content script |
+| **Cross-tab State** | ❌ Limited | ✅ Service worker |
+| **Transaction Approval** | ❌ Manual | ✅ Popup dialogs |
+| **Chrome Web Store** | ❌ N/A | ✅ Discoverable |
+
+### 14.2 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    BROWSER EXTENSION ARCHITECTURE               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────────────┐     ┌─────────────────┐                    │
+│  │   dApp Website  │     │   Extension     │                    │
+│  │                 │     │    Popup UI     │                    │
+│  │  window.sultan  │     │  (React/Vite)   │                    │
+│  └────────┬────────┘     └────────┬────────┘                    │
+│           │                       │                              │
+│           ▼                       ▼                              │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                   CONTENT SCRIPT                            ││
+│  │    • Injects inpage-provider.js                             ││
+│  │    • Rate limiting (100/min)                                ││
+│  │    • Message validation & sender verification               ││
+│  └──────────────────────────┬──────────────────────────────────┘│
+│                              │ chrome.runtime.sendMessage        │
+│                              ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                   SERVICE WORKER (background.js)            ││
+│  │    • Wallet state management                                ││
+│  │    • Key derivation (PBKDF2 600K)                          ││
+│  │    • Ed25519 signing                                        ││
+│  │    • Rate limiting (60/min per origin)                      ││
+│  │    • Audit logging (16 event types)                         ││
+│  │    • Phishing detection                                     ││
+│  └──────────────────────────┬──────────────────────────────────┘│
+│                              │ HTTPS                             │
+│                              ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                    RPC ENDPOINTS                            ││
+│  │    Primary: https://rpc.sltn.io                             ││
+│  │    Fallback: https://api.sltn.io                            ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 14.3 Security Model
+
+**Enterprise-Grade Security Features:**
+
+| Layer | Feature | Implementation |
+|-------|---------|----------------|
+| **Manifest** | Content Security Policy | `script-src 'self'; object-src 'none'; frame-ancestors 'none'` |
+| **Manifest** | External Connectable | `{"matches": []}` - No external extensions allowed |
+| **Manifest** | Minimum Chrome Version | `102` (Manifest V3 stable) |
+| **Background** | Rate Limiting | 60 requests/minute per origin |
+| **Background** | Audit Logging | 16 security event types logged to chrome.storage.local |
+| **Background** | Nonce Tracking | Prevents replay attacks |
+| **Background** | Phishing Detection | Pattern matching + homograph attack detection |
+| **Content Script** | Rate Limiting | 100 messages/minute |
+| **Content Script** | Sender Verification | Validates chrome.runtime.id |
+| **Content Script** | Message Validation | Type checking on all fields |
+| **Inpage Provider** | Object.freeze | Provider immutable after creation |
+| **Inpage Provider** | defineProperty | Non-writable, non-configurable window.sultan |
+| **Inpage Provider** | Listener Limits | MAX_LISTENERS_PER_EVENT = 100 |
+| **Crypto** | Key Derivation | PBKDF2 600,000 iterations |
+| **Crypto** | Encryption | AES-256-GCM |
+| **Crypto** | Memory Protection | SecureString XOR encryption, secureWipe on key material |
+
+### 14.4 Phishing Protection
+
+The extension includes multi-layer phishing detection:
+
+```javascript
+// Phishing Detection Patterns
+const PHISHING_PATTERNS = [
+  /free.*sltn/i,          // Free SLTN scams
+  /claim.*reward/i,        // Fake rewards
+  /wallet.*verify/i,       // Wallet verification scams
+  /urgent.*action/i,       // Urgency tactics
+  /connect.*now/i,         // Pressure tactics
+  /sultan.*giveaway/i,     // Fake giveaways
+  /airdrop.*claim/i,       // Airdrop scams
+  /double.*crypto/i,       // Doubling scams
+];
+
+// Homograph Attack Detection
+function containsHomographAttack(url) {
+  const homoglyphs = { 'а': 'a', 'е': 'e', 'о': 'o', ... };
+  // Detects Cyrillic/Greek lookalikes in URLs
+}
+
+// Whitelist for trusted domains
+const WHITELIST_DOMAINS = [
+  'sltn.io',
+  'sultan.io',
+  'localhost',
+];
+```
+
+### 14.5 dApp Integration API
+
+**Injected Provider (`window.sultan`):**
+
+```typescript
+interface SultanProvider {
+  // Connect to wallet
+  connect(): Promise<{ address: string }>;
+  
+  // Get connected accounts
+  getAccounts(): Promise<string[]>;
+  
+  // Get balance
+  getBalance(address: string): Promise<{ balance: string }>;
+  
+  // Sign and send transaction
+  signAndSendTransaction(tx: {
+    to: string;
+    amount: string;
+    memo?: string;
+  }): Promise<{ txHash: string }>;
+  
+  // Event listeners
+  on(event: 'connect' | 'disconnect' | 'accountsChanged', 
+     callback: Function): void;
+  removeListener(event: string, callback: Function): void;
+  
+  // Provider info
+  isConnected(): boolean;
+  chainId: string;  // 'sultan-mainnet-1'
+}
+
+// Usage in dApp
+if (window.sultan) {
+  const { address } = await window.sultan.connect();
+  console.log('Connected:', address);
+}
+```
+
+### 14.6 Audit Logging
+
+All security-relevant events are logged with timestamps:
+
+| Event Type | Description |
+|------------|-------------|
+| `wallet_unlock` | Wallet unlocked with PIN |
+| `wallet_lock` | Wallet locked (manual or timeout) |
+| `connect_approved` | dApp connection approved |
+| `connect_rejected` | dApp connection rejected |
+| `tx_signed` | Transaction signed |
+| `tx_rejected` | Transaction rejected by user |
+| `rate_limited` | Request rate limited |
+| `phishing_blocked` | Phishing site blocked |
+| `invalid_message` | Invalid message format |
+| `unknown_origin` | Request from unknown origin |
+| `nonce_duplicate` | Duplicate nonce detected |
+| `signature_failed` | Signature operation failed |
+
+**Log Format:**
+```json
+{
+  "timestamp": "2026-01-03T12:00:00.000Z",
+  "event": "tx_signed",
+  "origin": "https://dapp.example.com",
+  "details": { "amount": "1000000000", "to": "sultan1..." }
+}
+```
+
+### 14.7 Rate Limiting
+
+**Multi-layer protection against DoS:**
+
+| Layer | Limit | Window | Action on Exceed |
+|-------|-------|--------|------------------|
+| Background (per origin) | 60 requests | 1 minute | Request rejected, logged |
+| Content Script | 100 messages | 1 minute | Message dropped |
+| RPC Calls | Inherited | - | Fallback to secondary RPC |
+
+### 14.8 File Structure
+
+```
+wallet-extension/
+├── extension/
+│   ├── background.js      # Service worker (Manifest V3)
+│   ├── content-script.js  # Content script bridge
+│   └── inpage-provider.js # Injected window.sultan
+├── public/
+│   ├── manifest.json      # Extension manifest
+│   └── icons/             # Extension icons
+├── src/
+│   ├── screens/           # Popup UI screens
+│   ├── core/              # wallet.ts, security.ts
+│   └── components/        # React components
+├── dist-extension/        # Production build
+└── sultan-wallet-extension.zip  # Distributable (310KB)
+```
+
+### 14.9 Build & Distribution
+
+**Build Commands:**
+```bash
+cd wallet-extension
+npm install
+npm run build:extension   # Outputs to dist-extension/
+npm run package:extension # Creates .zip for Chrome Web Store
+```
+
+**Chrome Web Store Submission:**
+1. Build extension: `npm run build:extension`
+2. Package: `npm run package:extension`
+3. Upload `sultan-wallet-extension.zip` to Chrome Developer Dashboard
+4. Complete store listing with screenshots and description
+
+**Developer Loading:**
+1. Navigate to `chrome://extensions`
+2. Enable "Developer mode"
+3. Click "Load unpacked"
+4. Select `dist-extension/` folder
+
+### 14.10 Security Checklist
+
+| Requirement | Status |
+|-------------|--------|
+| CSP with frame-ancestors: 'none' | ✅ |
+| externally_connectable: [] | ✅ |
+| No all_frames in content scripts | ✅ |
+| Rate limiting on all layers | ✅ |
+| HTTPS RPC endpoints only | ✅ |
+| Audit logging enabled | ✅ |
+| Phishing detection active | ✅ |
+| PBKDF2 ≥ 600,000 iterations | ✅ |
+| Object.freeze on provider | ✅ |
+| Production logging disabled | ✅ |
+| Nonce replay protection | ✅ |
+| Message validation | ✅ |
 
 ---
 

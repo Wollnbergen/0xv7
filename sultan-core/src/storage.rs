@@ -538,6 +538,14 @@ impl PersistentStorage {
             Ok(None)
         }
     }
+
+    /// Delete staking state from persistent storage
+    /// Used when resetting staking state (--reset-staking flag)
+    pub fn delete_staking_state(&self) -> Result<()> {
+        self.db.delete(b"staking:state")?;
+        info!("🗑️ Staking state deleted from storage");
+        Ok(())
+    }
     
     /// Save slashing history (append-only log for audit)
     pub fn append_slashing_event(&self, event: &crate::staking::SlashingEvent) -> Result<()> {
@@ -851,10 +859,12 @@ mod tests {
             rewards_accumulated: 100_000_000,
             blocks_signed: 1000,
             blocks_missed: 5,
+            total_blocks_missed: 10,
             jailed: false,
             jailed_until: 0,
             created_at: 1700000000,
             last_reward_height: 5000,
+            reward_wallet: None,
         });
         
         let snapshot = StakingStateSnapshot {

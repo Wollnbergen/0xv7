@@ -306,15 +306,16 @@
     </footer>
 
     <script>
-        // Sultan L1 Production Validators - Christmas Day 2025 Launch
+        // Sultan L1 Production Validators - January 2026
         // Try multiple endpoints for redundancy
         const RPC_ENDPOINTS = [
-            'http://134.122.96.36:8545',   // London
-            'http://143.198.205.21:8545',  // Singapore  
-            'http://142.93.238.33:8545',   // Amsterdam
-            'http://46.101.122.13:8545',   // Frankfurt
-            'http://24.144.94.23:8545',    // San Francisco
-            'http://206.189.224.142:8545'  // New York
+            'https://rpc.sltn.io',          // Primary endpoint (NYC)
+            'http://206.189.224.142:8545',  // NYC direct
+            'http://24.144.94.23:8545',     // San Francisco
+            'http://46.101.122.13:8545',    // London
+            'http://142.93.238.33:8545',    // Frankfurt
+            'http://143.198.205.21:8545',   // Amsterdam
+            'http://134.122.96.36:8545'     // Singapore
         ];
         
         let currentEndpointIndex = 0;

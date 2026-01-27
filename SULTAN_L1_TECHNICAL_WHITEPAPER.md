@@ -2,11 +2,12 @@
 
 ## Technical Whitepaper
 
-**Version:** 3.6  
-**Date:** January 3, 2026  
+**Version:** 4.2  
+**Date:** January 27, 2026  
 **Status:** Production Mainnet Live  
 **Network:** Globally Distributed, Fully Decentralized
-**Binary:** v0.1.0 (SHA256: `6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51`)
+**Binary:** v0.2.2 (Staking System Release)
+**Genesis Wallet:** `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 ---
 
@@ -27,15 +28,16 @@ Sultan L1 is a **native Rust Layer 1 blockchain** purpose-built for high through
 | **Network Protocol** | libp2p |
 | **Cryptography** | Ed25519 + SHA3-256 |
 | **Gas Fees** | $0 (zero-fee transactions) |
-| **Staking APY** | 13.33% |
+| **Staking APY** | ~13.33% |
 
-| **Binary** | 15MB (stripped, LTO-optimized) |
+| **Binary** | 17.6MB (stripped, LTO-optimized) |
 | **DEX Swap Fee** | 0.3% total (0.2% to LP, 0.1% to protocol treasury) |
 
 **RPC Endpoint:** `https://rpc.sltn.io`  
 **Wallet PWA:** `https://wallet.sltn.io`  
-**P2P Bootstrap:** See [Validator Guide](VALIDATOR_GUIDE.md) for bootstrap peers  
-**Binary:** 14MB (stripped, LTO-optimized)
+**P2P Bootstrap:** `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7`  
+**Telegram:** [t.me/Sultan_L1](https://t.me/Sultan_L1)  
+**Binary:** 16MB (stripped, LTO-optimized)
 
 ---
 
@@ -80,7 +82,7 @@ We made a deliberate architectural decision to build Sultan as a **pure Rust imp
 - **50-105µs block creation** (vs 100-500ms for typical frameworks)
 - **Memory safety** without garbage collection pauses
 - **Deterministic performance** under high load
-- **Smaller binary size** (14MB production binary, stripped with LTO)
+- **Smaller binary size** (16MB production binary, stripped with LTO)
 - **Lower validator requirements** (1GB RAM minimum)
 
 ### 1.3 Core Innovations
@@ -304,9 +306,44 @@ Sultan tolerates up to **33% malicious validators** while maintaining:
 | Offense | Penalty | Detection |
 |---------|---------|-----------|
 | Double-signing | 100% stake | Cryptographic proof |
-| Extended downtime (>1%) | 5% stake | Missed proposals |
+| Extended downtime (>100 blocks) | Slashed | Consecutive missed proposals |
 | Invalid block production | 20% stake | State verification failure |
 | Censorship (proven) | 10% stake | Transaction inclusion analysis |
+
+### 3.6 Enterprise Proposer Failover (v0.1.5)
+
+Sultan implements an enterprise-grade failover system ensuring no single validator failure can halt the chain:
+
+**Key Constants:**
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `FALLBACK_THRESHOLD_MISSED_BLOCKS` | 5 | Blocks missed before fallback kicks in |
+| `MAX_FALLBACK_POSITIONS` | 3 | Only top 3 by stake can be fallbacks |
+| `MAX_MISSED_BLOCKS_BEFORE_SLASH` | 100 | Consecutive misses before slashing |
+| `MISSED_BLOCK_TRACKING_WINDOW` | 1000 | Memory cleanup window for old records |
+
+**Failover Algorithm:**
+```
+1. Primary proposer selected by stake-weighted height-based algorithm
+2. If primary misses 5 consecutive blocks:
+   - Fallback #1 (highest remaining stake) attempts to produce
+3. If Fallback #1 also offline:
+   - Fallback #2 (second highest stake) attempts to produce
+4. If Fallback #2 also offline:
+   - Fallback #3 (third highest stake) attempts to produce
+5. Chain continues producing blocks with no downtime
+```
+
+**Height-Based Deduplication:**
+Missed blocks are tracked with height-based deduplication to prevent double-counting:
+- Each (height, validator) pair is recorded only once
+- Automatic cleanup of records older than 1000 blocks
+- Prevents memory leaks in long-running nodes
+
+**Recovery Behavior:**
+- When offline validator returns, they resume normal proposer rotation
+- Missed block counter resets after successful block production
+- No permanent penalty for temporary network partitions
 
 ---
 
@@ -527,10 +564,32 @@ Sultan uses **libp2p**, the battle-tested peer-to-peer networking stack used by 
 New validators connect to the network via bootstrap nodes:
 
 ```
-/dns4/rpc.sltn.io/tcp/26656/p2p/<peer-id>
+/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7
 ```
 
 The bootstrap node maintains persistent connections to all active validators, ensuring network connectivity even during churn.
+
+**Persistent Node Identity (v0.1.4+):**
+- Node keys are stored in `<data-dir>/node_key.bin`
+- PeerId survives node restarts
+- Keys are generated on first run with 0600 permissions
+- Enables stable peer addressing and network topology
+
+**P2P Validator Discovery Protocol (Enterprise-Grade v0.1.6+):**
+
+Sultan implements strict separation between P2P discovery and consensus membership:
+
+| Message | Purpose | Affects Consensus? |
+|---------|---------|-------------------|
+| `ValidatorAnnounce` | Share pubkey + height for sync | ❌ Discovery only |
+| `ValidatorSetRequest` | Request known validators on startup | ❌ Discovery only |
+| `ValidatorSetResponse` | Share known validator pubkeys | ❌ Discovery only |
+
+**Key Principle:** P2P is for discovery. Blockchain is for consensus.
+- P2P messages register public keys for **signature verification only**
+- Validators MUST register on-chain via `/staking/create_validator` to join consensus
+- All nodes derive validator set from **blockchain state** (identical everywhere)
+- Prevents divergent validator sets that cause consensus failures
 
 ### 5.5 P2P Security Layer (Enterprise-Grade)
 
@@ -558,17 +617,16 @@ All network messages are cryptographically signed and verified:
 
 **Validator Registry:**
 
-The P2P layer maintains a registry of validator public keys, populated from verified announcements. This enables:
-- Signature verification for proposals and votes
-- Minimum stake enforcement (10 trillion SULTAN)
-- Known validator tracking for consensus integration
+The P2P layer maintains a registry of validator public keys for **signature verification only**. This registry is populated from verified `ValidatorAnnounce` messages but does NOT determine consensus membership:
 
 ```rust
-// Validator pubkey management
+// Validator pubkey management (for signature verification)
 pub fn register_validator_pubkey(&self, address: String, pubkey: [u8; 32]);
 pub fn get_validator_pubkey(&self, address: &str) -> Option<[u8; 32]>;
 pub fn known_validator_count(&self) -> usize;
 ```
+
+**Important:** Pubkey registration enables signature verification for incoming messages. To participate in consensus, validators MUST register on-chain via `/staking/create_validator`.
 
 ### 5.6 Block Synchronization
 
@@ -595,6 +653,37 @@ pub enum VoteRejection {
     Expired,            // Block too old
     InvalidSignature,   // Ed25519 verification failed
 }
+```
+
+### 5.7 Height-Based Validator Sync (v0.1.8+)
+
+Sultan validators broadcast their current chain height in `ValidatorAnnounce` messages:
+
+```rust
+pub struct ValidatorAnnounce {
+    pub address: String,
+    pub stake: u64,
+    pub peer_id: String,
+    pub pubkey: [u8; 32],
+    pub signature: Vec<u8>,
+    pub current_height: u64,  // Current chain height
+}
+```
+
+**Benefits:**
+- Validators detect when peers are ahead and request sync automatically
+- Eliminates desync scenarios where validators at different heights couldn't detect divergence
+- Enables rapid catch-up after network partitions or restarts
+- All validators maintain synchronized chain state
+
+**Sync Flow:**
+```
+1. Validator receives ValidatorAnnounce with current_height=5000
+2. Local chain is at height 4900
+3. Validator detects it's behind by 100 blocks
+4. Validator requests SyncRequest { from_height: 4900, to_height: 5000 }
+5. Peer responds with missing blocks
+6. Validator applies blocks and catches up
 ```
 
 ---
@@ -994,12 +1083,107 @@ Validators should monitor:
 |-----------|-------|
 | Base APY | 13.33% (at 30% staking) |
 | Block rewards | Proportional to stake |
+| Reward frequency | Every block (~43,200/day) |
 | Priority fees | 60% to proposer |
 | Slashing protection | Uptime monitoring |
+| Blocks signed | Real-time tracking |
+| Blocks missed | Real-time tracking |
+| Uptime percent | Calculated from signed/total |
+
+**Reward Wallet System (v0.2.0)**
+
+Validators can specify a custom wallet to receive their APY rewards. **Changing the reward wallet requires Ed25519 signature authentication** (prevents unauthorized reward redirection attacks).
+
+```bash
+# Set reward wallet (requires signature)
+curl -X POST https://rpc.sltn.io/staking/set_reward_wallet \
+  -H "Content-Type: application/json" \
+  -d '{
+    "validator_address": "sultanval1...",
+    "reward_wallet": "sultan1...",
+    "signature": "hex_encoded_ed25519_sig",
+    "public_key": "hex_encoded_32byte_pubkey",
+    "timestamp": 1737208800
+  }'
+
+# Signature message format: set_reward_wallet:{validator}:{wallet}:{timestamp}
+# Timestamp must be within 5 minutes (replay protection)
+
+# Check current reward wallet (no auth required)
+curl https://rpc.sltn.io/staking/reward_wallet/sultanval1...
+
+# Withdraw accumulated rewards
+curl -X POST https://rpc.sltn.io/staking/withdraw_rewards \
+  -d '{"validator_address": "sultanval1..."}'
+```
+
+Genesis validators automatically receive rewards to the genesis wallet:
+`sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g`
 
 **Annual Earnings Example (10,000 SLTN stake):**
 - At $0.20/SLTN: 1,333 SLTN = $267/year (covers ~$100 server + profit)
 - At $1.00/SLTN: 1,333 SLTN = $1,333/year
+
+### 10.5 Validator Uptime Tracking (v0.2.2)
+
+Sultan tracks validator performance in real-time with comprehensive metrics:
+
+**Tracked Metrics:**
+
+| Metric | Description | API Field |
+|--------|-------------|-----------|
+| Blocks Signed | Blocks this validator has signed | `blocks_signed` |
+| Blocks Missed | Blocks this validator should have signed but didn't | `blocks_missed` |
+| Total Blocks Missed | Lifetime counter of all missed blocks | `total_blocks_missed` |
+| Uptime Percent | Calculated as `signed / (signed + missed) * 100` | `uptime_percent` |
+| Voting Power | Share of total network stake | `voting_power_percent` |
+
+**Check Validator Status:**
+```bash
+# Get all validators with uptime stats
+curl https://rpc.sltn.io/staking/validators | jq '[.[] | {
+  address: .validator_address,
+  signed: .blocks_signed,
+  missed: .blocks_missed,
+  uptime: .uptime_percent,
+  voting_power: .voting_power_percent
+}]'
+```
+
+**Genesis Validator Registration:**
+
+Genesis validators are automatically registered at node startup via the `--genesis-validators` CLI flag:
+
+```bash
+./sultan-node \
+  --genesis-validators addr1,addr2,addr3,addr4,addr5,addr6 \
+  --validator \
+  --validator-address addr1
+```
+
+**Staking State Recovery:**
+
+If staking state becomes corrupted, use the `--reset-staking` flag to rebuild from genesis validators:
+
+```bash
+# One-time reset (remove flag after restart)
+./sultan-node --reset-staking --genesis-validators addr1,addr2,...
+```
+
+This deletes the `staking:state` key from RocksDB and re-registers all genesis validators fresh.
+
+### 10.6 Production Validator Set
+
+Sultan mainnet operates with 6 globally distributed validators:
+
+| Validator | Region | Address | Voting Power |
+|-----------|--------|---------|--------------|
+| NYC | USA East | `sultan1valnyc...vnyc01` | 16.67% |
+| SFO | USA West | `sultan1valsfo...vsfo02` | 16.67% |
+| FRA | EU Central | `sultan1valfra...vfra03` | 16.67% |
+| AMS | EU West | `sultan1valams...vams04` | 16.67% |
+| SGP | Asia Pacific | `sultan1valsgp...vsgp05` | 16.67% |
+| LON | EU West | `sultan1vallon...vlon06` | 16.67% |
 
 ---
 
@@ -1038,10 +1222,24 @@ Validators should monitor:
 Official non-custodial wallet with enterprise-grade security:
 
 - **Encryption:** AES-256-GCM
-- **Key Derivation:** PBKDF2 (100,000 iterations)
+- **Key Derivation:** PBKDF2 (600,000 iterations)
 - **Mnemonic:** BIP39 24-word seed phrases
 - **Signatures:** Ed25519
 - **Features:** Send, receive, stake, governance
+
+**Available Formats:**
+
+| Format | URL/Status | Use Case |
+|--------|------------|----------|
+| **PWA** | [wallet.sltn.io](https://wallet.sltn.io) | Browser-based, installable |
+| **Chrome Extension** | Chrome Web Store | dApp integration via `window.sultan` |
+
+**Browser Extension Security:**
+- Manifest V3 with strict CSP
+- Rate limiting (60 req/min per origin)
+- Phishing detection with homograph attack protection
+- Audit logging for all security events
+- Object.freeze on injected provider
 
 **Repository:** `github.com/Wollnbergen/SLTN`
 
@@ -1086,6 +1284,7 @@ Official non-custodial wallet with enterprise-grade security:
 - [ ] Ethereum bridge (Light Client)
 - [ ] DEX deployment
 - [ ] Mobile wallet (iOS/Android)
+- [ ] WalletConnect v2 integration (mobile dApp connectivity)
 - [ ] Security audit (Trail of Bits)
 
 ### Q3 2026 📋 Planned

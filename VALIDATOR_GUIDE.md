@@ -66,12 +66,12 @@ Any Linux VPS works. Recommended providers:
 SSH into your server and run:
 
 ```bash
-# Download the latest binary (v0.1.0)
-wget https://github.com/SultanL1/sultan-node/releases/download/v0.1.0/sultan-node-linux-x86_64
+# Download the latest binary (v0.1.4)
+wget https://github.com/SultanL1/sultan-node/releases/download/v0.1.4/sultan-node-linux-x86_64
 chmod +x sultan-node-linux-x86_64
 
 # Verify checksum
-echo "6440e83700a80b635b5938e945164539257490c3c8e57fcdcfefdab05a92de51  sultan-node-linux-x86_64" | sha256sum -c
+echo "bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff  sultan-node-linux-x86_64" | sha256sum -c
 
 # Rename for convenience
 mv sultan-node-linux-x86_64 sultan-node
@@ -113,13 +113,14 @@ sudo firewall-cmd --reload
   --validator-secret YOUR_SECRET_KEY_HEX \
   --rpc-port 26657 \
   --p2p-port 26656 \
-  --bootstrap-peers /ip4/206.189.224.142/tcp/26656
+  --bootstrap-peers /ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7
 ```
 
 **Important flags:**
 - `--validator`: Enable validator mode
 - `--validator-secret`: Your Ed25519 secret key (64 hex chars)
-- `--bootstrap-peers`: NYC bootstrap node IP
+- `--bootstrap-peers`: Bootstrap node multiaddr (NYC) with persistent peer ID
+- `--data-dir`: Node keys are stored in `<data-dir>/node_key.bin` (generated on first run)
 
 ### Step 6: Verify Connection
 
@@ -159,7 +160,7 @@ ExecStart=/root/sultan-node \
   --enable-sharding \
   --shard-count 16 \
   --enable-p2p \
-  --bootstrap-peers /ip4/206.189.224.142/tcp/26656 \
+  --bootstrap-peers /ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7 \
   --rpc-addr 0.0.0.0:26657 \
   --p2p-addr /ip4/0.0.0.0/tcp/26656 \
   --data-dir /root/sultan-data
@@ -198,6 +199,24 @@ sudo journalctl -u sultan -f  # Live logs
 | `--shard-count` | 8 | Initial shard count (mainnet: 16) |
 | `--enable-p2p` | false | Enable P2P networking |
 | `--bootstrap-peers` | - | Bootstrap peer multiaddr |
+| `--genesis-validators` | - | Comma-separated list of genesis validator addresses |
+| `--reset-staking` | false | Reset staking state on startup (one-time recovery) |
+
+## Validator Uptime Tracking (v0.2.2)
+
+Sultan tracks validator performance in real-time:
+
+| Metric | Description |
+|--------|-------------|
+| `blocks_signed` | Number of blocks you've signed |
+| `blocks_missed` | Number of blocks you missed |
+| `uptime_percent` | Your uptime percentage |
+| `voting_power_percent` | Your share of network stake |
+
+**Check your validator status:**
+```bash
+curl https://rpc.sltn.io/staking/validators | jq '.[] | select(.validator_address | contains("YOUR_ADDRESS"))'
+```
 
 ## Validator Earnings
 
@@ -256,8 +275,9 @@ sudo lsof -i :26657
 
 ### "No peers found"
 - Verify internet connectivity: `ping 206.189.224.142`
-- Check bootstrap peer is correct: `/ip4/206.189.224.142/tcp/26656`
+- Check bootstrap peer is correct: `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7`
 - Ensure port 26656 is not blocked by firewall
+- Your node key is stored in `<data-dir>/node_key.bin` (PeerId persists across restarts)
 
 ### Node crashes on startup
 ```bash
@@ -284,7 +304,15 @@ A: Contact the Sultan team for genesis allocation or acquire through the network
 A: Yes, each validator needs a unique name and separate server.
 
 **Q: What happens if my validator goes offline?**  
-A: You stop earning rewards while offline. Currently no slashing penalties.
+A: The network has enterprise-grade failover - other validators take over block production automatically. When you come back online:
+- Your validator receives `ValidatorAnnounce` messages with current heights from peers
+- It automatically detects it's behind and requests missing blocks
+- Rapid sync catches you up to the network within seconds
+- However, note:
+  - After **5 consecutive missed blocks**, fallback proposers take over
+  - After **100 consecutive missed blocks**, your stake may be slashed
+  - You stop earning rewards while offline
+  - Aim for 99%+ uptime to maximize rewards and avoid penalties
 
 **Q: How do I increase my stake?**  
 A: Use the Sultan Wallet to delegate additional stake to your validator.
@@ -311,7 +339,8 @@ A: No, APY is variable based on network conditions. 13.33% is an estimate.
 - **Website**: [sltn.io](https://sltn.io)
 - **RPC Endpoint**: `https://rpc.sltn.io`
 - **Explorer**: [x.sltn.io](https://x.sltn.io)
+- **Telegram**: [t.me/Sultan_L1](https://t.me/Sultan_L1)
 
 ---
 
-*Sultan Network - High-performance Layer 1 blockchain with 64K TPS and zero fees*
+*Sultan Network v0.1.8 - High-performance Layer 1 blockchain with 64K TPS, zero fees, enterprise failover, and automatic height sync*

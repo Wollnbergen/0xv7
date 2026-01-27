@@ -440,11 +440,11 @@ chmod +x sultan-node
 ./sultan-node \
   --validator \
   --validator-address YOUR_VALIDATOR_NAME \
-  --validator-stake 10000 \
+  --validator-stake 10000000000000 \
   --enable-sharding \
-  --shard-count 8 \
+  --shard-count 16 \
   --block-time 2 \
-  --rpc-addr 0.0.0.0:8080 \
+  --rpc-addr 0.0.0.0:26657 \
   --p2p-addr /ip4/0.0.0.0/tcp/26656 \
   --enable-p2p \
   --bootstrap-peers /ip4/206.189.224.142/tcp/26656</pre>
@@ -485,7 +485,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/root/sultan-node --validator --validator-address YOUR_VALIDATOR_NAME --validator-stake 10000 --enable-sharding --shard-count 8 --block-time 2 --rpc-addr 0.0.0.0:8080 --p2p-addr /ip4/0.0.0.0/tcp/26656 --enable-p2p --bootstrap-peers /ip4/206.189.224.142/tcp/26656
+ExecStart=/root/sultan-node --validator --validator-address YOUR_VALIDATOR_NAME --validator-stake 10000000000000 --enable-sharding --shard-count 16 --block-time 2 --rpc-addr 0.0.0.0:26657 --p2p-addr /ip4/0.0.0.0/tcp/26656 --enable-p2p --bootstrap-peers /ip4/206.189.224.142/tcp/26656
 Restart=always
 RestartSec=3
 
@@ -511,7 +511,7 @@ systemctl status sultan</pre>
             <p>Check that your validator is running and connected:</p>
             
 <pre># Check local status
-curl localhost:8080/status
+curl localhost:26657/status
 
 # You should see:
 # {"height":12345,"validator_count":10,...}</pre>
@@ -561,7 +561,7 @@ curl localhost:8080/status
             <p><strong style="color: var(--primary);">Can't connect to bootstrap peer?</strong></p>
             <p>Make sure port 26656 is open in your firewall:</p>
 <pre>ufw allow 26656/tcp
-ufw allow 8080/tcp</pre>
+ufw allow 26657/tcp</pre>
 
             <p><strong style="color: var(--primary);">Validator not showing in network?</strong></p>
             <p>Check the logs for errors:</p>

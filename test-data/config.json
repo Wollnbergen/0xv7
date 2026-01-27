@@ -1,0 +1,19 @@
+{
+  "chain_id": "sultan-mainnet-1",
+  "gas_price": 0,
+  "block_time": 2,
+  "max_block_size": 1000,
+  "min_stake": 10000,
+  "inflation_rate": 0.04,
+  "features": {
+    "sharding_enabled": true,
+    "governance_enabled": true,
+    "bridges_enabled": true,
+    "token_factory_enabled": true,
+    "native_dex_enabled": true,
+    "wasm_contracts_enabled": false,
+    "evm_contracts_enabled": false,
+    "quantum_signatures_enabled": false,
+    "ibc_enabled": false
+  }
+}

@@ -53,18 +53,15 @@ fn validate_address(address: &str) -> Result<()> {
               MIN_ADDRESS_LENGTH, MAX_ADDRESS_LENGTH);
     }
     
-    // Check that remaining characters are valid bech32 (alphanumeric, lowercase, no 1,b,i,o)
+    // Check that remaining characters are valid (alphanumeric, lowercase)
+    // Note: Our validator addresses use a simple format, not strict bech32
     let suffix = &address[SULTAN_ADDRESS_PREFIX.len()..];
     for c in suffix.chars() {
         if !c.is_ascii_alphanumeric() {
             bail!("Invalid address: contains non-alphanumeric character");
         }
         if c.is_uppercase() {
-            bail!("Invalid address: bech32 addresses must be lowercase");
-        }
-        // bech32 doesn't use 1, b, i, o in the data part
-        if matches!(c, '1' | 'b' | 'i' | 'o') {
-            bail!("Invalid address: contains invalid bech32 character '{}'", c);
+            bail!("Invalid address: addresses must be lowercase");
         }
     }
     
@@ -86,13 +83,22 @@ pub struct UnbondingEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatorStake {
     pub validator_address: String,
+    /// Optional wallet address where rewards should be sent when withdrawn.
+    /// For genesis validators without wallets, this can be set later to receive accumulated APY.
+    /// If None, rewards accumulate but cannot be withdrawn until a reward_wallet is set.
+    #[serde(default)]
+    pub reward_wallet: Option<String>,
     pub self_stake: u64,
     pub delegated_stake: u64,
     pub total_stake: u64,
     pub commission_rate: f64, // 0.0 to 1.0 (0% to 100%)
     pub rewards_accumulated: u64,
     pub blocks_signed: u64,
+    /// Consecutive missed blocks (resets on successful sign, used for slashing)
     pub blocks_missed: u64,
+    /// Total historical missed blocks (never resets, used for uptime calculation)
+    #[serde(default)]
+    pub total_blocks_missed: u64,
     pub jailed: bool,
     pub jailed_until: u64,
     pub created_at: u64,
@@ -201,6 +207,7 @@ impl StakingManager {
 
         let validator = ValidatorStake {
             validator_address: validator_address.clone(),
+            reward_wallet: None, // Can be set later via set_reward_wallet RPC
             self_stake: initial_stake,
             delegated_stake: 0,
             total_stake: initial_stake,
@@ -208,6 +215,7 @@ impl StakingManager {
             rewards_accumulated: 0,
             blocks_signed: 0,
             blocks_missed: 0,
+            total_blocks_missed: 0,
             jailed: false,
             jailed_until: 0,
             created_at: now,
@@ -536,14 +544,15 @@ impl StakingManager {
     }
     
     /// Withdraw validator rewards with auto-persist to storage
+    /// Returns (rewards_amount, reward_wallet_address)
     pub async fn withdraw_validator_rewards_with_storage(
         &self,
         validator_address: &str,
         storage: &crate::storage::PersistentStorage,
-    ) -> Result<u64> {
-        let rewards = self.withdraw_validator_rewards(validator_address).await?;
+    ) -> Result<(u64, String)> {
+        let result = self.withdraw_validator_rewards(validator_address).await?;
         self.persist_to_storage(storage).await?;
-        Ok(rewards)
+        Ok(result)
     }
     
     /// Withdraw delegator rewards with auto-persist to storage
@@ -596,22 +605,75 @@ impl StakingManager {
         Ok(())
     }
 
-    /// Withdraw accumulated rewards
-    pub async fn withdraw_validator_rewards(&self, validator_address: &str) -> Result<u64> {
+    /// Set the reward wallet for a validator (allows genesis validators to claim rewards)
+    /// 
+    /// This allows operators of genesis validators (which don't have wallets) to designate
+    /// a wallet address where their accumulated APY rewards should be sent.
+    /// 
+    /// # Security
+    /// - Can only be called by the validator operator (requires signature verification in RPC layer)
+    /// - Once set, can be changed (allows key rotation)
+    pub async fn set_reward_wallet(&self, validator_address: &str, reward_wallet: String) -> Result<()> {
+        validate_address(&reward_wallet)
+            .context("Invalid reward wallet address")?;
+        
         let mut validators = self.validators.write().await;
         let validator = validators.get_mut(validator_address)
             .context("Validator not found")?;
 
+        let old_wallet = validator.reward_wallet.clone();
+        validator.reward_wallet = Some(reward_wallet.clone());
+
+        info!(
+            "Validator {} set reward wallet: {:?} -> {}",
+            validator_address,
+            old_wallet,
+            reward_wallet
+        );
+
+        Ok(())
+    }
+
+    /// Get the reward wallet for a validator
+    pub async fn get_reward_wallet(&self, validator_address: &str) -> Result<Option<String>> {
+        let validators = self.validators.read().await;
+        let validator = validators.get(validator_address)
+            .context("Validator not found")?;
+        Ok(validator.reward_wallet.clone())
+    }
+
+    /// Withdraw accumulated rewards to the validator's reward_wallet
+    /// 
+    /// # Returns
+    /// - The amount of rewards withdrawn (in smallest units)
+    /// - The wallet address where rewards were sent
+    /// 
+    /// # Errors
+    /// - If validator not found
+    /// - If no reward_wallet is set (genesis validators must call set_reward_wallet first)
+    pub async fn withdraw_validator_rewards(&self, validator_address: &str) -> Result<(u64, String)> {
+        let mut validators = self.validators.write().await;
+        let validator = validators.get_mut(validator_address)
+            .context("Validator not found")?;
+
+        let reward_wallet = validator.reward_wallet.clone()
+            .context("No reward wallet set. Call set_reward_wallet first to designate where rewards should be sent.")?;
+
         let rewards = validator.rewards_accumulated;
+        if rewards == 0 {
+            bail!("No rewards to withdraw");
+        }
+        
         validator.rewards_accumulated = 0;
 
         info!(
-            "Validator {} withdrew {} SLTN in rewards",
+            "Validator {} withdrew {} SLTN in rewards to wallet {}",
             validator_address,
-            rewards / 1_000_000_000
+            rewards / 1_000_000_000,
+            reward_wallet
         );
 
-        Ok(rewards)
+        Ok((rewards, reward_wallet))
     }
 
     /// Withdraw delegator rewards
@@ -777,6 +839,14 @@ impl StakingManager {
         validators.values().cloned().collect()
     }
 
+    /// Get a specific validator by address
+    pub async fn get_validator(&self, validator_address: &str) -> Result<ValidatorStake> {
+        let validators = self.validators.read().await;
+        validators.get(validator_address)
+            .cloned()
+            .context("Validator not found")
+    }
+
     /// Get delegations for an address
     pub async fn get_delegations(&self, delegator_address: &str) -> Vec<Delegation> {
         let delegations = self.delegations.read().await;
@@ -851,6 +921,7 @@ impl StakingManager {
                     return Ok(false);
                 }
                 validator.blocks_missed += 1;
+                validator.total_blocks_missed += 1; // Track total for uptime calc
                 validator.blocks_missed >= DOWNTIME_MISS_THRESHOLD
             } else {
                 return Ok(false);
@@ -1429,18 +1500,22 @@ mod tests {
         let staking = StakingManager::new(0.08);
         staking.create_validator(VALIDATOR1.to_string(), MIN_STAKE, 0.10).await.unwrap();
 
+        // Set reward wallet first (required for withdrawal)
+        staking.set_reward_wallet(VALIDATOR1, DELEGATOR1.to_string()).await.unwrap();
+
         // Distribute some rewards
         for height in 1..=100 {
             staking.distribute_block_rewards(height).await.unwrap();
         }
 
         // Withdraw validator rewards
-        let rewards = staking.withdraw_validator_rewards(VALIDATOR1).await.unwrap();
+        let (rewards, wallet) = staking.withdraw_validator_rewards(VALIDATOR1).await.unwrap();
         assert!(rewards > 0, "Validator should have accumulated rewards");
+        assert_eq!(wallet, DELEGATOR1);
 
-        // Second withdrawal should return 0
-        let rewards2 = staking.withdraw_validator_rewards(VALIDATOR1).await.unwrap();
-        assert_eq!(rewards2, 0);
+        // Second withdrawal should fail (no rewards to withdraw)
+        let result = staking.withdraw_validator_rewards(VALIDATOR1).await;
+        assert!(result.is_err(), "Should fail with no rewards");
     }
 
     #[tokio::test]

@@ -19,7 +19,7 @@ use sultan_core::native_dex::NativeDex;
 use sultan_core::sharding_production::ShardConfig;
 use sultan_core::sharded_blockchain_production::ConfirmedTransaction;
 use sultan_core::SultanBlockchain;
-use sultan_core::p2p::{P2PNetwork, NetworkMessage};
+use sultan_core::p2p::{P2PNetwork, NetworkMessage, load_or_generate_keypair};
 use sultan_core::config::Config;
 use anyhow::{Result, Context, bail};
 use tracing::{info, warn, error, debug};
@@ -73,6 +73,22 @@ struct Args {
     /// SECURITY: Pass via environment variable SULTAN_VALIDATOR_SECRET instead of CLI for production
     #[clap(long, env = "SULTAN_VALIDATOR_SECRET")]
     validator_secret: Option<String>,
+
+    /// Reward wallet address (where validator APY rewards are sent)
+    /// Defaults to genesis wallet if not specified
+    #[clap(long)]
+    reward_wallet: Option<String>,
+
+    /// Genesis validators (comma-separated list of validator addresses)
+    /// All specified validators will be pre-registered at startup
+    /// Example: --genesis-validators addr1,addr2,addr3
+    #[clap(long)]
+    genesis_validators: Option<String>,
+
+    /// Reset staking state on startup (deletes all validators from staking system)
+    /// Use when staking state is corrupted or needs to be rebuilt from genesis validators
+    #[clap(long)]
+    reset_staking: bool,
 
     /// P2P listen address
     #[clap(short, long, default_value = "/ip4/0.0.0.0/tcp/26656")]
@@ -421,6 +437,16 @@ impl NodeState {
         let storage = PersistentStorage::new(storage_path.to_str().unwrap())
             .context("Failed to initialize storage")?;
 
+        // Reset staking state if requested (deletes staking:state key from RocksDB)
+        if args.reset_staking {
+            warn!("🔥🔥🔥 RESET STAKING: Deleting all staking state from storage!");
+            if let Err(e) = storage.delete_staking_state() {
+                warn!("⚠️ Failed to delete staking state: {} (may not exist)", e);
+            } else {
+                warn!("✅ Staking state deleted - will rebuild from genesis validators");
+            }
+        }
+
         // Configure sharding (always enabled, but shard count is configurable)
         let shard_count = if args.enable_sharding { args.shard_count } else { 16 };
         let config = ShardConfig {
@@ -436,6 +462,9 @@ impl NodeState {
         // Create the unified Sultan blockchain
         let blockchain = SultanBlockchain::new(config.clone());
         
+        // Track the first genesis wallet (for validator rewards)
+        let mut genesis_wallet: Option<String> = None;
+        
         // Initialize genesis accounts
         if let Some(genesis_str) = &args.genesis {
             for account in genesis_str.split(',') {
@@ -447,6 +476,12 @@ impl NodeState {
                     blockchain.init_account(address.clone(), balance).await
                         .context("Failed to init genesis account")?;
                     info!("Genesis account: {} = {}", address, balance);
+                    
+                    // First genesis account becomes the default reward wallet for genesis validators
+                    if genesis_wallet.is_none() {
+                        genesis_wallet = Some(address.clone());
+                        info!("🏦 Genesis treasury wallet: {} (will receive genesis validator APY)", address);
+                    }
                 }
             }
         } else {
@@ -459,16 +494,20 @@ impl NodeState {
         
         // Load existing blocks from storage if available
         if let Some(latest_block) = storage.get_latest_block()? {
-            info!("Loading existing blockchain from height {}", latest_block.index);
+            warn!("🔄🔄🔄 BLOCKCHAIN RESTORE: Loading {} blocks from storage", latest_block.index);
             for i in 1..=latest_block.index {
                 if let Some(block) = storage.get_block_by_height(i)? {
-                    // Apply block to restore state
-                    if let Err(e) = blockchain.apply_block(block.clone()).await {
+                    // Apply block to restore state (silently to avoid journald rate limiting)
+                    if let Err(e) = blockchain.apply_block_silent(block.clone()).await {
                         warn!("Failed to apply stored block {}: {}", i, e);
+                    }
+                    // Log progress every 10,000 blocks
+                    if i % 10000 == 0 {
+                        warn!("🔄 Restored {} / {} blocks...", i, latest_block.index);
                     }
                 }
             }
-            info!("Loaded {} blocks", latest_block.index);
+            warn!("✅✅✅ BLOCKCHAIN RESTORE COMPLETE: Loaded {} blocks", latest_block.index);
         }
 
         let tps_capacity = blockchain.get_tps_capacity().await;
@@ -488,33 +527,75 @@ impl NodeState {
             let validator_stake = args.validator_stake
                 .context("--validator-stake required when --validator is set")?;
             
-            // Parse and validate Ed25519 public key from CLI
-            let validator_pubkey = args.validator_pubkey.as_ref()
-                .context("--validator-pubkey required when --validator is set (64 hex chars)")?;
-            
-            // Decode hex pubkey to [u8; 32]
-            if validator_pubkey.len() != 64 {
-                bail!("Validator pubkey must be 64 hex characters (32 bytes), got {}", validator_pubkey.len());
-            }
-            let pubkey_bytes = hex::decode(validator_pubkey)
-                .context("Invalid validator pubkey hex")?;
-            let pubkey_array: [u8; 32] = pubkey_bytes.try_into()
-                .map_err(|_| anyhow::anyhow!("Invalid validator pubkey length"))?;
-            
-            // Verify it's a valid Ed25519 public key
-            VerifyingKey::from_bytes(&pubkey_array)
-                .context("Invalid Ed25519 public key")?;
+            // Parse and validate Ed25519 public key from CLI (or generate ephemeral key for testing)
+            let pubkey_array: [u8; 32] = if let Some(validator_pubkey) = args.validator_pubkey.as_ref() {
+                // Decode hex pubkey to [u8; 32]
+                if validator_pubkey.len() != 64 {
+                    bail!("Validator pubkey must be 64 hex characters (32 bytes), got {}", validator_pubkey.len());
+                }
+                let pubkey_bytes = hex::decode(validator_pubkey)
+                    .context("Invalid validator pubkey hex")?;
+                let arr: [u8; 32] = pubkey_bytes.try_into()
+                    .map_err(|_| anyhow::anyhow!("Invalid validator pubkey length"))?;
+                
+                // Verify it's a valid Ed25519 public key
+                VerifyingKey::from_bytes(&arr)
+                    .context("Invalid Ed25519 public key")?;
+                
+                info!("Running as validator: {} (stake: {}, pubkey: {}...)", 
+                    validator_addr, validator_stake, &validator_pubkey[..16]);
+                arr
+            } else {
+                // Generate ephemeral signing key for testing (NOT for production!)
+                warn!("⚠️  No --validator-pubkey provided, generating EPHEMERAL key (testing only!)");
+                let signing_key = SigningKey::generate(&mut rand::thread_rng());
+                let verifying_key = signing_key.verifying_key();
+                let pubkey_hex = hex::encode(verifying_key.as_bytes());
+                info!("Running as validator: {} (stake: {}, EPHEMERAL pubkey: {}...)", 
+                    validator_addr, validator_stake, &pubkey_hex[..16]);
+                *verifying_key.as_bytes()
+            };
             
             consensus.add_validator(validator_addr.clone(), validator_stake, pubkey_array)
                 .context("Failed to add validator")?;
+        }
+
+        // Add genesis validators to consensus (allows accepting blocks from all genesis validators)
+        if let Some(genesis_vals_str) = &args.genesis_validators {
+            let genesis_validators: Vec<String> = genesis_vals_str.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
             
-            info!("Running as validator: {} (stake: {}, pubkey: {}...)", 
-                validator_addr, validator_stake, &validator_pubkey[..16]);
+            let our_addr = args.validator_address.as_ref().map(|s| s.as_str()).unwrap_or("");
+            
+            for gv_addr in &genesis_validators {
+                // Skip if it's our own address (already added above)
+                if gv_addr == our_addr {
+                    continue;
+                }
+                
+                // Add with default stake and zero pubkey (will be updated via sync)
+                let default_stake = 10_000_000_000_000u64; // 10M SLTN
+                let zero_pubkey = [0u8; 32]; // Will be updated when validator syncs
+                
+                if let Err(e) = consensus.add_validator(gv_addr.clone(), default_stake, zero_pubkey) {
+                    debug!("Genesis validator {} already exists or failed: {}", gv_addr, e);
+                } else {
+                    info!("📋 Pre-registered genesis validator: {}", gv_addr);
+                }
+            }
+            info!("🏛️ {} genesis validators pre-registered", genesis_validators.len());
         }
 
         // Initialize P2P network if enabled
         let p2p_network = if args.enable_p2p {
-            let mut p2p = P2PNetwork::new()
+            // Load or generate persistent keypair for stable PeerId across restarts
+            let data_dir_path = std::path::Path::new(&args.data_dir);
+            let keypair = load_or_generate_keypair(data_dir_path)
+                .context("Failed to load/generate node keypair")?;
+            
+            let mut p2p = P2PNetwork::with_keypair(keypair)
                 .context("Failed to create P2P network")?;
             
             // Set bootstrap peers if provided
@@ -557,13 +638,81 @@ impl NodeState {
         };
 
         // Initialize staking manager and restore persisted state if available
+        warn!("💎💎💎 STAKING INIT: Creating staking manager");
         let staking_manager = Arc::new(StakingManager::new(0.04)); // 4% inflation (zero gas model)
         
         // Restore staking state from persistent storage
         if let Ok(Some(staking_snapshot)) = storage.load_staking_state() {
-            info!("📥 Found persisted staking state, restoring...");
+            warn!("📥📥📥 STAKING RESTORE: Found {} validators in snapshot", staking_snapshot.validators.len());
             if let Err(e) = staking_manager.restore_from_snapshot(staking_snapshot).await {
                 warn!("⚠️ Failed to restore staking state: {}. Starting fresh.", e);
+            }
+        } else {
+            warn!("📭📭📭 STAKING INIT: No persisted staking state found - starting fresh");
+        }
+        
+        // Register ALL genesis validators in staking system (ensures block counts are tracked)
+        if let Some(genesis_vals_str) = &args.genesis_validators {
+            let genesis_validators: Vec<String> = genesis_vals_str.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            
+            warn!("👥👥👥 GENESIS VALIDATORS: Processing {} validators from CLI", genesis_validators.len());
+            
+            let default_stake = 10_000_000_000_000u64; // 10,000 SLTN (10M in base units)
+            let default_commission = 0.05; // 5%
+            
+            for gv_addr in &genesis_validators {
+                // Only create if not already in staking (from snapshot or previous registration)
+                let exists = staking_manager.get_validator(gv_addr).await.is_ok();
+                if !exists {
+                    if let Err(e) = staking_manager.create_validator(
+                        gv_addr.clone(),
+                        default_stake,
+                        default_commission,
+                    ).await {
+                        warn!("⚠️⚠️⚠️ Genesis validator {} NOT added to staking: {}", gv_addr, e);
+                    } else {
+                        warn!("📋📋📋 Genesis validator {} REGISTERED in staking system", gv_addr);
+                    }
+                } else {
+                    warn!("✓✓✓ Genesis validator {} already exists in staking", gv_addr);
+                }
+            }
+        } else {
+            warn!("⚠️⚠️⚠️ GENESIS VALIDATORS: No --genesis-validators CLI arg provided!");
+        }
+        
+        // If running as validator, register in staking manager with genesis wallet as reward destination
+        if args.validator {
+            if let Some(validator_addr) = args.validator_address.as_ref() {
+                let stake = args.validator_stake.unwrap_or(10_000_000_000_000); // Default 10M SLTN
+                
+                // Create validator in staking manager (if not already exists from snapshot)
+                if staking_manager.get_validator(validator_addr).await.is_err() {
+                    if let Err(e) = staking_manager.create_validator(
+                        validator_addr.clone(),
+                        stake,
+                        0.05, // 5% commission
+                    ).await {
+                        warn!("⚠️ Failed to register validator in staking: {}", e);
+                    } else {
+                        warn!("✅✅✅ Validator {} registered in staking system (stake: {} SLTN)", 
+                              validator_addr, stake / 1_000_000_000);
+                    }
+                }
+                
+                // Set reward wallet for this validator (CLI flag > genesis wallet > validator address)
+                let reward_wallet = args.reward_wallet.clone()
+                    .or_else(|| genesis_wallet.clone())
+                    .unwrap_or_else(|| validator_addr.clone());
+                
+                if let Err(e) = staking_manager.set_reward_wallet(validator_addr, reward_wallet.clone()).await {
+                    warn!("⚠️ Failed to set reward wallet: {}", e);
+                } else {
+                    info!("💰 Validator {} APY rewards → {}", validator_addr, reward_wallet);
+                }
             }
         }
 
@@ -900,10 +1049,38 @@ impl NodeState {
 
     /// Block production loop
     async fn run_block_production(&self) -> Result<()> {
+        info!("🔄 Block production loop started, block_time={}s", self.block_time);
+        
+        // === GOSSIPSUB MESH WARMUP ===
+        // Wait for gossipsub mesh to establish before producing first block.
+        // This is critical for multi-validator networks - messages won't propagate
+        // until the mesh is formed (typically 5-15 seconds after peer connections).
+        // IMPORTANT: Wait BEFORE creating the ticker to avoid accumulated missed ticks.
+        info!("⏳ Waiting 15s for P2P mesh to establish before block production...");
+        tokio::time::sleep(Duration::from_secs(15)).await;
+        info!("✅ P2P mesh warmup complete, starting block production");
+        
+        // Create ticker AFTER the warmup sleep to avoid accumulated ticks
         let mut ticker = interval(Duration::from_secs(self.block_time));
         
+        // Track ticks for periodic sync check
+        let mut tick_count: u64 = 0;
+        let sync_check_interval = 5; // Check every 5 ticks (10s with 2s block time)
+        
         loop {
+            info!("⏳ Block production: waiting for next tick...");
             ticker.tick().await;
+            tick_count += 1;
+            info!("⏰ Block production: tick received, starting produce_block()");
+            
+            // === PERIODIC BLOCK SYNC CHECK ===
+            // Every N ticks, check if we're behind and request sync if needed.
+            // This handles cases where gossipsub misses blocks.
+            if tick_count % sync_check_interval == 0 {
+                if let Err(e) = self.check_and_request_sync().await {
+                    debug!("Sync check failed: {}", e);
+                }
+            }
             
             if let Err(e) = self.produce_block().await {
                 error!("Block production failed: {}", e);
@@ -911,48 +1088,340 @@ impl NodeState {
             }
         }
     }
+    
+    /// Check if we're behind and request sync from peers
+    async fn check_and_request_sync(&self) -> Result<()> {
+        // Get our current height
+        let our_height = self.blockchain.read().await.get_height().await;
+        
+        // Check if we need to sync using block_sync_manager
+        if let Some(ref block_sync) = self.block_sync_manager {
+            let sync_manager = block_sync.read().await;
+            
+            if sync_manager.needs_sync().await {
+                let max_peer_height = sync_manager.max_peer_height().await;
+                let behind_by = max_peer_height.saturating_sub(our_height);
+                
+                if behind_by > 0 {
+                    // Request blocks we're missing
+                    let from_height = our_height + 1;
+                    let to_height = std::cmp::min(max_peer_height, from_height + 99); // Max 100 blocks
+                    
+                    drop(sync_manager); // Release lock before P2P operation
+                    
+                    if let Some(ref p2p) = self.p2p_network {
+                        info!("🔄 Behind by {} blocks (ours: {}, peers: {}), requesting sync for blocks {}-{}", 
+                              behind_by, our_height, max_peer_height, from_height, to_height);
+                        if let Err(e) = p2p.read().await.request_sync(from_height, to_height).await {
+                            warn!("Failed to request sync: {}", e);
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+        }
+        
+        // Fallback: if we're at genesis and have peers, try to sync
+        if our_height == 0 {
+            if let Some(ref p2p) = self.p2p_network {
+                let peer_count = p2p.read().await.peer_count().await;
+                if peer_count > 0 {
+                    info!("🔄 Still at genesis height with {} peers, requesting sync for blocks 1-10", peer_count);
+                    if let Err(e) = p2p.read().await.request_sync(1, 10).await {
+                        warn!("Failed to request sync: {}", e);
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
 
     /// Produce a single block
     async fn produce_block(&self) -> Result<()> {
-        let storage = self.storage.read().await;
-
-        // Get current height FIRST - this determines the proposer
-        let current_height = self.blockchain.read().await.get_height().await;
+        info!("🔨 produce_block: entering function");
+        
+        // Yield to allow P2P handler to complete any pending operations
+        // This helps prevent lock starvation
+        tokio::task::yield_now().await;
+        info!("🔨 produce_block: after yield_now");
+        
+        // DEADLOCK PREVENTION: Use try_get_height with timeout on inner lock
+        // The blockchain read lock is briefly held, but the inner blocks lock
+        // uses a timeout to prevent indefinite waiting
+        let current_height = {
+            let mut retries = 0;
+            loop {
+                // First try to get outer blockchain lock
+                let guard = match self.blockchain.try_read() {
+                    Ok(g) => g,
+                    Err(_) => {
+                        retries += 1;
+                        if retries > 50 {
+                            anyhow::bail!("Failed to acquire blockchain read lock after 50 retries");
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        continue;
+                    }
+                };
+                
+                // Use try_get_height which has internal timeout
+                match guard.try_get_height().await {
+                    Some(h) => {
+                        drop(guard);
+                        break h;
+                    }
+                    None => {
+                        drop(guard);
+                        retries += 1;
+                        if retries > 50 {
+                            anyhow::bail!("Failed to get height after 50 retries (inner lock busy)");
+                        }
+                        info!("🔨 produce_block: height lock busy, retry {}/50", retries);
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        continue;
+                    }
+                }
+            }
+        };
+        info!("🔨 produce_block: got height {}", current_height);
+        
         let next_height = current_height + 1;
 
-        // === PRODUCTION: Height-based proposer selection ===
-        // All validators use the same height to deterministically select proposer
-        // This ensures network-wide agreement on who should propose each block
-        let consensus = self.consensus.read().await;
-        let proposer = consensus.select_proposer_for_height(next_height)
-            .context("No validator available to propose")?;
-        drop(consensus);
-
-        // Check if we are the proposer for this height
-        if let Some(our_address) = &self.validator_address {
-            if &proposer != our_address {
-                debug!("Not our turn to propose height {} (proposer: {})", next_height, proposer);
+        // === PROPER PoS: Height-based proposer selection with timeout fallback ===
+        // Each block height has a designated proposer. If they don't produce within
+        // the slot time, fallback validators can step in after a delay.
+        // 
+        // Slot timing (2 second block time):
+        // - 0.0-1.0s: Primary proposer window
+        // - 1.0-1.5s: First fallback window  
+        // - 1.5-1.8s: Second fallback window
+        // - 1.8-2.0s: Third fallback window
+        //
+        // This ensures liveness even if the primary proposer is offline.
+        
+        let our_address = match &self.validator_address {
+            Some(addr) => addr.clone(),
+            None => {
+                // Not a validator, skip production
                 return Ok(());
             }
-            info!("🎯 We are proposer for height {}", next_height);
-        } else {
-            // Not a validator, skip production
-            return Ok(());
+        };
+
+        // Get proposer order and check our position
+        let (proposer_order, validator_count) = {
+            let mut retries = 0;
+            loop {
+                match self.consensus.try_read() {
+                    Ok(guard) => {
+                        let order = guard.get_proposer_order_for_height(next_height);
+                        let count = guard.validator_count();
+                        drop(guard);
+                        break (order, count);
+                    }
+                    Err(_) => {
+                        retries += 1;
+                        if retries > 50 {
+                            anyhow::bail!("Failed to acquire consensus read lock after 50 retries");
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                }
+            }
+        };
+
+        if proposer_order.is_empty() {
+            anyhow::bail!("No active validators to propose block");
         }
 
+        let primary_proposer = &proposer_order[0];
+        let our_position = proposer_order.iter().position(|a| a == &our_address);
+        
+        info!("🔨 produce_block: primary proposer: {} (validators: {})", primary_proposer, validator_count);
+        info!("🔨 produce_block: our_address: {}, our_position: {:?}", our_address, our_position);
+
+        // === GENESIS BOOTSTRAP SAFETY NET ===
+        // On a fresh network with only one registered validator (the genesis node),
+        // always allow production. This is NOT Bootstrap Mode workaround - this is
+        // standard behavior for network genesis. With proper on-chain registration,
+        // all validators will have the same view and normal proposer selection works.
+        let is_genesis_only = validator_count == 1;
+        
+        if is_genesis_only && our_position == Some(0) {
+            info!("🌱 Genesis mode: single validator producing block {}", next_height);
+        }
+
+        // Determine if we should produce based on our position and timing
+        let is_our_turn = match our_position {
+            None => {
+                // We're not in the proposer list (shouldn't happen if we're a validator)
+                debug!("Not in proposer order for height {}", next_height);
+                false
+            }
+            Some(0) => {
+                // We're the primary proposer - always produce
+                info!("🎯 We are PRIMARY proposer for height {}", next_height);
+                true
+            }
+            Some(pos) => {
+                // We're a fallback proposer - check if we should step in
+                // 
+                // ENTERPRISE-GRADE FALLBACK LOGIC:
+                // 1. Only step in if primary has missed FALLBACK_THRESHOLD_MISSED_BLOCKS consecutive blocks
+                // 2. Only top MAX_FALLBACK_POSITIONS validators can be fallbacks
+                // 3. Uses missed_blocks counter which is reset when primary signs
+                
+                // Import the constants (they're in consensus.rs)
+                use crate::consensus::{FALLBACK_THRESHOLD_MISSED_BLOCKS, MAX_FALLBACK_POSITIONS};
+                
+                // Check if we're eligible to be a fallback (position must be within limit)
+                if pos > MAX_FALLBACK_POSITIONS {
+                    debug!("Position {} exceeds MAX_FALLBACK_POSITIONS ({}), not stepping in", 
+                           pos, MAX_FALLBACK_POSITIONS);
+                    false
+                } else {
+                    // Check if primary proposer seems offline
+                    let primary_seems_offline = {
+                        if let Ok(guard) = self.consensus.try_read() {
+                            if let Some(validator) = guard.get_validator(primary_proposer) {
+                                // Primary is "offline" if they've missed enough consecutive blocks
+                                let is_offline = validator.missed_blocks >= FALLBACK_THRESHOLD_MISSED_BLOCKS;
+                                if is_offline {
+                                    debug!("Primary {} has missed {} blocks (threshold: {})", 
+                                           primary_proposer, validator.missed_blocks, FALLBACK_THRESHOLD_MISSED_BLOCKS);
+                                }
+                                is_offline
+                            } else {
+                                warn!("Primary proposer {} not found in validators!", primary_proposer);
+                                true // Validator not found, assume offline
+                            }
+                        } else {
+                            // Can't acquire lock - be conservative, don't step in
+                            debug!("Cannot check primary status - lock unavailable");
+                            false
+                        }
+                    };
+
+                    if primary_seems_offline {
+                        info!("🔄 Fallback position {}: primary {} missed {} blocks, stepping in for height {}", 
+                              pos, primary_proposer, FALLBACK_THRESHOLD_MISSED_BLOCKS, next_height);
+                        true
+                    } else {
+                        debug!("Not our turn: position {} in fallback order for height {}", pos, next_height);
+                        false
+                    }
+                }
+            }
+        };
+
+        if !is_our_turn {
+            // Record that primary proposer missed this block (if they're supposed to produce)
+            if our_position == Some(0) {
+                // This shouldn't happen - we're primary but not producing?
+                warn!("We're primary but not producing for height {} - logic error", next_height);
+            }
+            return Ok(());
+        }
+        info!("🔨 produce_block: IT IS OUR TURN for height {}", next_height);
+
+        // === SYNC-CHECK (non-blocking): Log if behind but DON'T skip if we're proposer ===
+        // The proposer must always produce - skipping causes chain stalls
+        // Other validators will catch up via sync, but the proposer must lead
+        // DEADLOCK PREVENTION: Use timeout on sync manager lock
+        if let Some(block_sync) = &self.block_sync_manager {
+            match tokio::time::timeout(Duration::from_millis(100), block_sync.read()).await {
+                Ok(sync_manager) => {
+                    // Use timeout on inner async call too
+                    if let Ok(needs) = tokio::time::timeout(Duration::from_millis(50), sync_manager.needs_sync()).await {
+                        if needs {
+                            if let Ok(max_peer) = tokio::time::timeout(Duration::from_millis(50), sync_manager.max_peer_height()).await {
+                                if max_peer > next_height + 10 {
+                                    warn!("⚠️ We're behind by {} blocks but still producing as proposer", 
+                                        max_peer.saturating_sub(next_height));
+                                }
+                            }
+                        }
+                    }
+                    drop(sync_manager);
+                }
+                Err(_) => {
+                    warn!("⚠️ Sync manager lock busy, skipping sync check");
+                }
+            }
+        }
+        info!("🔨 produce_block: passed sync check");
+        
+        // === PEER-GATE: Disabled for now - just log peer count ===
+        // The peer gate was causing the chain to stall because the bootstrap
+        // validator couldn't produce without peers, but peers can't connect
+        // without blocks to sync. Chicken-and-egg problem.
+        // 
+        // For now, just log peer status and produce regardless.
+        if self.p2p_enabled {
+            if let Some(p2p) = &self.p2p_network {
+                match tokio::time::timeout(Duration::from_millis(100), p2p.read()).await {
+                    Ok(p2p_guard) => {
+                        if let Ok(peer_count) = tokio::time::timeout(Duration::from_millis(50), p2p_guard.peer_count()).await {
+                            if peer_count < 1 {
+                                debug!("📡 No peers connected, but producing block {} anyway", next_height);
+                            } else {
+                                debug!("📡 {} peer(s) connected, producing block {}", peer_count, next_height);
+                            }
+                        }
+                        drop(p2p_guard);
+                    }
+                    Err(_) => {
+                        warn!("⚠️ P2P lock busy, skipping peer check");
+                    }
+                }
+            }
+        }
+        info!("🔨 produce_block: passed peer gate");
+
+        info!("🎯 We are proposer for height {}", next_height);
+
         // Create block using unified Sultan blockchain
-        let blockchain = self.blockchain.write().await;
+        // DEADLOCK PREVENTION: Use try_read with retry instead of blocking read
+        let (block, tx_count, stats) = {
+            let mut retries = 0;
+            let blockchain = loop {
+                match self.blockchain.try_read() {
+                    Ok(guard) => break guard,
+                    Err(_) => {
+                        retries += 1;
+                        if retries > 100 {
+                            anyhow::bail!("Failed to acquire blockchain read lock after 100 retries");
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                }
+            };
+            
+            // Drain pending transactions from mempool
+            let transactions = blockchain.drain_pending_transactions().await;
+            let tx_count = transactions.len();
+            
+            let block = blockchain.create_block(transactions, our_address.clone()).await
+                .context("Failed to create block")?;
+            
+            let stats = blockchain.get_stats().await;
+            
+            // Auto-expand shards if load threshold exceeded
+            if stats.should_expand {
+                let current_shards = stats.shard_count;
+                let additional = current_shards.min(8000 - current_shards);
+                if additional > 0 {
+                    info!("⚡ Auto-expansion triggered at {:.1}% load", stats.current_load * 100.0);
+                    if let Err(e) = blockchain.expand_shards(additional).await {
+                        warn!("Failed to auto-expand shards: {}", e);
+                    }
+                }
+            }
+            
+            drop(blockchain); // Explicit drop before returning from block
+            (block, tx_count, stats)
+        }; // blockchain lock guaranteed dropped here
         
-        // Drain pending transactions from mempool
-        let transactions = blockchain.drain_pending_transactions().await;
-        let tx_count = transactions.len();
-        
-        let block = blockchain.create_block(transactions, proposer.clone()).await
-            .context("Failed to create block")?;
-        
-        // Block is already added by create_block
-        
-        let stats = blockchain.get_stats().await;
         info!(
             "✅ SHARDED Block {} | {} shards active | {} txs in block | {} total processed | capacity: {} TPS",
             block.index,
@@ -961,35 +1430,42 @@ impl NodeState {
             stats.total_processed,
             stats.estimated_tps
         );
-        
-        // Auto-expand shards if load threshold exceeded
-        if stats.should_expand {
-            let current_shards = stats.shard_count;
-            // Double shard count (up to max 8000)
-            let additional = current_shards.min(8000 - current_shards);
-            if additional > 0 {
-                info!("⚡ Auto-expansion triggered at {:.1}% load", stats.current_load * 100.0);
-                if let Err(e) = blockchain.expand_shards(additional).await {
-                    warn!("Failed to auto-expand shards: {}", e);
+
+        // Record proposal in consensus - DEADLOCK PREVENTION: Use try_write with retry
+        {
+            let mut retries = 0;
+            loop {
+                match self.consensus.try_write() {
+                    Ok(mut guard) => {
+                        guard.record_proposal(&our_address)
+                            .context("Failed to record proposal")?;
+                        drop(guard); // Explicit drop
+                        break;
+                    }
+                    Err(_) => {
+                        retries += 1;
+                        if retries > 100 {
+                            anyhow::bail!("Failed to acquire consensus write lock after 100 retries");
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
                 }
             }
         }
         
-        drop(blockchain);
-
-        // Record proposal in consensus
-        {
-            let mut consensus = self.consensus.write().await;
-            consensus.record_proposal(&proposer)
-                .context("Failed to record proposal")?;
+        // Update block sync manager height after producing block
+        if let Some(ref block_sync) = self.block_sync_manager {
+            block_sync.write().await.set_height(block.index).await;
         }
 
         // Record block signed in staking (resets missed block counter)
-        if let Err(e) = self.staking_manager.record_block_signed(&proposer).await {
+        if let Err(e) = self.staking_manager.record_block_signed(&our_address).await {
             warn!("Failed to record block signed for staking: {}", e);
         }
 
-        // Save to storage
+        // Save to storage - ACQUIRE LOCK ONLY WHEN NEEDED (after all other locks released)
+        // This prevents deadlock with P2P handler which acquires locks in different order
+        let storage = self.storage.read().await;
         storage.save_block(&block)
             .context("Failed to save block")?;
 
@@ -1051,6 +1527,16 @@ impl NodeState {
             }
         }
 
+        // Periodic staking state persistence (every 100 blocks) to save block counts
+        if next_height % 100 == 0 {
+            let storage = self.storage.read().await;
+            if let Err(e) = self.staking_manager.persist_to_storage(&storage).await {
+                warn!("⚠️ Failed to persist staking state at height {}: {}", next_height, e);
+            } else {
+                debug!("💾 Staking state persisted at height {}", next_height);
+            }
+        }
+
         // Update governance height to check for voting period endings
         self.governance_manager.update_height(next_height).await;
         
@@ -1067,10 +1553,10 @@ impl NodeState {
                 let block_hash = format!("{:x}", sha2::Sha256::digest(&block_data));
                 
                 // Sign block hash with validator's key for proposer verification
+                // NOTE: Sign the raw block_hash bytes directly - p2p.rs verify_vote_signature verifies raw bytes
                 let proposer_signature = if let Some(ref signing_key) = self.validator_signing_key {
                     use ed25519_dalek::Signer;
-                    let hash_bytes = sha2::Sha256::digest(block_hash.as_bytes());
-                    let signature = signing_key.sign(&hash_bytes);
+                    let signature = signing_key.sign(block_hash.as_bytes());
                     signature.to_bytes().to_vec()
                 } else {
                     warn!("⚠️  Block {} proposed without signature (no signing key)", block.index);
@@ -1079,7 +1565,7 @@ impl NodeState {
                 
                 if let Err(e) = p2p.read().await.broadcast_block(
                     block.index,
-                    &proposer,
+                    &our_address,
                     &block_hash,
                     block_data,
                     proposer_signature,
@@ -1094,6 +1580,20 @@ impl NodeState {
         }
 
         Ok(())
+    }
+
+    /// Sign a validator announcement for P2P broadcast
+    /// Signs the message: address || stake || peer_id
+    fn sign_validator_announcement(&self, address: &str, stake: u64, peer_id: &str) -> Vec<u8> {
+        if let Some(ref signing_key) = self.validator_signing_key {
+            use ed25519_dalek::Signer;
+            let message = format!("{}{}{}", address, stake, peer_id);
+            let signature = signing_key.sign(message.as_bytes());
+            signature.to_bytes().to_vec()
+        } else {
+            warn!("⚠️ Cannot sign validator announcement (no signing key)");
+            Vec::new()
+        }
     }
 
     /// Verify transaction signature using Ed25519
@@ -1481,6 +1981,19 @@ mod rpc {
             .and(with_state(state.clone()))
             .and_then(handle_withdraw_rewards);
 
+        // POST /staking/set_reward_wallet - Set wallet address for validator rewards
+        let set_reward_wallet_route = warp::path!("staking" / "set_reward_wallet")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_state(state.clone()))
+            .and_then(handle_set_reward_wallet);
+
+        // GET /staking/reward_wallet/:validator_address - Get reward wallet for a validator
+        let get_reward_wallet_route = warp::path!("staking" / "reward_wallet" / String)
+            .and(warp::get())
+            .and(with_state(state.clone()))
+            .and_then(handle_get_reward_wallet);
+
         // POST /staking/undelegate (unstake - starts 21-day unbonding period)
         let undelegate_route = warp::path!("staking" / "undelegate")
             .and(warp::post())
@@ -1698,6 +2211,8 @@ mod rpc {
             .or(validators_route)
             .or(delegations_route)
             .or(withdraw_rewards_route)
+            .or(set_reward_wallet_route)
+            .or(get_reward_wallet_route)
             .or(staking_stats_route)
             .boxed();
         
@@ -2232,6 +2747,10 @@ mod rpc {
         signature: Option<String>,
         #[serde(default)]
         public_key: Option<String>,
+        /// Optional: wallet address for receiving APY rewards
+        /// If not provided, defaults to validator_address
+        #[serde(default)]
+        reward_wallet: Option<String>,
     }
 
     fn default_commission() -> f64 {
@@ -2294,12 +2813,24 @@ mod rpc {
             req.commission_rate,
         ).await {
             Ok(_) => {
+                // Set reward wallet: use provided wallet or default to validator's own address
+                let reward_wallet = req.reward_wallet.clone().unwrap_or_else(|| req.validator_address.clone());
+                if let Err(e) = state.staking_manager.set_reward_wallet(&req.validator_address, reward_wallet.clone()).await {
+                    warn!("Failed to set reward wallet for {}: {}", req.validator_address, e);
+                } else {
+                    info!("💰 New validator {} rewards → {}", req.validator_address, reward_wallet);
+                }
+
                 // Also add to consensus engine for block production
                 // This unifies staking validators with consensus validators
-                let mut consensus = state.consensus.write().await;
-                if let Err(e) = consensus.add_validator(req.validator_address.clone(), req.initial_stake, pubkey) {
-                    warn!("Validator {} added to staking but not consensus: {}", req.validator_address, e);
-                }
+                // CRITICAL: Drop consensus lock BEFORE acquiring blockchain lock to prevent deadlock
+                // Lock ordering: always release consensus before acquiring blockchain
+                {
+                    let mut consensus = state.consensus.write().await;
+                    if let Err(e) = consensus.add_validator(req.validator_address.clone(), req.initial_stake, pubkey) {
+                        warn!("Validator {} added to staking but not consensus: {}", req.validator_address, e);
+                    }
+                } // consensus lock dropped here
                 
                 // Record as transaction for history
                 {
@@ -2716,6 +3247,27 @@ mod rpc {
         }
     }
 
+    /// Enhanced validator info with computed fields for explorer
+    #[derive(serde::Serialize)]
+    struct ValidatorInfo {
+        validator_address: String,
+        reward_wallet: Option<String>,
+        self_stake: u64,
+        delegated_stake: u64,
+        total_stake: u64,
+        commission_rate: f64,
+        rewards_accumulated: u64,
+        blocks_signed: u64,
+        blocks_missed: u64,
+        jailed: bool,
+        jailed_until: u64,
+        created_at: u64,
+        last_reward_height: u64,
+        // Computed fields for explorer
+        uptime_percent: f64,
+        voting_power_percent: f64,
+    }
+
     async fn handle_get_validators(
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -2730,13 +3282,15 @@ mod rpc {
             validators = consensus_validators.iter().map(|v| {
                 sultan_core::staking::ValidatorStake {
                     validator_address: v.address.clone(),
+                    reward_wallet: None, // Genesis validators have no wallet until set
                     self_stake: v.stake,
                     delegated_stake: 0,
                     total_stake: v.stake,
                     commission_rate: 0.05, // Default 5%
                     rewards_accumulated: 0,
                     blocks_signed: v.blocks_signed,
-                    blocks_missed: 0,
+                    blocks_missed: v.missed_blocks,
+                    total_blocks_missed: v.missed_blocks, // Consensus doesn't track total separately
                     jailed: !v.is_active,
                     jailed_until: 0,
                     created_at: 0,
@@ -2745,7 +3299,48 @@ mod rpc {
             }).collect();
         }
         
-        Ok(warp::reply::json(&validators))
+        // Calculate total stake for voting power percentages
+        let total_network_stake: u64 = validators.iter().map(|v| v.total_stake).sum();
+        
+        // Convert to enhanced info with computed fields
+        let enhanced: Vec<ValidatorInfo> = validators.iter().map(|v| {
+            // Uptime: blocks_signed / (blocks_signed + total_blocks_missed) * 100
+            // Uses total_blocks_missed (cumulative) not blocks_missed (consecutive)
+            // If no blocks yet, show 100% (new validator)
+            let total_blocks = v.blocks_signed + v.total_blocks_missed;
+            let uptime_percent = if total_blocks > 0 {
+                (v.blocks_signed as f64 / total_blocks as f64) * 100.0
+            } else {
+                100.0 // New validator, no blocks yet
+            };
+            
+            // Voting power: this validator's stake / total network stake * 100
+            let voting_power_percent = if total_network_stake > 0 {
+                (v.total_stake as f64 / total_network_stake as f64) * 100.0
+            } else {
+                0.0
+            };
+            
+            ValidatorInfo {
+                validator_address: v.validator_address.clone(),
+                reward_wallet: v.reward_wallet.clone(),
+                self_stake: v.self_stake,
+                delegated_stake: v.delegated_stake,
+                total_stake: v.total_stake,
+                commission_rate: v.commission_rate,
+                rewards_accumulated: v.rewards_accumulated,
+                blocks_signed: v.blocks_signed,
+                blocks_missed: v.blocks_missed,
+                jailed: v.jailed,
+                jailed_until: v.jailed_until,
+                created_at: v.created_at,
+                last_reward_height: v.last_reward_height,
+                uptime_percent,
+                voting_power_percent,
+            }
+        }).collect();
+        
+        Ok(warp::reply::json(&enhanced))
     }
 
     async fn handle_get_delegations(
@@ -2767,23 +3362,223 @@ mod rpc {
         req: WithdrawRewardsRequest,
         state: Arc<NodeState>,
     ) -> Result<impl warp::Reply, warp::Rejection> {
-        let amount = if req.is_validator {
-            state.staking_manager.withdraw_validator_rewards(&req.address).await
+        if req.is_validator {
+            match state.staking_manager.withdraw_validator_rewards(&req.address).await {
+                Ok((rewards, wallet)) => {
+                    // Credit the rewards to the reward_wallet (minted via inflation)
+                    let blockchain = state.blockchain.read().await;
+                    if let Err(e) = blockchain.add_balance(&wallet, rewards).await {
+                        warn!("Failed to credit rewards to wallet {}: {}", wallet, e);
+                        return Ok(warp::reply::json(&serde_json::json!({
+                            "error": format!("Failed to credit rewards: {}", e),
+                            "status": "error"
+                        })));
+                    }
+                    info!("Validator {} rewards ({} SLTN) credited to wallet {}", 
+                          req.address, rewards / 1_000_000_000, wallet);
+                    Ok(warp::reply::json(&serde_json::json!({
+                        "validator_address": req.address,
+                        "reward_wallet": wallet,
+                        "rewards_withdrawn": rewards,
+                        "status": "success"
+                    })))
+                }
+                Err(e) => {
+                    warn!("Withdraw validator rewards failed: {}", e);
+                    Ok(warp::reply::json(&serde_json::json!({
+                        "error": e.to_string(),
+                        "status": "error"
+                    })))
+                }
+            }
         } else if let Some(validator) = req.validator_address {
-            state.staking_manager.withdraw_delegator_rewards(&req.address, &validator).await
+            match state.staking_manager.withdraw_delegator_rewards(&req.address, &validator).await {
+                Ok(rewards) => {
+                    // Credit delegator rewards to their address
+                    let blockchain = state.blockchain.read().await;
+                    if let Err(e) = blockchain.add_balance(&req.address, rewards).await {
+                        warn!("Failed to credit delegator rewards: {}", e);
+                        return Ok(warp::reply::json(&serde_json::json!({
+                            "error": format!("Failed to credit rewards: {}", e),
+                            "status": "error"
+                        })));
+                    }
+                    Ok(warp::reply::json(&serde_json::json!({
+                        "address": req.address,
+                        "rewards_withdrawn": rewards,
+                        "status": "success"
+                    })))
+                }
+                Err(e) => {
+                    warn!("Withdraw delegator rewards failed: {}", e);
+                    Ok(warp::reply::json(&serde_json::json!({
+                        "error": e.to_string(),
+                        "status": "error"
+                    })))
+                }
+            }
         } else {
-            return Err(warp::reject());
+            Ok(warp::reply::json(&serde_json::json!({
+                "error": "validator_address required for delegator withdrawals",
+                "status": "error"
+            })))
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct SetRewardWalletRequest {
+        validator_address: String,
+        reward_wallet: String,
+        /// Signature proving ownership of validator (required)
+        /// Signs: "set_reward_wallet:{validator_address}:{reward_wallet}:{timestamp}"
+        signature: String,
+        /// Public key of the validator (hex encoded, 64 chars)
+        public_key: String,
+        /// Timestamp to prevent replay attacks (must be within 5 minutes)
+        timestamp: u64,
+    }
+
+    /// Handle setting a validator's reward wallet
+    /// 
+    /// This allows validators to designate a wallet where their accumulated 
+    /// APY rewards should be sent when withdrawn.
+    /// 
+    /// SECURITY: Requires signature verification to prevent unauthorized changes.
+    async fn handle_set_reward_wallet(
+        req: SetRewardWalletRequest,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        // Verify timestamp is within 5 minutes to prevent replay attacks
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        if req.timestamp > now + 300 || req.timestamp < now.saturating_sub(300) {
+            return Ok(warp::reply::json(&serde_json::json!({
+                "error": "Timestamp must be within 5 minutes of current time",
+                "status": "error"
+            })));
+        }
+
+        // Validate and decode public key
+        if req.public_key.len() != 64 {
+            return Ok(warp::reply::json(&serde_json::json!({
+                "error": "public_key must be 64 hex characters",
+                "status": "error"
+            })));
+        }
+        
+        let pubkey_bytes = match hex::decode(&req.public_key) {
+            Ok(b) if b.len() == 32 => {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&b);
+                arr
+            }
+            _ => {
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "error": "Invalid public_key hex",
+                    "status": "error"
+                })));
+            }
         };
 
-        match amount {
-            Ok(rewards) => Ok(warp::reply::json(&serde_json::json!({
-                "address": req.address,
-                "rewards_withdrawn": rewards,
-                "status": "success"
-            }))),
+        let verifying_key = match ed25519_dalek::VerifyingKey::from_bytes(&pubkey_bytes) {
+            Ok(k) => k,
+            Err(_) => {
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "error": "Invalid Ed25519 public key",
+                    "status": "error"
+                })));
+            }
+        };
+
+        // Verify the public key matches the validator address (or is registered for this validator)
+        // For genesis validators, we check if the pubkey is registered in consensus
+        let consensus = state.consensus.read().await;
+        let validator_pubkey = consensus.get_validator_pubkey(&req.validator_address);
+        drop(consensus);
+        
+        if let Some(registered_pubkey) = validator_pubkey {
+            if registered_pubkey != pubkey_bytes {
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "error": "Public key does not match registered validator key",
+                    "status": "error"
+                })));
+            }
+        }
+        // Note: For new validators without registered pubkeys, we allow the operation
+        // since they just registered with this pubkey
+
+        // Verify signature
+        let message = format!("set_reward_wallet:{}:{}:{}", 
+            req.validator_address, req.reward_wallet, req.timestamp);
+        
+        use sha2::{Sha256, Digest};
+        let message_hash = Sha256::digest(message.as_bytes());
+        
+        let sig_bytes = match hex::decode(&req.signature) {
+            Ok(b) if b.len() == 64 => {
+                let mut arr = [0u8; 64];
+                arr.copy_from_slice(&b);
+                arr
+            }
+            _ => {
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "error": "Invalid signature hex (must be 128 chars)",
+                    "status": "error"
+                })));
+            }
+        };
+
+        let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+
+        if verifying_key.verify_strict(&message_hash, &signature).is_err() {
+            return Ok(warp::reply::json(&serde_json::json!({
+                "error": "Invalid signature - must sign: set_reward_wallet:{validator}:{wallet}:{timestamp}",
+                "status": "error"
+            })));
+        }
+
+        // Signature verified - update reward wallet
+        match state.staking_manager.set_reward_wallet(&req.validator_address, req.reward_wallet.clone()).await {
+            Ok(()) => {
+                info!("Validator {} set reward wallet to {}", req.validator_address, req.reward_wallet);
+                Ok(warp::reply::json(&serde_json::json!({
+                    "validator_address": req.validator_address,
+                    "reward_wallet": req.reward_wallet,
+                    "status": "success"
+                })))
+            }
             Err(e) => {
-                warn!("Withdraw rewards failed: {}", e);
-                Err(warp::reject())
+                warn!("Set reward wallet failed: {}", e);
+                Ok(warp::reply::json(&serde_json::json!({
+                    "error": e.to_string(),
+                    "status": "error"
+                })))
+            }
+        }
+    }
+
+    /// Handle getting a validator's reward wallet
+    async fn handle_get_reward_wallet(
+        validator_address: String,
+        state: Arc<NodeState>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        match state.staking_manager.get_reward_wallet(&validator_address).await {
+            Ok(wallet) => {
+                Ok(warp::reply::json(&serde_json::json!({
+                    "validator_address": validator_address,
+                    "reward_wallet": wallet,
+                    "status": "success"
+                })))
+            }
+            Err(e) => {
+                warn!("Get reward wallet failed: {}", e);
+                Ok(warp::reply::json(&serde_json::json!({
+                    "error": e.to_string(),
+                    "status": "error"
+                })))
             }
         }
     }
@@ -3100,21 +3895,85 @@ async fn main() -> Result<()> {
                 if let Some(ref p2p) = p2p_state.p2p_network {
                     let peer_count = p2p.read().await.peer_count().await;
                     info!("📢 Announcing validator {} to P2P network ({} peers connected)", addr, peer_count);
-                    // Use placeholder pubkey/signature - validators register via RPC with real keys
-                    let pubkey = [0u8; 32];
-                    let signature = Vec::new();
-                    if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
-                        warn!("Failed to announce validator: {}", e);
+                    
+                    // Get our current height for sync detection
+                    let current_height = p2p_state.blockchain.read().await.get_height().await;
+                    
+                    // Get pubkey from our actual signing key (NOT from consensus, which may have placeholder)
+                    // This ensures the pubkey matches the signature we create
+                    let (pubkey, signature) = if let Some(ref signing_key) = p2p_state.validator_signing_key {
+                        use ed25519_dalek::Signer;
+                        let peer_id = p2p.read().await.peer_id().to_string();
+                        let message = format!("{}{}{}", addr, stake, peer_id);
+                        let sig = signing_key.sign(message.as_bytes());
+                        let pk = signing_key.verifying_key().to_bytes();
+                        (pk, sig.to_bytes().to_vec())
                     } else {
-                        info!("✅ Announced validator {} to P2P network", addr);
+                        warn!("⚠️ No signing key available for validator announcement");
+                        ([0u8; 32], Vec::new())
+                    };
+                    
+                    if pubkey == [0u8; 32] {
+                        warn!("⚠️ Skipping validator announcement - no valid pubkey");
+                    } else if signature.is_empty() {
+                        warn!("⚠️ Skipping validator announcement - no signing key");
+                    } else {
+                        info!("📢 Announcing with pubkey: {}... height: {}", hex::encode(&pubkey[..8]), current_height);
+                        if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature, current_height).await {
+                            warn!("Failed to announce validator: {}", e);
+                        } else {
+                            info!("✅ Announced validator {} to P2P network (height: {})", addr, current_height);
+                        }
                     }
                 }
             }
+            
+            // Request validator set from peers on startup to sync existing validators
+            if let Some(ref p2p) = p2p_state.p2p_network {
+                let known_count = {
+                    let consensus = p2p_state.consensus.read().await;
+                    consensus.validator_count() as u32
+                };
+                info!("📡 Requesting validator set from peers (we know {} validators)", known_count);
+                if let Err(e) = p2p.read().await.request_validator_set(known_count).await {
+                    warn!("Failed to request validator set: {}", e);
+                }
+            }
+            
+            // Create timer for periodic re-announcement (every 60 seconds)
+            let mut reannounce_interval = tokio::time::interval(Duration::from_secs(60));
+            reannounce_interval.tick().await; // Skip immediate first tick
             
             // P2P message handler loop
             loop {
                 // Process incoming P2P messages with timeout
                 tokio::select! {
+                    // Periodic validator re-announcement for network churn
+                    _ = reannounce_interval.tick() => {
+                        if let (Some(ref addr), Some(stake)) = (&validator_addr, validator_stake) {
+                            if let Some(ref p2p) = p2p_state.p2p_network {
+                                // Get actual validator pubkey from consensus engine
+                                // Get pubkey and signature from actual signing key
+                                if let Some(ref signing_key) = p2p_state.validator_signing_key {
+                                    use ed25519_dalek::Signer;
+                                    let peer_id = p2p.read().await.peer_id().to_string();
+                                    let message = format!("{}{}{}", addr, stake, peer_id);
+                                    let signature = signing_key.sign(message.as_bytes()).to_bytes().to_vec();
+                                    let pubkey = signing_key.verifying_key().to_bytes();
+                                    
+                                    // Get current height for sync detection
+                                    let current_height = p2p_state.blockchain.read().await.get_height().await;
+                                    let peer_count = p2p.read().await.peer_count().await;
+                                    
+                                    if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature, current_height).await {
+                                        warn!("Failed to re-announce validator: {}", e);
+                                    } else {
+                                        info!("📢 Re-announced validator {} (height: {}, {} peers)", addr, current_height, peer_count);
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // Handle incoming messages from P2P network
                     Some(msg) = async { 
                         if let Some(ref mut rx) = message_rx { 
@@ -3124,37 +3983,168 @@ async fn main() -> Result<()> {
                         } 
                     } => {
                         match msg {
-                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, pubkey: _, signature: _ } => {
-                                // Check if validator is already registered
-                                let consensus = p2p_state.consensus.read().await;
-                                if !consensus.is_validator(address) {
-                                    // TODO(Phase 4): NetworkMessage::ValidatorAnnounce should include pubkey field
-                                    // For now, log a warning and skip registration without valid pubkey
-                                    // This prevents placeholder pubkeys in production
-                                    warn!("⚠️ Validator {} announced via P2P but pubkey not in message - \
-                                           use RPC /validators/create with public_key to register", address);
-                                    // Skip adding to consensus without verified pubkey
-                                    // Validators must register via RPC with their Ed25519 public key
+                            NetworkMessage::ValidatorAnnounce { ref address, stake, ref peer_id, pubkey, signature: _, current_height } => {
+                                // ====================================================================
+                                // ENTERPRISE-GRADE FIX: P2P announcements are for DISCOVERY ONLY
+                                // ====================================================================
+                                // Validators MUST register on-chain via /staking/create_validator
+                                // P2P announcements only register pubkey for signature verification
+                                // This ensures all validators have the SAME view of the validator set
+                                // (derived from blockchain state, not P2P message order)
+                                // ====================================================================
+                                
+                                // Register pubkey for signature verification (discovery only)
+                                if pubkey != [0u8; 32] {
+                                    if let Some(ref p2p) = p2p_state.p2p_network {
+                                        p2p.read().await.register_validator_pubkey(address.clone(), pubkey).await;
+                                    }
                                 }
-                                info!("📡 Received validator announcement: {} (stake: {}, peer: {})", 
-                                      address, stake, peer_id);
+                                
+                                // CRITICAL: Update peer height for sync detection
+                                // This allows us to know when peers are ahead and request sync
+                                if current_height > 0 {
+                                    if let Some(ref block_sync) = p2p_state.block_sync_manager {
+                                        block_sync.write().await.update_peer_height(address.clone(), current_height).await;
+                                    }
+                                }
+                                
+                                // Check if already in consensus (via on-chain registration)
+                                let is_registered = {
+                                    let consensus = p2p_state.consensus.read().await;
+                                    consensus.is_validator(address)
+                                };
+                                
+                                if is_registered {
+                                    info!("📡 Validator {} online (stake: {}, peer: {}, height: {}) - already in consensus", 
+                                          address, stake, peer_id, current_height);
+                                } else {
+                                    // NOT adding to consensus - validator must register on-chain first
+                                    info!("📡 Validator {} discovered via P2P (stake: {}, peer: {}, height: {}) - awaiting on-chain registration", 
+                                          address, stake, peer_id, current_height);
+                                }
+                            }
+                            NetworkMessage::ValidatorSetRequest { known_count } => {
+                                // Another node is requesting our validator set
+                                info!("📥 Validator set request received (they know {} validators)", known_count);
+                                
+                                // Get our validators from consensus
+                                let consensus = p2p_state.consensus.read().await;
+                                let our_validators: Vec<sultan_core::p2p::ValidatorInfo> = consensus
+                                    .get_active_validators()
+                                    .iter()
+                                    .map(|v| sultan_core::p2p::ValidatorInfo {
+                                        address: v.address.clone(),
+                                        stake: v.stake,
+                                        pubkey: v.pubkey,
+                                    })
+                                    .collect();
+                                
+                                // Only send if we have more validators than they know about
+                                if our_validators.len() as u32 > known_count {
+                                    if let Some(ref p2p) = p2p_state.p2p_network {
+                                        if let Err(e) = p2p.read().await.send_validator_set(our_validators).await {
+                                            warn!("Failed to send validator set: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                            NetworkMessage::ValidatorSetResponse { validators } => {
+                                // ====================================================================
+                                // ENTERPRISE-GRADE: Validator set response is for DISCOVERY ONLY
+                                // ====================================================================
+                                // Do NOT add validators to consensus from P2P sync
+                                // Validators must register on-chain for consensus participation
+                                // We only register pubkeys for signature verification
+                                // ====================================================================
+                                info!("📥 Received validator set with {} validators (for discovery)", validators.len());
+                                
+                                let mut discovered_count = 0;
+                                for validator in validators {
+                                    if validator.pubkey == [0u8; 32] {
+                                        continue;
+                                    }
+                                    
+                                    // Register pubkey for signature verification only
+                                    if let Some(ref p2p) = p2p_state.p2p_network {
+                                        p2p.read().await.register_validator_pubkey(validator.address.clone(), validator.pubkey).await;
+                                        discovered_count += 1;
+                                    }
+                                }
+                                
+                                if discovered_count > 0 {
+                                    info!("📊 Discovered {} validator pubkeys for signature verification", discovered_count);
+                                }
                             }
                             NetworkMessage::BlockProposal { height, proposer, block_hash, block_data, proposer_signature: _ } => {
                                 // === PRODUCTION BLOCK SYNC ===
                                 // Process incoming block from another validator
-                                debug!("📥 Received block proposal: height={}, proposer={}, hash={}", 
+                                info!("📥 HANDLER: BlockProposal received - height={}, proposer={}, hash={}", 
                                        height, proposer, &block_hash[..16.min(block_hash.len())]);
                                 
-                                // Validate proposer is a registered validator
-                                let consensus = p2p_state.consensus.read().await;
-                                if !consensus.is_validator(&proposer) {
+                                // Validate proposer is a registered validator FIRST
+                                // (before updating peer height to avoid sync deadlock)
+                                // CRITICAL: Validate proposer and extract expected_proposer, then DROP
+                                // consensus lock BEFORE acquiring block_sync lock to prevent deadlock.
+                                // Lock ordering: always acquire block_sync before consensus, or ensure
+                                // they are never held simultaneously.
+                                let (is_valid_proposer, expected_primary_proposer) = {
+                                    let consensus = p2p_state.consensus.read().await;
+                                    let valid = consensus.is_validator(&proposer);
+                                    // Get the expected PRIMARY proposer for this height
+                                    let expected = consensus.select_proposer_for_height(height);
+                                    (valid, expected)
+                                }; // consensus lock dropped here
+                                
+                                if !is_valid_proposer {
                                     warn!("❌ Block rejected: proposer {} is not a registered validator", proposer);
                                     continue;
                                 }
                                 
-                                // Verify this is the expected proposer
-                                let expected_proposer = consensus.current_proposer.clone();
-                                drop(consensus); // Release lock before acquiring write lock
+                                // Track missed blocks: if block came from a fallback proposer,
+                                // the primary proposer missed their slot
+                                // 
+                                // ENTERPRISE-GRADE PROTECTION:
+                                // 1. Verify the actual proposer is in the valid proposer order
+                                // 2. Use deduplication in consensus to prevent double-counting
+                                // 3. Only valid fallbacks can trigger missed block tracking
+                                if let Some(ref primary) = expected_primary_proposer {
+                                    if primary != &proposer {
+                                        // Verify the actual proposer is a valid fallback for this height
+                                        let is_valid_fallback = {
+                                            if let Ok(guard) = p2p_state.consensus.try_read() {
+                                                let order = guard.get_proposer_order_for_height(height);
+                                                // Check proposer is in the order AND not in position 0 (that's primary)
+                                                order.iter().skip(1).any(|addr| addr == &proposer)
+                                            } else {
+                                                false // Can't verify, don't track
+                                            }
+                                        };
+                                        
+                                        if is_valid_fallback {
+                                            // Primary proposer missed their slot, block produced by valid fallback
+                                            info!("⚠️ Primary proposer {} missed slot for height {}, block from fallback {}", 
+                                                  primary, height, proposer);
+                                            // Record missed block for the primary (may trigger slashing)
+                                            // Note: record_missed_block has built-in deduplication
+                                            if let Ok(mut consensus) = p2p_state.consensus.try_write() {
+                                                if let Ok(Some(slash_amount)) = consensus.record_missed_block(primary, height) {
+                                                    warn!("🔪 Validator {} slashed {} for missing block {}", 
+                                                          primary, slash_amount, height);
+                                                }
+                                            }
+                                        } else {
+                                            warn!("⚠️ Block from {} is neither primary nor valid fallback for height {}", 
+                                                  proposer, height);
+                                        }
+                                    }
+                                }
+                                
+                                // Only update peer height for valid proposers
+                                // This prevents sync deadlock from unknown validators
+                                // Now safe: consensus lock is not held
+                                if let Some(ref block_sync) = p2p_state.block_sync_manager {
+                                    block_sync.write().await.update_peer_height(proposer.clone(), height).await;
+                                }
                                 
                                 // Deserialize block
                                 let block: Block = match bincode::deserialize(&block_data) {
@@ -3165,63 +4155,99 @@ async fn main() -> Result<()> {
                                     }
                                 };
                                 
-                                // Get our current height - Sultan Chain unified blockchain
-                                let our_height = p2p_state.blockchain.read().await.get_height().await;
+                                // Get our current height - DEADLOCK PREVENTION: use try_read
+                                let our_height = match p2p_state.blockchain.try_read() {
+                                    Ok(guard) => {
+                                        let h = guard.get_height().await;
+                                        drop(guard); // Explicit drop
+                                        h
+                                    }
+                                    Err(_) => {
+                                        debug!("Skipping block proposal - blockchain lock busy");
+                                        continue;
+                                    }
+                                };
                                 
                                 // Only accept blocks that are ahead of us
                                 if height <= our_height {
-                                    debug!("Block {} already processed (our height: {})", height, our_height);
+                                    info!("⏭️ Block {} already processed (our height: {})", height, our_height);
+                                    continue;
+                                }
+                                
+                                // If we're far behind (> 10 blocks), request sync instead of waiting
+                                if height > our_height + 10 {
+                                    info!("🔄 We're behind: our height {} vs incoming block {}. Requesting sync...", 
+                                          our_height, height);
+                                    
+                                    // Send sync request via P2P
+                                    if let Some(ref p2p) = p2p_state.p2p_network {
+                                        let from = our_height + 1;
+                                        let to = std::cmp::min(our_height + 100, height);
+                                        if let Err(e) = p2p.read().await.request_sync(from, to).await {
+                                            warn!("Failed to send sync request: {}", e);
+                                        }
+                                    }
                                     continue;
                                 }
                                 
                                 // Accept block if it's the next one we need
                                 if height == our_height + 1 {
-                                    info!("📦 Applying block {} from {}", height, proposer);
+                                    info!("📦 Applying block {} from {} (our height was {})", height, proposer, our_height);
                                     
-                                    // Apply block to our chain - Sultan Chain unified architecture
-                                    let blockchain = p2p_state.blockchain.write().await;
-                                    match blockchain.apply_block(block.clone()).await {
-                                        Ok(_) => {
-                                            info!("✅ Synced block {} from {} ({} txs)", 
-                                                  height, proposer, block.transactions.len());
+                                    // Apply block - DEADLOCK PREVENTION: use try_read to avoid blocking
+                                    let apply_result = match p2p_state.blockchain.try_read() {
+                                        Ok(blockchain) => {
+                                            let result = blockchain.apply_block(block.clone()).await;
+                                            drop(blockchain); // Explicit drop
+                                            Some(result)
+                                        }
+                                        Err(_) => {
+                                            debug!("Skipping block apply - blockchain lock busy");
+                                            None
+                                        }
+                                    };
+                                    
+                                    if let Some(result) = apply_result {
+                                        match result {
+                                            Ok(_) => {
+                                                info!("✅ Synced block {} from {} ({} txs)", 
+                                                      height, proposer, block.transactions.len());
                                             
-                                            // === DOWNTIME DETECTION ===
-                                            // If expected proposer didn't produce this block, count as missed
-                                            if let Some(ref expected) = expected_proposer {
-                                                if expected != &proposer {
-                                                    // Someone else produced when expected didn't
-                                                    if let Err(e) = p2p_state.staking_manager
-                                                        .record_block_missed(expected).await {
-                                                        warn!("Failed to record missed block for {}: {}", expected, e);
-                                                    } else {
-                                                        let missed = p2p_state.staking_manager
-                                                            .get_missed_blocks(expected).await;
-                                                        if missed > 0 && missed % 10 == 0 {
-                                                            warn!("⚠️ Validator {} has missed {} blocks", expected, missed);
-                                                        }
+                                                // Update block sync manager height - now safe, blockchain lock is released
+                                                if let Some(ref block_sync) = p2p_state.block_sync_manager {
+                                                    if let Ok(mut sync) = block_sync.try_write() {
+                                                        sync.set_height(height).await;
                                                     }
                                                 }
-                                            }
                                             
-                                            // Record that actual proposer signed
-                                            let _ = p2p_state.staking_manager
-                                                .record_block_signed(&proposer).await;
-                                        }
-                                        Err(e) => {
-                                            warn!("❌ Failed to apply block {}: {}", height, e);
-                                            continue;
+                                                // Note: Missed block tracking is already handled above when we detect
+                                                // primary != proposer (around line 3573). No duplicate tracking needed here.
+                                            
+                                                // Record that actual proposer signed
+                                                let _ = p2p_state.staking_manager
+                                                    .record_block_signed(&proposer).await;
+                                            
+                                                // Advance consensus round after accepting block
+                                                // DEADLOCK PREVENTION: Use try_write to avoid blocking
+                                                if let Ok(mut consensus) = p2p_state.consensus.try_write() {
+                                                    let _ = consensus.select_proposer();
+                                                    drop(consensus); // Explicit drop
+                                                }
+                                            
+                                                // Save to storage
+                                                if let Ok(storage) = p2p_state.storage.try_read() {
+                                                    let _ = storage.save_block(&block);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                warn!("❌ Failed to apply block {}: {}", height, e);
+                                            }
                                         }
                                     }
-                                    drop(blockchain);
-                                    
-                                    // Advance consensus round after accepting block
-                                    let mut consensus = p2p_state.consensus.write().await;
-                                    let _ = consensus.select_proposer();
-                                    
-                                    // Save to storage
-                                    if let Ok(storage) = p2p_state.storage.try_read() {
-                                        let _ = storage.save_block(&block);
-                                    }
+                                } else {
+                                    // Block is ahead but not the immediate next one - gap in sequence
+                                    info!("⏳ Block {} received but we need {} first (gap of {} blocks)", 
+                                          height, our_height + 1, height - our_height - 1);
                                 }
                             }
                             NetworkMessage::Transaction { tx_hash, tx_data } => {
@@ -3232,13 +4258,17 @@ async fn main() -> Result<()> {
                                         info!("📥 Received transaction from peer: {} -> {} amount={}", 
                                               tx.from, tx.to, tx.amount);
                                         
-                                        // Add to our local mempool - Sultan Chain unified blockchain
-                                        let blockchain = p2p_state.blockchain.write().await;
-                                        if let Err(e) = blockchain.submit_transaction(tx.clone()).await {
-                                            debug!("Failed to add peer tx to mempool: {}", e);
+                                        // DEADLOCK PREVENTION: Use try_write to avoid blocking
+                                        if let Ok(blockchain) = p2p_state.blockchain.try_write() {
+                                            if let Err(e) = blockchain.submit_transaction(tx.clone()).await {
+                                                debug!("Failed to add peer tx to mempool: {}", e);
+                                            } else {
+                                                let pending = blockchain.pending_count().await;
+                                                debug!("Added peer tx to mempool [pending: {}]", pending);
+                                            }
+                                            drop(blockchain); // Explicit drop
                                         } else {
-                                            let pending = blockchain.pending_count().await;
-                                            debug!("Added peer tx to mempool [pending: {}]", pending);
+                                            debug!("Skipping tx add - blockchain lock busy");
                                         }
                                     }
                                     Err(e) => {
@@ -3246,8 +4276,129 @@ async fn main() -> Result<()> {
                                     }
                                 }
                             }
+                            NetworkMessage::SyncRequest { from_height, to_height } => {
+                                // === BLOCK SYNC REQUEST HANDLER ===
+                                // Another node is behind and requesting blocks from us
+                                info!("📥 Received sync request for blocks {}-{}", from_height, to_height);
+                                
+                                // Limit response size to prevent DoS
+                                let max_blocks: u64 = 100;
+                                let to_height = std::cmp::min(to_height, from_height + max_blocks - 1);
+                                
+                                // Get our current height
+                                let our_height = p2p_state.blockchain.read().await.get_height().await;
+                                
+                                // Only respond if we have the requested blocks
+                                if from_height > our_height {
+                                    debug!("Cannot serve sync request: requested {} but our height is {}", 
+                                           from_height, our_height);
+                                    continue;
+                                }
+                                
+                                // Collect blocks from storage
+                                let mut blocks_data: Vec<Vec<u8>> = Vec::new();
+                                let storage = p2p_state.storage.read().await;
+                                let actual_to = std::cmp::min(to_height, our_height);
+                                for h in from_height..=actual_to {
+                                    if let Ok(Some(block)) = storage.get_block_by_height(h) {
+                                        if let Ok(data) = bincode::serialize(&block) {
+                                            blocks_data.push(data);
+                                        }
+                                    }
+                                }
+                                drop(storage);
+                                
+                                if !blocks_data.is_empty() {
+                                    // Send sync response using P2P helper
+                                    if let Some(ref p2p) = p2p_state.p2p_network {
+                                        if let Err(e) = p2p.read().await.send_sync_response(blocks_data).await {
+                                            warn!("Failed to send sync response: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                            NetworkMessage::SyncResponse { blocks } => {
+                                // === BLOCK SYNC RESPONSE HANDLER ===
+                                // We requested blocks and received them
+                                info!("📥 Received sync response with {} blocks", blocks.len());
+                                
+                                let mut applied_count = 0;
+                                for block_data in blocks {
+                                    // Deserialize block
+                                    let block: Block = match bincode::deserialize(&block_data) {
+                                        Ok(b) => b,
+                                        Err(e) => {
+                                            warn!("Failed to deserialize sync block: {}", e);
+                                            continue;
+                                        }
+                                    };
+                                    
+                                    // Get current height - DEADLOCK PREVENTION: use try_read
+                                    let our_height = match p2p_state.blockchain.try_read() {
+                                        Ok(guard) => {
+                                            let h = guard.get_height().await;
+                                            drop(guard); // Explicit drop
+                                            h
+                                        }
+                                        Err(_) => {
+                                            debug!("Skipping sync block - blockchain lock busy");
+                                            continue;
+                                        }
+                                    };
+                                    
+                                    if block.index == our_height + 1 {
+                                        // Apply the block - DEADLOCK PREVENTION: use try_write
+                                        let blockchain = match p2p_state.blockchain.try_write() {
+                                            Ok(guard) => guard,
+                                            Err(_) => {
+                                                debug!("Skipping sync block {} - blockchain write lock busy", block.index);
+                                                continue;
+                                            }
+                                        };
+                                        match blockchain.apply_block(block.clone()).await {
+                                            Ok(_) => {
+                                                applied_count += 1;
+                                                drop(blockchain); // Explicit drop before other operations
+                                                
+                                                // Update block sync manager height
+                                                if let Some(ref block_sync) = p2p_state.block_sync_manager {
+                                                    if let Ok(mut sync) = block_sync.try_write() {
+                                                        sync.set_height(block.index).await;
+                                                    }
+                                                }
+                                                // Save to storage
+                                                if let Ok(storage) = p2p_state.storage.try_read() {
+                                                    let _ = storage.save_block(&block);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                drop(blockchain);
+                                                warn!("Failed to apply sync block {}: {}", block.index, e);
+                                                break; // Stop on first error to maintain sequence
+                                            }
+                                        }
+                                        
+                                        // Advance consensus - DEADLOCK PREVENTION: use try_write
+                                        if let Ok(mut consensus) = p2p_state.consensus.try_write() {
+                                            let _ = consensus.select_proposer();
+                                            drop(consensus); // Explicit drop
+                                        }
+                                    } else if block.index <= our_height {
+                                        debug!("Sync block {} already applied", block.index);
+                                    } else {
+                                        debug!("Sync block {} out of sequence (our height: {})", block.index, our_height);
+                                    }
+                                }
+                                
+                                if applied_count > 0 {
+                                    if let Ok(blockchain) = p2p_state.blockchain.try_read() {
+                                        let new_height = blockchain.get_height().await;
+                                        info!("✅ Synced {} blocks. New height: {}", applied_count, new_height);
+                                    }
+                                }
+                            }
                             _ => {
-                                // Other message types handled elsewhere
+                                // Other message types handled elsewhere (BlockVote, etc.)
                             }
                         }
                     }
@@ -3262,12 +4413,23 @@ async fn main() -> Result<()> {
                                 if count % 6 == 0 {
                                     let peer_count = p2p.read().await.peer_count().await;
                                     if peer_count > 0 {
-                                        let pubkey = [0u8; 32];
-                                        let signature = Vec::new();
-                                        if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature).await {
-                                            debug!("Failed to re-announce validator: {}", e);
-                                        } else {
-                                            info!("📢 Re-announced validator {} ({} peers)", addr, peer_count);
+                                        // Get actual pubkey from consensus
+                                        // Get pubkey and signature from actual signing key
+                                        if let Some(ref signing_key) = p2p_state.validator_signing_key {
+                                            use ed25519_dalek::Signer;
+                                            let peer_id = p2p.read().await.peer_id().to_string();
+                                            let message = format!("{}{}{}", addr, stake, peer_id);
+                                            let signature = signing_key.sign(message.as_bytes()).to_bytes().to_vec();
+                                            let pubkey = signing_key.verifying_key().to_bytes();
+                                            
+                                            // Get current height for sync detection
+                                            let current_height = p2p_state.blockchain.read().await.get_height().await;
+                                            
+                                            if let Err(e) = p2p.read().await.announce_validator(addr, stake, pubkey, signature, current_height).await {
+                                                debug!("Failed to re-announce validator: {}", e);
+                                            } else {
+                                                info!("📢 Re-announced validator {} (height: {}, {} peers)", addr, current_height, peer_count);
+                                            }
                                         }
                                     }
                                 }

@@ -3,7 +3,7 @@
   ║  SULTAN BLOCK EXPLORER                                                    ║
   ║                                                                           ║
   ║  Block explorer UI for viewing Sultan blockchain data.                    ║
-  ║  Connects to RPC at rpc.sltn.io (production) or localhost:8545 (dev)      ║
+  ║  Connects to RPC at rpc.sltn.io (production) or localhost:26657 (dev)     ║
   ║                                                                           ║
   ║  ⚠️  DO NOT CONFUSE WITH:                                                 ║
   ║      - /wallet-extension/index.html (PWA wallet - wallet.sltn.io)         ║
@@ -16,7 +16,7 @@
 <html lang="en">
 <head>
     <!-- Security Headers -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://rpc.sltn.io http://localhost:8545; frame-src 'none'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://rpc.sltn.io http://localhost:26657; frame-src 'none'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta http-equiv="X-Frame-Options" content="DENY" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
@@ -362,6 +362,55 @@
             font-family: 'JetBrains Mono', monospace;
         }
         
+        /* Voting Power Bar */
+        .voting-power {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .voting-power-bar {
+            height: 6px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            border-radius: 3px;
+            min-width: 20px;
+        }
+        
+        .voting-power span {
+            font-size: 0.875em;
+            color: var(--text-secondary);
+            min-width: 50px;
+        }
+        
+        /* Uptime Badges */
+        .uptime-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .uptime-excellent {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+        
+        .uptime-good {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+        }
+        
+        .uptime-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+        
+        .uptime-poor {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        
         /* Loading */
         .loading {
             text-align: center;
@@ -521,13 +570,15 @@
                         <tr>
                             <th>Validator</th>
                             <th>Stake</th>
+                            <th>Voting Power</th>
+                            <th>Uptime</th>
                             <th>Commission</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="validatorsTable">
                         <tr>
-                            <td colspan="4" class="loading">
+                            <td colspan="6" class="loading">
                                 <div class="spinner"></div>
                                 Loading validators...
                             </td>
@@ -552,7 +603,7 @@
         // Configuration
         const RPC_ENDPOINTS = [
             'https://rpc.sltn.io',
-            'http://localhost:8545'
+            'http://localhost:26657'
         ];
         let activeRpc = null;
         let isConnected = false;
@@ -661,30 +712,54 @@
                 
                 const tbody = document.getElementById('validatorsTable');
                 if (validators.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No validators found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No validators found</td></tr>';
                     return;
                 }
                 
-                tbody.innerHTML = validators.slice(0, 10).map((v, i) => `
+                // Helper to get uptime color class
+                const getUptimeClass = (uptime) => {
+                    if (uptime >= 99) return 'uptime-excellent';
+                    if (uptime >= 95) return 'uptime-good';
+                    if (uptime >= 90) return 'uptime-warning';
+                    return 'uptime-poor';
+                };
+                
+                tbody.innerHTML = validators.slice(0, 10).map((v, i) => {
+                    const stake = v.total_stake || v.tokens || v.stake || 0;
+                    const uptime = v.uptime_percent ?? 100;
+                    const votingPower = v.voting_power_percent ?? (100 / validators.length);
+                    const commission = (v.commission_rate || v.commission || 0) * 100;
+                    
+                    return `
                     <tr>
                         <td>
                             <div class="validator-row">
                                 <div class="validator-rank">${i + 1}</div>
                                 <div class="validator-info">
                                     <div class="validator-name">${v.moniker || 'Validator ' + (i + 1)}</div>
-                                    <div class="validator-address">${shortenHash(v.operator_address || v.address, 10)}</div>
+                                    <div class="validator-address">${shortenHash(v.validator_address || v.operator_address || v.address, 10)}</div>
                                 </div>
                             </div>
                         </td>
-                        <td>${formatSltn(v.tokens || v.stake)} SLTN</td>
-                        <td>${((v.commission_rate || v.commission || 0) * 100).toFixed(1)}%</td>
+                        <td>${formatSltn(stake)} SLTN</td>
+                        <td>
+                            <div class="voting-power">
+                                <div class="voting-power-bar" style="width: ${Math.min(votingPower * 3, 100)}%"></div>
+                                <span>${votingPower.toFixed(2)}%</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="uptime-badge ${getUptimeClass(uptime)}">${uptime.toFixed(2)}%</span>
+                        </td>
+                        <td>${commission.toFixed(1)}%</td>
                         <td><span class="badge ${v.jailed ? 'badge-warning' : 'badge-success'}">${v.jailed ? 'Jailed' : 'Active'}</span></td>
                     </tr>
-                `).join('');
+                `;
+                }).join('');
             } catch (e) {
                 console.error('Failed to load validators:', e);
                 document.getElementById('validatorsTable').innerHTML = 
-                    '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Failed to load validators</td></tr>';
+                    '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Failed to load validators</td></tr>';
             }
         }
         

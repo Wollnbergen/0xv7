@@ -12,10 +12,10 @@ Sultan is a **native Rust L1 blockchain** with every component custom-built for 
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `main.rs` | 2,938 | Node binary, RPC server (30+ endpoints), P2P networking, keygen CLI |
+| `main.rs` | 4,736 | Node binary, RPC server (30+ endpoints), P2P networking, keygen CLI |
 | `lib.rs` | ~100 | Library exports for all modules |
-| `consensus.rs` | 1,078 | Proof of Stake consensus engine (17 tests, Ed25519) |
-| `staking.rs` | ~1,540 | Validator registration, delegation, rewards, slashing with auto-persist (21 tests) |
+| `consensus.rs` | 1,351 | Proof of Stake consensus engine (26 tests, Ed25519, enterprise failover) |
+| `staking.rs` | ~1,640 | Validator registration, delegation, rewards (with reward_wallet), uptime tracking (blocks_signed/blocks_missed), slashing with auto-persist (21 tests) |
 | `governance.rs` | ~1,900 | On-chain proposals, voting, slashing proposals, encrypted storage (21 tests) |
 | `storage.rs` | ~1,120 | Persistent state with AES-256-GCM encryption, HKDF key derivation (14 tests) |
 | `token_factory.rs` | ~880 | Native token creation with Ed25519 signatures (14 tests) |
@@ -27,13 +27,13 @@ Sultan is a **native Rust L1 blockchain** with every component custom-built for 
 | `economics.rs` | 100 | Inflation (fixed 4%), rewards, APY calculations |
 | `transaction_validator.rs` | 782 | Transaction validation (18 tests, typed errors, Ed25519 sig verify) |
 | `blockchain.rs` | 374 | Block/Transaction structures (with memo) |
-| `p2p.rs` | 1,025 | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify, 16 tests) |
+| `p2p.rs` | 1,200+ | libp2p P2P networking (GossipSub, Kademlia, DoS protection, Ed25519 sig verify, persistent node keys, validator discovery, height-based sync, 16 tests) |
 | `block_sync.rs` | 1,174 | Byzantine-tolerant block sync (voter verification, signature validation, 31 tests) |
 | `mev_protection.rs` | ~100 | MEV resistance |
 | `sharding.rs` | 362 | ⚠️ LEGACY (deprecated, tests only) |
 | `sharded_blockchain.rs` | 179 | ⚠️ LEGACY (deprecated, tests only) |
 
-**Total:** ~18,000+ lines of production Rust code (274 tests passing)
+**Total:** ~22,000+ lines of production Rust code (283+ tests passing)
 
 ### Cross-Chain Bridges (bridges/)
 
@@ -108,11 +108,128 @@ pub async fn swap(
 | Max History/Address | 10,000 entries (pruned) |
 | Mempool Ordering | Deterministic (timestamp/from/nonce) |
 | Signature Verification | Ed25519 STRICT mode |
-| Tests | 274 passing (lib tests) |
+| Tests | 283+ passing (lib tests) |
 | DEX Swap Fee | 0.3% total (0.2% to LP reserves, 0.1% to protocol) |
 | Protocol Fee Address | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (genesis treasury) |
-| Binary Version | v0.1.0 |
-| Binary SHA256 | `6440e837...de51` |
+| Genesis Wallet | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (receives validator APY) |
+| Binary Version | v0.2.0 |
+| Binary SHA256 | `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff` |
+| Bootstrap Peer | `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7` |
+
+---
+
+## Enterprise Consensus Features
+
+### PoS Proposer Selection with Failover (v0.1.5)
+Sultan uses an enterprise-grade Proof-of-Stake consensus with automatic failover:
+
+| Feature | Implementation |
+|---------|---------------|
+| Proposer Selection | Height-based, stake-weighted deterministic selection |
+| Fallback Threshold | 5 consecutive missed blocks before fallback |
+| Fallback Positions | Top 3 stake-weighted validators can act as fallbacks |
+| Missed Block Tracking | Height-based deduplication prevents double-counting |
+| Slashing | 100 consecutive misses triggers stake slash |
+| Memory Cleanup | Automatic cleanup of old missed block records (1000 block window) |
+
+**Key Constants (consensus.rs):**
+```rust
+pub const MAX_MISSED_BLOCKS_BEFORE_SLASH: u64 = 100;  // Slash threshold
+pub const FALLBACK_THRESHOLD_MISSED_BLOCKS: u64 = 5;  // When fallback kicks in
+pub const MAX_FALLBACK_POSITIONS: usize = 3;          // Only top 3 can fallback
+pub const MISSED_BLOCK_TRACKING_WINDOW: u64 = 1000;   // Memory cleanup window
+```
+
+### Proposer Failover Flow
+```
+Primary proposer offline for 5 consecutive blocks
+    ↓
+Fallback #1 (highest remaining stake) takes over
+    ↓
+If #1 also offline, Fallback #2 tries
+    ↓
+If #2 also offline, Fallback #3 tries
+    ↓
+Chain continues producing blocks (no single point of failure)
+```
+
+### Validator Registration Architecture (v0.1.6+)
+
+Sultan implements **enterprise-grade separation** between P2P discovery and consensus membership:
+
+| Layer | Purpose | Determines Consensus? |
+|-------|---------|----------------------|
+| **P2P Discovery** | Find validators, exchange pubkeys | ❌ No |
+| **On-Chain Registration** | Stake tokens, join validator set | ✅ Yes |
+
+**Why This Matters:**
+- All nodes derive validator set from **blockchain state** (identical everywhere)
+- P2P announcements only register pubkeys for **signature verification**
+- Prevents divergent validator sets that cause chain stalls
+- Provides audit trail and economic security (stake required)
+
+**Validator Registration Flow:**
+```
+1. New validator sets up node → P2P connects to network
+2. Node discovers other validators via ValidatorAnnounce (pubkey + current height)
+3. Validator submits on-chain registration:
+   POST /staking/create_validator { address, stake_amount, commission_rate }
+4. Blockchain processes registration → validator added to on-chain state
+5. All nodes see new validator in next block → consensus includes them
+```
+
+**Key Principle:**
+> P2P is for discovery. Blockchain is for consensus.
+
+### Byzantine Fault Tolerance
+- Tolerates 33% malicious/offline validators
+- Automatic recovery when validators come back online
+- Missed block counts reset after successful block production
+
+### Block Timestamp Guarantee (v0.1.7+)
+Sultan enforces **strictly increasing block timestamps** to prevent consensus failures:
+
+| Feature | Implementation |
+|---------|---------------|
+| Timestamp Source | `SystemTime::now()` with monotonic guarantee |
+| Minimum Increment | `max(current_time, prev_timestamp + 1)` |
+| Validation | Reject blocks where `timestamp <= prev_timestamp` |
+
+**Why This Matters:**
+When multiple validators operate in rapid succession (e.g., at genesis or recovery), blocks could be created within the same second. Without this protection, identical timestamps cause block validation to fail with "Block timestamp must be greater than previous block."
+
+**Implementation (sharded_blockchain_production.rs):**
+```rust
+let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+let timestamp = std::cmp::max(current_time, prev_timestamp + 1);
+```
+
+See [Validator Deadlock Postmortem](docs/VALIDATOR_DEADLOCK_POSTMORTEM.md) Issue #7 for details.
+
+### Height-Based Validator Sync (v0.1.8+)
+Sultan validators broadcast their current chain height in `ValidatorAnnounce` messages, enabling automatic sync detection:
+
+| Feature | Implementation |
+|---------|---------------|
+| Height Broadcast | `ValidatorAnnounce` includes `current_height: u64` field |
+| Peer Height Tracking | `update_peer_height()` called on announce receive |
+| Sync Detection | Validators detect peers ahead and request sync |
+| Auto-Recovery | Validators automatically catch up after downtime |
+
+**Why This Matters:**
+When a validator restarts or experiences network partition, it can immediately detect if other validators are ahead by examining incoming `ValidatorAnnounce` messages. This eliminates the previous failure mode where validators at different heights couldn't detect desync.
+
+**Implementation (p2p.rs + main.rs):**
+```rust
+pub struct ValidatorAnnounce {
+    pub address: String,
+    pub stake: u64,
+    pub peer_id: String,
+    pub pubkey: [u8; 32],
+    pub signature: Vec<u8>,
+    pub current_height: u64,  // NEW: Chain height for sync detection
+}
+```
 
 ---
 
@@ -143,6 +260,21 @@ The Sultan Wallet PWA has undergone comprehensive security review (January 2026)
 | TOTP 2FA | With 8 backup codes |
 | Test Coverage | 219 tests passing |
 
+### Browser Extension Security - v1.0.0
+The Sultan Wallet Chrome extension (Manifest V3) provides dApp integration:
+
+| Feature | Implementation |
+|---------|---------------|
+| CSP | `script-src 'self'; object-src 'none'; frame-ancestors 'none'` |
+| Rate Limiting | 60 req/min (background), 100 msg/min (content script) |
+| Audit Logging | 16 security event types to chrome.storage.local |
+| Phishing Detection | Pattern matching + homograph attack detection |
+| Provider Security | Object.freeze, non-writable window.sultan |
+| Crypto | Same as PWA (PBKDF2 600K, AES-256-GCM, Ed25519) |
+| dApp API | `window.sultan.connect()`, `signAndSendTransaction()` |
+
+See [Browser Extension Security Audit](docs/BROWSER_EXTENSION_SECURITY_AUDIT.md) for full details.
+
 ### Governance Security
 | Protection | Mechanism |
 |------------|-----------|
@@ -167,10 +299,33 @@ The `_archive/` folder contains legacy/experimental code:
 
 ## Deployment
 
-### Production
-- **RPC:** https://rpc.sltn.io
-- **Wallet:** https://wallet.sltn.io
-- **Validators:** Dynamic (anyone can join with 10,000 SLTN)
+### Production Infrastructure
+| Service | URL | Hosting |
+|---------|-----|---------|
+| **RPC** | https://rpc.sltn.io | NYC Validator (DigitalOcean) |
+| **Wallet** | https://wallet.sltn.io | Replit (Wollnbergen/PWA repo) |
+| **Backup Wallet** | https://rpc.sltn.io/wallet/ | NYC Validator |
+
+### Wallet Deployment Workflow
+The Sultan Wallet PWA is developed in `wallet-extension/` but deployed via a separate repo:
+
+```
+wallet-extension/ (0xv7)  →  Wollnbergen/PWA repo  →  Replit  →  wallet.sltn.io
+```
+
+**To deploy wallet changes:**
+```bash
+# 1. Sync changes to PWA repo and push
+./scripts/deploy_wallet.sh --push
+
+# 2. On Replit (wallet.sltn.io project):
+git pull origin main
+npm install
+npm run build
+```
+
+### Validators
+Dynamic validator set - anyone can join with 10,000 SLTN stake.
 
 ### Development
 ```bash
@@ -197,4 +352,26 @@ cargo test --workspace
 
 ---
 
-*Last updated: January 3, 2026 - Phase 6 security audit complete, v0.1.0 binary released, wallet v1.0.0 deployed*
+## Production Validator Set (v0.2.2)
+
+Sultan mainnet operates with **6 globally distributed validators**, each with equal voting power:
+
+| Validator | Address | Location | Voting Power |
+|-----------|---------|----------|-------------|
+| NYC | `sultan1valnyc...vnyc01` | New York, USA | 16.67% |
+| SFO | `sultan1valsfo...vsfo02` | San Francisco, USA | 16.67% |
+| FRA | `sultan1valfra...vfra03` | Frankfurt, EU | 16.67% |
+| AMS | `sultan1valams...vams04` | Amsterdam, EU | 16.67% |
+| SGP | `sultan1valsgp...vsgp05` | Singapore, APAC | 16.67% |
+| LON | `sultan1vallon...vlon06` | London, EU | 16.67% |
+
+**Staking System Features:**
+- Genesis validator auto-registration via `--genesis-validators` CLI flag
+- Real-time uptime tracking (`blocks_signed`, `blocks_missed`, `uptime_percent`)
+- Persistent staking state in RocksDB (`staking:state` key)
+- `--reset-staking` flag for state recovery/rebuild
+- `total_blocks_missed` lifetime counter for validator performance history
+
+---
+
+*Last updated: January 27, 2026 - v0.2.2 with staking system improvements, 6 validators live with equal voting power*
