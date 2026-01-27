@@ -835,16 +835,62 @@ Run the automated test suite to verify network capabilities:
 
 ### 7.3 Comparative Analysis
 
-| Blockchain | Block Time | Finality | TPS | Validator Count |
-|------------|------------|----------|-----|-----------------|
-| **Sultan L1** | **0.9-2s** | **<2s** | **64K** | **6** |
-| Ethereum | 12s | 15 min | 15-30 | 900K+ |
-| Solana | 0.4s | 13s | 65K | 1,500+ |
-| Cosmos Hub | 6s | 6s | 10K | 180 |
-| Avalanche | 2s | 1s | 4.5K | 1,200+ |
-| Polygon PoS | 2s | Variable | 7K | 100 |
+#### Blockchain Networks
 
-### 7.4 Scalability Projections
+| Blockchain | Block Time | Finality | TPS | Validators | Fees |
+|------------|------------|----------|-----|------------|------|
+| **Sultan L1** | **0.9-2s** | **<2s** | **64K** | **6** | **Zero** |
+| Ethereum | 12s | 15 min | 15-30 | 900K+ | $2-50 |
+| Solana | 0.4s | 13s | 65K theoretical | 1,500+ | ~$0.0002 |
+| Cosmos Hub | 6s | 6s | 10K | 180 | ~$0.01 |
+| Avalanche | 2s | 1s | 4.5K | 1,200+ | ~$0.01 |
+| Polygon PoS | 2s | Variable | 7K | 100 | ~$0.001 |
+
+#### Traditional Payment Networks
+
+| Network | Peak TPS | Avg TPS | Latency | Decentralized | Fees |
+|---------|----------|---------|---------|---------------|------|
+| **Sultan L1** | **64K** (32M max) | ~0 (early) | <2s | ✅ (6 validators) | Zero |
+| Visa | 65,000 | ~1,700 | Instant | ❌ Centralized | 1.5-3.5% |
+| Mastercard | 5,000 | ~500 | Instant | ❌ Centralized | 1.5-3.5% |
+| PayPal | 793 | ~200 | Instant | ❌ Centralized | 2.9%+$0.30 |
+| Solana (real) | 65K | 400-2,000 | 13s finality | ✅ (1,500+) | ~$0.0002 |
+
+#### Honest Assessment
+
+**Where Sultan Wins:**
+- ✅ **Zero transaction fees** - Users pay nothing, ever
+- ✅ **Deterministic scaling** - Sharding adds TPS linearly (16→8,000 shards)
+- ✅ **Instant finality** - <2s and permanent (no reorgs)
+- ✅ **100% uptime** - No outages since launch (Solana: 10+ major outages)
+
+**Where Others Win:**
+- ⚠️ **Solana** - Faster block time (0.4s), larger validator set, bigger ecosystem
+- ⚠️ **Visa/Mastercard** - 50+ years battle-tested, global merchant acceptance
+- ⚠️ **Ethereum** - Largest smart contract ecosystem, most developers
+
+**Important Context:**
+- Sultan has **6 genesis validators** (targeting 100+ by Q2 2026)
+- 64K TPS is **theoretical capacity** at low load - stress testing ongoing
+- Visa's 65K TPS is **peak burst** capacity; average is ~1,700 TPS
+- Solana's **real-world TPS** is 400-2,000 despite 65K theoretical claims
+
+### 7.4 Stress Testing
+
+Verify actual network throughput with the stress test suite:
+
+```bash
+./scripts/stress_test.sh --tps 1000 --duration 60
+```
+
+**Test Parameters:**
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--tps` | 100 | Target transactions per second |
+| `--duration` | 30 | Test duration in seconds |
+| `--parallel` | 10 | Concurrent connections |
+
+### 7.5 Scalability Projections
 
 | Phase | Shards | TPS Capacity | Timeline |
 |-------|--------|--------------|----------|

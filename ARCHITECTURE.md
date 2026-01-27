@@ -118,6 +118,36 @@ pub async fn swap(
 
 ---
 
+## Industry Comparison
+
+### vs Blockchain Networks
+
+| Feature | Sultan L1 | Solana | Ethereum | Cosmos |
+|---------|-----------|--------|----------|--------|
+| **TPS** | 64K (32M max) | 65K (400-2K real) | 15-30 | 10K |
+| **Fees** | Zero | ~$0.0002 | $2-50 | ~$0.01 |
+| **Finality** | <2s | 13s | 15 min | 6s |
+| **Sharding** | Native | ❌ | ❌ (abandoned) | ❌ |
+| **Uptime** | 100% | 90%+ (outages) | 100% | 100% |
+
+### vs Payment Networks
+
+| Feature | Sultan L1 | Visa | PayPal |
+|---------|-----------|------|--------|
+| **Peak TPS** | 64K→32M | 65K | 793 |
+| **Avg TPS** | ~0 (early) | ~1,700 | ~200 |
+| **Fees** | Zero | 1.5-3.5% | 2.9%+$0.30 |
+| **Decentralized** | ✅ | ❌ | ❌ |
+| **Permissionless** | ✅ | ❌ | ❌ |
+
+### Stress Testing
+
+```bash
+./scripts/stress_test.sh --tps 1000 --duration 60
+```
+
+---
+
 ## Enterprise Consensus Features
 
 ### PoS Proposer Selection with Failover (v0.1.5)

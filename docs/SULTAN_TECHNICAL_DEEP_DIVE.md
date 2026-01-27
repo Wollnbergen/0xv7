@@ -3244,17 +3244,55 @@ npm run package:extension # Creates .zip for Chrome Web Store
 
 ## Appendix B: Comparison to Competitors
 
+### Blockchain Networks
+
 | Feature | Sultan | Solana | Ethereum | Cosmos |
 |---------|--------|--------|----------|--------|
-| TX Fees | Zero | ~$0.0002 | ~$2-50 | ~$0.01 |
-| Block Time | 2s | 0.4s | 12s | 6s |
-| Finality | Instant | Probabilistic | ~15 min | Instant |
-| TPS (current) | 64K | 65K | 15 | 10K |
-| TPS (max) | 64M | 65K | 100K (L2) | 1M |
+| TX Fees | **Zero** | ~$0.0002 | ~$2-50 | ~$0.01 |
+| Block Time | 0.9-2s | 0.4s | 12s | 6s |
+| Finality | **Instant** | 13s | ~15 min | Instant |
+| TPS (current) | 64K | 65K theoretical | 15 | 10K |
+| TPS (real-world) | Testing | 400-2,000 | 15 | 1-5K |
+| TPS (max) | **32M** | 65K | 100K (L2) | 1M |
 | Zero-fee Native | ✅ | ❌ | ❌ | ❌ |
-| Native Sharding | ✅ | ❌ | ❌ (gave up) | ❌ |
-| Native Token Factory | ✅ | ❌ | ❌ | ✅ |
+| Native Sharding | ✅ | ❌ | ❌ (abandoned) | ❌ |
+| Network Uptime | **100%** | ~90% (outages) | 100% | 100% |
 | Native DEX | ✅ | ❌ | ❌ | ✅ (Osmosis) |
+
+### Traditional Payment Networks
+
+| Feature | Sultan L1 | Visa | Mastercard | PayPal |
+|---------|-----------|------|------------|--------|
+| Peak TPS | 64K→32M | 65,000 | 5,000 | 793 |
+| Avg TPS | ~0 (early) | ~1,700 | ~500 | ~200 |
+| Fees | **Zero** | 1.5-3.5% | 1.5-3.5% | 2.9%+$0.30 |
+| Settlement | <2s | 1-3 days | 1-3 days | Instant |
+| Decentralized | ✅ | ❌ | ❌ | ❌ |
+| Permissionless | ✅ | ❌ | ❌ | ❌ |
+| Censorship Resistant | ✅ | ❌ | ❌ | ❌ |
+
+### Honest Assessment
+
+**Where Sultan Excels:**
+- ✅ **Zero fees** - No transaction costs, ever
+- ✅ **Instant finality** - <2s, no probabilistic confirmation
+- ✅ **Deterministic scaling** - Add shards = add TPS (linear)
+- ✅ **No outages** - 100% uptime since launch
+
+**Where Sultan Needs Growth:**
+- ⚠️ **6 validators** - Genesis stage, targeting 100+ by Q2 2026
+- ⚠️ **New network** - Needs ecosystem development, battle testing
+- ⚠️ **64K TPS is theoretical** - Real stress testing ongoing
+
+**Key Insight:** Visa processes ~150M transactions/day ≈ 1,700 TPS average. Their 65K "capacity" is peak burst rarely used. Similarly, Solana's 65K theoretical TPS translates to 400-2,000 in practice. Raw TPS claims require context.
+
+### Stress Testing
+
+Verify actual throughput with:
+
+```bash
+./scripts/stress_test.sh --tps 1000 --duration 60
+```
 
 **Detailed Comparisons:**
 
