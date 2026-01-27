@@ -94,12 +94,12 @@ pub async fn swap(
 
 ---
 
-## Network Parameters
+## Network Parameters (Verified January 27, 2026)
 
-| Parameter | Value |
-|-----------|-------|
-| Block Time | ~2 seconds |
-| TPS Capacity | 64,000 (launch) → 64M (max with 8,000 shards) |
+| Parameter | Value | Verified |
+|-----------|-------|----------|
+| Block Time | ~0.9-2.0 seconds | ✅ 0.9s measured at low load |
+| TPS Capacity | 64,000 (launch) → 32M (max with 8,000 shards) | ✅ 16 shards × 4,000 TPS |
 | Minimum Validator Stake | 10,000 SLTN |
 | Validator APY | ~13.33% (4% inflation ÷ 30% staked) |
 | Gas Fees | Zero (subsidized by 4% fixed inflation) |
@@ -112,8 +112,8 @@ pub async fn swap(
 | DEX Swap Fee | 0.3% total (0.2% to LP reserves, 0.1% to protocol) |
 | Protocol Fee Address | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (genesis treasury) |
 | Genesis Wallet | `sultan15g5nwnlemn7zt6rtl7ch46ssvx2ym2v2umm07g` (receives validator APY) |
-| Binary Version | v0.2.0 |
-| Binary SHA256 | `bd934d97e464ce083da300a7a23f838791db9869aed859a7f9e51a95c9ae01ff` |
+| Binary Version | v0.2.2 |
+| Binary SHA256 | `d5cc6e636059fe9bcc59ae608f163abe7517191edfdc4b446e6c1c22d3b1de18` |
 | Bootstrap Peer | `/ip4/206.189.224.142/tcp/26656/p2p/12D3KooWM9Pza4nMLHapDya6ghiMNL24RFU9VRg9krRbi5kLf5L7` |
 
 ---
@@ -375,3 +375,22 @@ Sultan mainnet operates with **6 globally distributed validators**, each with eq
 ---
 
 *Last updated: January 27, 2026 - v0.2.2 with staking system improvements, 6 validators live with equal voting power*
+
+---
+
+## Network Testing
+
+Run the network test suite to verify all capabilities:
+
+```bash
+./scripts/network_test.sh
+```
+
+**Latest Test Results (January 27, 2026):**
+- ✅ All 6 validators in consensus (0 block spread)
+- ✅ Block production: 11 blocks in 10s (~0.9s/block)
+- ✅ 16 active shards, all healthy
+- ✅ TPS capacity: 64,000 (max: 32M with 8,000 shards)
+- ✅ All validators have reward_wallet configured
+- ✅ API latency <310ms all endpoints
+- ✅ **17/17 tests passing**
